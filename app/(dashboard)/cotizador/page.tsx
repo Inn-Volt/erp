@@ -292,9 +292,9 @@ function CotizadorContent() {
             </h3>
             {!clienteSeleccionado ? (
               <div className="relative">
-                <input type="text" value={searchCliente} onChange={(e) => { setSearchCliente(e.target.value); setShowClienteDropdown(true); }} placeholder="Buscar cliente..." className="w-full bg-slate-50 p-4 rounded-2xl text-sm font-bold outline-none border-2 border-transparent focus:border-[#ffc600] transition-all" />
+                <input type="text" value={searchCliente} onChange={(e) => { setSearchCliente(e.target.value); setShowClienteDropdown(true); }} placeholder="Buscar cliente..." className="text-slate-900 w-full bg-slate-50 p-4 rounded-2xl text-sm font-bold outline-none border-2 border-transparent focus:border-[#ffc600] transition-all" />
                 {showClienteDropdown && searchCliente && (
-                  <div className="absolute z-20 top-full left-0 right-0 mt-2 bg-white border border-slate-100 rounded-2xl shadow-2xl max-h-48 overflow-y-auto p-2">
+                  <div className="text-slate-900 absolute z-20 top-full left-0 right-0 mt-2 bg-white border border-slate-100 rounded-2xl shadow-2xl max-h-48 overflow-y-auto p-2">
                     {clientes.filter(c => c.nombre_cliente.toLowerCase().includes(searchCliente.toLowerCase())).map(c => (
                       <button key={c.id} onClick={() => { setClienteSeleccionado(c); setSearchCliente(c.nombre_cliente); setShowClienteDropdown(false); }} className="w-full text-left p-3 hover:bg-slate-50 rounded-xl text-xs font-bold uppercase transition-colors">{c.nombre_cliente}</button>
                     ))}
@@ -313,7 +313,7 @@ function CotizadorContent() {
 
           <div className="bg-white p-6 md:p-8 rounded-[1.5rem] md:rounded-[2.5rem] border border-slate-100 shadow-sm">
              <h3 className="text-[10px] font-black text-slate-400 uppercase mb-4 flex items-center gap-2"><FileText size={14} className="text-[#ffc600]" /> Alcance</h3>
-             <textarea value={descripcionGeneral} onChange={(e) => setDescripcionGeneral(e.target.value)} className="w-full bg-slate-50 p-4 rounded-2xl text-xs font-bold h-32 resize-none outline-none focus:border-[#ffc600] border-2 border-transparent transition-all" placeholder="Descripción..." />
+             <textarea value={descripcionGeneral} onChange={(e) => setDescripcionGeneral(e.target.value)} className="text-slate-900 w-full bg-slate-50 p-4 rounded-2xl text-xs font-bold h-32 resize-none outline-none focus:border-[#ffc600] border-2 border-transparent transition-all" placeholder="Descripción..." />
           </div>
 
           <div className="bg-slate-900 p-6 md:p-8 rounded-[1.5rem] md:rounded-[2.5rem] text-white shadow-2xl relative overflow-hidden group">
@@ -344,16 +344,16 @@ function CotizadorContent() {
               items.map((item, i) => (
                 <div key={i} className={`flex flex-col md:flex-row gap-4 md:items-center p-4 rounded-2xl border transition-all group ${item.esMaterial ? 'bg-amber-50/50 border-amber-100' : 'bg-slate-50 border-transparent hover:border-slate-200'}`}>
                   <div className="flex-1">
-                    <input className="w-full bg-transparent text-xs font-black uppercase text-slate-700 outline-none" value={item.descripcion} onChange={(e) => { const n = [...items]; n[i].descripcion = e.target.value; setItems(n); }} />
+                    <input className="text-slate-900 w-full bg-transparent text-xs font-black uppercase text-slate-700 outline-none" value={item.descripcion} onChange={(e) => { const n = [...items]; n[i].descripcion = e.target.value; setItems(n); }} />
                   </div>
                   <div className="flex items-center gap-3 justify-between md:justify-end">
                     <div className="flex items-center gap-2 bg-white px-3 py-1 rounded-xl shadow-sm">
                       <span className="text-[9px] font-black text-slate-400 uppercase">Cant.</span>
-                      <input type="text" className="w-10 bg-transparent text-center text-xs font-black outline-none" value={item.cantidad === 0 ? "" : item.cantidad} onChange={(e) => { const n = [...items]; n[i].cantidad = cleanNumber(e.target.value); setItems(n); }} />
+                      <input type="text" className="text-slate-900 w-10 bg-transparent text-center text-xs font-black outline-none" value={item.cantidad === 0 ? "" : item.cantidad} onChange={(e) => { const n = [...items]; n[i].cantidad = cleanNumber(e.target.value); setItems(n); }} />
                     </div>
                     <div className="flex items-center gap-2 bg-white px-3 py-1 rounded-xl shadow-sm">
                       <span className="text-[9px] font-black text-slate-400 uppercase">$ Unit.</span>
-                      <input type="text" className="w-20 md:w-24 bg-transparent text-right text-xs font-black outline-none" value={item.precio === 0 ? "" : item.precio.toLocaleString('es-CL')} onChange={(e) => { const n = [...items]; n[i].precio = cleanNumber(e.target.value); setItems(n); }} />
+                      <input type="text" className="text-slate-900 w-20 md:w-24 bg-transparent text-right text-xs font-black outline-none" value={item.precio === 0 ? "" : item.precio.toLocaleString('es-CL')} onChange={(e) => { const n = [...items]; n[i].precio = cleanNumber(e.target.value); setItems(n); }} />
                     </div>
                     <button onClick={() => setItems(items.filter((_, idx) => idx !== i))} className="p-2 text-slate-300 hover:text-red-500 hover:bg-red-50 rounded-lg transition-all"><Trash2 size={16}/></button>
                   </div>
@@ -375,7 +375,7 @@ function CotizadorContent() {
             <div className="p-4 border-b border-slate-50 shrink-0">
                 <div className="relative">
                   <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
-                  <input className="w-full bg-slate-50 p-4 pl-12 rounded-2xl text-xs font-bold outline-none" placeholder="Filtrar materiales..." />
+                  <input className="text-slate-900 w-full bg-slate-50 p-4 pl-12 rounded-2xl text-xs font-bold outline-none" placeholder="Filtrar materiales..." />
                 </div>
             </div>
             <div className="flex-1 overflow-y-auto p-4 md:p-6 space-y-2">

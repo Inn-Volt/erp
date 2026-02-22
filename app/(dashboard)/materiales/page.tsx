@@ -226,7 +226,7 @@ export default function MaterialesPage() {
           value={filtro}
           onChange={(e) => setFiltro(e.target.value)}
           placeholder="BUSCAR POR NOMBRE, MARCA O SKU..."
-          className="w-full bg-white border-2 border-slate-100 rounded-2xl md:rounded-3xl p-4 md:p-6 pl-12 md:pl-16 text-xs md:text-sm font-black uppercase shadow-sm focus:border-[#ffc600] outline-none transition-all"
+          className="text-slate-900 w-full bg-white border-2 border-slate-100 rounded-2xl md:rounded-3xl p-4 md:p-6 pl-12 md:pl-16 text-xs md:text-sm font-black uppercase shadow-sm focus:border-[#ffc600] outline-none transition-all"
         />
       </div>
 

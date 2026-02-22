@@ -154,7 +154,7 @@ export default function HistorialPage() {
           <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-300" size={18} />
           <input 
             placeholder="Buscar cliente o folio..." 
-            className="w-full bg-slate-50 pl-11 pr-4 py-3 rounded-2xl text-sm font-bold outline-none border-2 border-transparent focus:border-[#ffc600] transition-all shadow-inner"
+            className="text-slate-900 w-full bg-slate-50 pl-11 pr-4 py-3 rounded-2xl text-sm font-bold outline-none border-2 border-transparent focus:border-[#ffc600] transition-all shadow-inner"
             onChange={(e) => setSearch(e.target.value)}
           />
         </div>

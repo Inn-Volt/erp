@@ -260,11 +260,11 @@ export default function RentabilidadPro() {
                         <label className="text-[8px] font-black text-slate-400 uppercase">Cargo / Nombre</label>
                         <button onClick={() => eliminarPersonal(idx)} className="p-1 text-rose-500 hover:bg-rose-50 rounded-lg"><Trash2 size={14}/></button>
                       </div>
-                      <input value={p.rol} onChange={(e) => updatePersonal(idx, 'rol', e.target.value)} placeholder="Ej: Maestro Liniero" className="w-full bg-transparent font-black text-xs uppercase outline-none border-b border-slate-200 pb-1 focus:border-[#ffc600]"/>
+                      <input value={p.rol} onChange={(e) => updatePersonal(idx, 'rol', e.target.value)} placeholder="Ej: Maestro Liniero" className="text-slate-900 w-full bg-transparent font-black text-xs uppercase outline-none border-b border-slate-200 pb-1 focus:border-[#ffc600]"/>
                       <div className="grid grid-cols-2 gap-3 mt-1">
                         <div>
                           <label className="text-[8px] font-black text-slate-400 uppercase">Horas</label>
-                          <input type="number" value={p.hh || ''} onChange={(e) => updatePersonal(idx, 'hh', e.target.value)} className="w-full bg-white rounded-lg p-2 font-black text-xs border border-slate-200" placeholder="0"/>
+                          <input type="number" value={p.hh || ''} onChange={(e) => updatePersonal(idx, 'hh', e.target.value)} className="text-slate-900 w-full bg-white rounded-lg p-2 font-black text-xs border border-slate-200" placeholder="0"/>
                         </div>
                         <div>
                           <label className="text-[8px] font-black text-slate-400 uppercase">Valor HH</label>
@@ -294,7 +294,7 @@ export default function RentabilidadPro() {
                       placeholder="VIÁTICOS..." 
                       value={gastosAdicionales || ''}
                       onChange={(e) => setGastosAdicionales(Number(e.target.value))}
-                      className="w-full bg-slate-50 rounded-2xl py-4 pl-14 pr-4 font-black text-lg outline-none border-2 border-transparent focus:border-[#ffc600] transition-all"
+                      className="text-slate-900 w-full bg-slate-50 rounded-2xl py-4 pl-14 pr-4 font-black text-lg outline-none border-2 border-transparent focus:border-[#ffc600] transition-all"
                     />
                   </div>
                 </div>
@@ -467,7 +467,7 @@ export default function RentabilidadPro() {
           <Search className="absolute left-6 top-1/2 -translate-y-1/2 text-slate-300 group-focus-within:text-[#ffc600] transition-all" size={24} />
           <input 
             placeholder="BUSCAR CLIENTE O RUT..." 
-            className="w-full bg-white border-2 border-slate-100 rounded-[2rem] py-6 md:py-8 pl-16 pr-6 text-[10px] md:text-xs font-black uppercase outline-none focus:border-[#ffc600] shadow-xl transition-all"
+            className="text-slate-900 -full bg-white border-2 border-slate-100 rounded-[2rem] py-6 md:py-8 pl-16 pr-6 text-[10px] md:text-xs font-black uppercase outline-none focus:border-[#ffc600] shadow-xl transition-all"
             onChange={(e) => setSearchTerm(e.target.value)}
           />
         </div>

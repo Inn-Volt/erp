@@ -110,7 +110,7 @@ export default function ClientesPage() {
                   placeholder="CONSTRUCTORA SPA"
                   value={nuevoCliente.nombre_cliente}
                   onChange={(e) => setNuevoCliente({...nuevoCliente, nombre_cliente: e.target.value.toUpperCase()})}
-                  className="w-full bg-slate-50 border-none rounded-2xl p-4 text-sm font-bold focus:ring-2 focus:ring-[#ffc600] transition-all outline-none"
+                  className="text-slate-900 w-full bg-slate-50 border-none rounded-2xl p-4 text-sm font-bold focus:ring-2 focus:ring-[#ffc600] transition-all outline-none"
                 />
               </div>
 
@@ -122,7 +122,7 @@ export default function ClientesPage() {
                     placeholder="12.345.678-9"
                     value={nuevoCliente.rut}
                     onChange={(e) => setNuevoCliente({...nuevoCliente, rut: formatRut(e.target.value)})}
-                    className="w-full bg-slate-50 border-none rounded-2xl p-4 text-sm font-bold focus:ring-2 focus:ring-[#ffc600] transition-all outline-none"
+                    className="text-slate-900 w-full bg-slate-50 border-none rounded-2xl p-4 text-sm font-bold focus:ring-2 focus:ring-[#ffc600] transition-all outline-none"
                   />
                 </div>
                 <div className="space-y-1">
@@ -132,7 +132,7 @@ export default function ClientesPage() {
                     placeholder="+56 9..."
                     value={nuevoCliente.telefono}
                     onChange={(e) => setNuevoCliente({...nuevoCliente, telefono: formatPhone(e.target.value)})}
-                    className="w-full bg-slate-50 border-none rounded-2xl p-4 text-sm font-bold focus:ring-2 focus:ring-[#ffc600] transition-all outline-none"
+                    className="text-slate-900 w-full bg-slate-50 border-none rounded-2xl p-4 text-sm font-bold focus:ring-2 focus:ring-[#ffc600] transition-all outline-none"
                   />
                 </div>
               </div>
@@ -144,7 +144,7 @@ export default function ClientesPage() {
                   placeholder="correo@empresa.cl"
                   value={nuevoCliente.email}
                   onChange={(e) => setNuevoCliente({...nuevoCliente, email: e.target.value.toLowerCase()})}
-                  className="w-full bg-slate-50 border-none rounded-2xl p-4 text-sm font-bold focus:ring-2 focus:ring-[#ffc600] transition-all outline-none"
+                  className="text-slate-900 w-full bg-slate-50 border-none rounded-2xl p-4 text-sm font-bold focus:ring-2 focus:ring-[#ffc600] transition-all outline-none"
                 />
               </div>
 
@@ -155,7 +155,7 @@ export default function ClientesPage() {
                   placeholder="Av. Principal 123..."
                   value={nuevoCliente.direccion}
                   onChange={(e) => setNuevoCliente({...nuevoCliente, direccion: e.target.value})}
-                  className="w-full bg-slate-50 border-none rounded-2xl p-4 text-sm font-bold focus:ring-2 focus:ring-[#ffc600] transition-all outline-none"
+                  className="text-slate-900 w-full bg-slate-50 border-none rounded-2xl p-4 text-sm font-bold focus:ring-2 focus:ring-[#ffc600] transition-all outline-none"
                 />
               </div>
 
@@ -182,7 +182,7 @@ export default function ClientesPage() {
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
                   placeholder="Buscar por nombre o RUT..." 
-                  className="w-full pl-12 pr-4 py-3 bg-white border border-slate-200 rounded-2xl text-[11px] md:text-xs font-bold outline-none focus:ring-2 focus:ring-[#ffc600] transition-all shadow-sm"
+                  className="text-slate-900 w-full pl-12 pr-4 py-3 bg-white border border-slate-200 rounded-2xl text-[11px] md:text-xs font-bold outline-none focus:ring-2 focus:ring-[#ffc600] transition-all shadow-sm"
                 />
               </div>
             </div>
