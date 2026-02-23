@@ -53,6 +53,11 @@ function CotizadorContent() {
   
   const [items, setItems] = useState<any[]>([]);
   const [descripcionGeneral, setDescripcionGeneral] = useState(''); 
+  
+  // --- NUEVO ESTADO PARA TÉRMINOS Y CONDICIONES ---
+  const [condiciones, setCondiciones] = useState(
+    "• Garantía: 6 meses sobre la mano de obra. La garantía no cubre fallas por mal uso o intervención de terceros.\n• Materiales: La garantía de los materiales es responsabilidad del fabricante.\n• Modificaciones: Cualquier trabajo adicional no presupuestado será valorizado por separado.\n• Validez de la oferta: 15 días corridos.\n• Forma de Pago: 50% de anticipo para el inicio de los trabajos y 50% restante al finalizar.\n• Formas de pago: Transferencia electrónica o efectivo a la cuenta de InnVolt SpA."
+  );
 
   const [showSuccessModal, setShowSuccessModal] = useState(false);
 
@@ -123,6 +128,7 @@ function CotizadorContent() {
       setSearchCliente(data.clientes.nombre_cliente);
       setItems(data.items || []);
       setDescripcionGeneral(data.descripcion_general || '');
+      if (data.condiciones) setCondiciones(data.condiciones); // Cargar si existe en BD
       setFolioGenerado(data.folio);
     }
     setLoading(false);
@@ -161,6 +167,7 @@ function CotizadorContent() {
           subtotal={subtotal} iva={iva} total={total} 
           folio={folioFormateado} 
           descripcionGeneral={descripcionGeneral} 
+          condiciones={condiciones} // SE PASA AL PDF
         />;
         const blobCliente = await pdf(docCliente).toBlob();
         saveAs(blobCliente, `Cotizacion_${folioFormateado}_${clienteSeleccionado.nombre_cliente}.pdf`);
@@ -199,7 +206,8 @@ function CotizadorContent() {
       subtotal,
       iva,
       total,
-      descripcion_general: descripcionGeneral 
+      descripcion_general: descripcionGeneral,
+      condiciones // SE INCLUYE EN EL GUARDADO
     };
 
     let result;
@@ -312,7 +320,13 @@ function CotizadorContent() {
 
           <div className="bg-white p-6 md:p-8 rounded-[1.5rem] md:rounded-[2.5rem] border border-slate-100 shadow-sm">
               <h3 className="text-[10px] font-black text-slate-400 uppercase mb-4 flex items-center gap-2"><FileText size={14} className="text-[#ffc600]" /> Alcance</h3>
-              <textarea value={descripcionGeneral} onChange={(e) => setDescripcionGeneral(e.target.value)} className="text-slate-900 w-full bg-slate-50 p-4 rounded-2xl text-xs font-bold h-32 resize-none outline-none focus:border-[#ffc600] border-2 border-transparent transition-all" placeholder="Descripción..." />
+              <textarea value={descripcionGeneral} onChange={(e) => setDescripcionGeneral(e.target.value)} className="text-slate-900 w-full bg-slate-50 p-4 rounded-2xl text-xs font-bold h-24 resize-none outline-none focus:border-[#ffc600] border-2 border-transparent transition-all" placeholder="Descripción..." />
+          </div>
+
+          {/* --- NUEVA SECCIÓN: TÉRMINOS Y CONDICIONES --- */}
+          <div className="bg-white p-6 md:p-8 rounded-[1.5rem] md:rounded-[2.5rem] border border-slate-100 shadow-sm">
+              <h3 className="text-[10px] font-black text-slate-400 uppercase mb-4 flex items-center gap-2"><ShieldCheck size={14} className="text-[#ffc600]" /> Términos y Condiciones</h3>
+              <textarea value={condiciones} onChange={(e) => setCondiciones(e.target.value)} className="text-slate-900 w-full bg-slate-50 p-4 rounded-2xl text-[10px] font-bold h-32 resize-none outline-none focus:border-[#ffc600] border-2 border-transparent transition-all" placeholder="Condiciones comerciales..." />
           </div>
 
           <div className="bg-slate-900 p-6 md:p-8 rounded-[1.5rem] md:rounded-[2.5rem] text-white shadow-2xl relative overflow-hidden group">

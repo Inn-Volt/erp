@@ -129,7 +129,7 @@ const styles = StyleSheet.create({
   },
 });
 
-export const PresupuestoPDF = ({ items = [], subtotal, iva, total, cliente, folio, descripcionGeneral }: any) => {
+export const PresupuestoPDF = ({ items = [], subtotal, iva, total, cliente, folio, descripcionGeneral, condiciones }: any) => {
   // Formateador de moneda CL
   const f = (v: any) => {
     const num = isNaN(parseFloat(v)) ? 0 : parseFloat(v);
@@ -228,6 +228,14 @@ export const PresupuestoPDF = ({ items = [], subtotal, iva, total, cliente, foli
           • El retraso en los pagos facultará la suspensión de los trabajos.{"\n"}
           • Formas de pago: Transferencia electrónica o efectivo a la cuenta de InnVolt SpA.
         </Text>
+
+        {/* --- NUEVA SECCIÓN DINÁMICA --- */}
+        {condiciones && (
+          <>
+            <Text style={styles.sectionTitle}>Notas Adicionales</Text>
+            <Text style={styles.legalText}>{condiciones}</Text>
+          </>
+        )}
 
         <View style={{ marginTop: 80 }}>
           <View style={styles.signatureSection}>
