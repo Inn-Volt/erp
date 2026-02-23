@@ -73,7 +73,6 @@ function CotizadorContent() {
     }
   }, [editId]);
 
-  // --- NUEVA LÓGICA: CARGAR MATERIALES DESDE LOCALSTORAGE (CATÁLOGO) ---
   useEffect(() => {
     const saved = localStorage.getItem('cotizacion_temporal');
     if (saved) {
@@ -81,7 +80,7 @@ function CotizadorContent() {
         const materialesNuevos = JSON.parse(saved);
         if (Array.isArray(materialesNuevos) && materialesNuevos.length > 0) {
           setItems(prev => [...prev, ...materialesNuevos]);
-          localStorage.removeItem('cotizacion_temporal'); // Limpiar después de cargar
+          localStorage.removeItem('cotizacion_temporal');
         }
       } catch (e) {
         console.error("Error cargando materiales temporales", e);
@@ -252,12 +251,12 @@ function CotizadorContent() {
 
         {/* FOLIO RESPONSIVE */}
         <div className="w-full md:w-auto bg-slate-900 text-white px-6 py-2 rounded-2xl flex flex-col items-center justify-center shadow-xl border-b-4 border-[#ffc600]">
-           <span className="text-[8px] font-black uppercase tracking-[0.3em] text-[#ffc600]">
-            {folioGenerado ? 'Folio Confirmado' : 'Folio Asignado'}
-           </span>
-           <span className="text-lg font-black tracking-tighter">
-            {formatFolio(folioGenerado || proximoFolio)}
-           </span>
+            <span className="text-[8px] font-black uppercase tracking-[0.3em] text-[#ffc600]">
+             {folioGenerado ? 'Folio Confirmado' : 'Folio Asignado'}
+            </span>
+            <span className="text-lg font-black tracking-tighter">
+             {formatFolio(folioGenerado || proximoFolio)}
+            </span>
         </div>
 
         {/* ACCIONES RESPONSIVE */}
@@ -273,7 +272,7 @@ function CotizadorContent() {
           </Link>
           {success && folioGenerado ? (
             <button onClick={() => setShowSuccessModal(true)} className="w-full md:w-auto flex items-center justify-center gap-2 px-8 py-3 bg-green-600 text-white rounded-xl md:rounded-2xl font-black text-[10px] uppercase hover:bg-green-700 transition-all shadow-xl shadow-green-200">
-               <Download size={16}/> PDFs
+                <Download size={16}/> PDFs
             </button>
           ) : (
             <button onClick={handleGuardar} disabled={loading} className="w-full md:w-auto flex items-center justify-center gap-2 px-8 py-3 bg-blue-600 text-white rounded-xl md:rounded-2xl font-black text-[10px] uppercase hover:scale-105 transition-all shadow-xl shadow-blue-200 disabled:opacity-50">
@@ -312,8 +311,8 @@ function CotizadorContent() {
           </div>
 
           <div className="bg-white p-6 md:p-8 rounded-[1.5rem] md:rounded-[2.5rem] border border-slate-100 shadow-sm">
-             <h3 className="text-[10px] font-black text-slate-400 uppercase mb-4 flex items-center gap-2"><FileText size={14} className="text-[#ffc600]" /> Alcance</h3>
-             <textarea value={descripcionGeneral} onChange={(e) => setDescripcionGeneral(e.target.value)} className="text-slate-900 w-full bg-slate-50 p-4 rounded-2xl text-xs font-bold h-32 resize-none outline-none focus:border-[#ffc600] border-2 border-transparent transition-all" placeholder="Descripción..." />
+              <h3 className="text-[10px] font-black text-slate-400 uppercase mb-4 flex items-center gap-2"><FileText size={14} className="text-[#ffc600]" /> Alcance</h3>
+              <textarea value={descripcionGeneral} onChange={(e) => setDescripcionGeneral(e.target.value)} className="text-slate-900 w-full bg-slate-50 p-4 rounded-2xl text-xs font-bold h-32 resize-none outline-none focus:border-[#ffc600] border-2 border-transparent transition-all" placeholder="Descripción..." />
           </div>
 
           <div className="bg-slate-900 p-6 md:p-8 rounded-[1.5rem] md:rounded-[2.5rem] text-white shadow-2xl relative overflow-hidden group">
@@ -331,9 +330,16 @@ function CotizadorContent() {
         <div className="lg:col-span-8 bg-white rounded-[1.5rem] md:rounded-[2.5rem] border border-slate-100 shadow-sm overflow-hidden flex flex-col order-1 lg:order-2">
           <div className="p-6 md:p-8 border-b border-slate-50 flex flex-col md:flex-row justify-between items-center bg-slate-50/30 gap-4">
             <h3 className="font-black text-[10px] uppercase text-slate-400 tracking-widest w-full md:w-auto">Desglose</h3>
-            <div className="flex gap-2 w-full md:w-auto">
+            <div className="flex flex-wrap gap-2 w-full md:w-auto">
               <button onClick={() => setShowMaterialSelector(true)} className="flex-1 md:flex-none bg-[#ffc600] text-[#1e293b] px-4 py-2 rounded-xl text-[10px] font-black uppercase flex items-center justify-center gap-2"><Package size={14}/> Catálogo</button>
-              <button onClick={() => setItems([...items, { descripcion: '', cantidad: 1, precio: 0, esMaterial: false }])} className="flex-1 md:flex-none bg-slate-900 text-white px-4 py-2 rounded-xl text-[10px] font-black uppercase flex items-center justify-center gap-2"><Plus size={14}/> Item Manual</button>
+              
+              <button onClick={() => setItems([...items, { descripcion: '', cantidad: 1, precio: 0, esMaterial: true }])} className="flex-1 md:flex-none bg-amber-500 text-white px-4 py-2 rounded-xl text-[10px] font-black uppercase flex items-center justify-center gap-2">
+                <Plus size={14}/> Agregar Material
+              </button>
+
+              <button onClick={() => setItems([...items, { descripcion: '', cantidad: 1, precio: 0, esMaterial: false }])} className="flex-1 md:flex-none bg-slate-900 text-white px-4 py-2 rounded-xl text-[10px] font-black uppercase flex items-center justify-center gap-2">
+                <Plus size={14}/> Agregar Item
+              </button>
             </div>
           </div>
 
