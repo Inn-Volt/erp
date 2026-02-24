@@ -58,7 +58,6 @@ function CotizadorContent() {
   const [materialAfecto, setMaterialAfecto] = useState(true);
   const [moAfecto, setMoAfecto] = useState(true);
 
-  // Descuento exclusivo para Mano de Obra
   const [descuentoPorcentajeMO, setDescuentoPorcentajeMO] = useState(0);
   const [validezOferta, setValidezOferta] = useState("15 DÍAS CORRIDOS");
   
@@ -104,6 +103,7 @@ function CotizadorContent() {
       setClienteSeleccionado(data.clientes);
       setSearchCliente(data.clientes.nombre_cliente);
       setItems(data.items || []);
+      setMoAfecto(data.iva > 0); // Aproximación si no se guardó el flag
       setDescripcionGeneral(data.descripcion_general || '');
       setDescuentoPorcentajeMO(data.descuento_global || 0);
       if (data.condiciones_servicio) setGarantia(data.condiciones_servicio);
@@ -143,18 +143,18 @@ function CotizadorContent() {
     reader.readAsBinaryString(file);
   };
 
-  // --- LÓGICA DE CÁLCULO: DESCUENTO SOLO A MANO DE OBRA ---
+  // --- LÓGICA DE CÁLCULO MEJORADA ---
   const totals = useMemo(() => {
     const rawNetoMateriales = items.filter(i => i.esMaterial).reduce((acc, item) => acc + (item.cantidad * item.precio), 0);
     const rawNetoMO = items.filter(i => !i.esMaterial).reduce((acc, item) => acc + (item.cantidad * item.precio), 0);
     
-    // Aplicar descuento solo a MO
+    // Descuento MO
     const montoDescuentoMO = Math.round(rawNetoMO * (descuentoPorcentajeMO / 100));
     const netoMOConDescuento = rawNetoMO - montoDescuentoMO;
 
     const subtotalNetoFinal = rawNetoMateriales + netoMOConDescuento;
 
-    // Cálculo de IVA independiente por categoría post-descuento
+    // IVA individual
     const ivaMateriales = materialAfecto ? Math.round(rawNetoMateriales * 0.19) : 0;
     const ivaMO = moAfecto ? Math.round(netoMOConDescuento * 0.19) : 0;
     
@@ -162,9 +162,15 @@ function CotizadorContent() {
 
     return {
       netoMateriales: rawNetoMateriales,
+      ivaMateriales,
+      totalMaterialesFinal: rawNetoMateriales + ivaMateriales,
+      
       netoMOOriginal: rawNetoMO,
       descuentoMO: montoDescuentoMO,
       netoMOFinal: netoMOConDescuento,
+      ivaMO,
+      totalMOFinal: netoMOConDescuento + ivaMO,
+
       subtotalNeto: subtotalNetoFinal,
       iva: ivaTotal,
       total: subtotalNetoFinal + ivaTotal
@@ -246,7 +252,7 @@ function CotizadorContent() {
       descripcion_general: descripcionGeneral,
       condiciones_servicio: garantia,
       condiciones_comerciales: condicionesComerciales,
-      estado: 'pendiente'
+      estado: 'Pendiente'
     };
     try {
       let result;
@@ -382,7 +388,7 @@ function CotizadorContent() {
             />
           </section>
 
-          {/* TOTALES CON DESCUENTO SOLO EN MANO DE OBRA */}
+          {/* --- SECCIÓN MODIFICADA: TOTALES CON DETALLE INDIVIDUAL --- */}
           <section className="bottom-4 lg:relative lg:bottom-0 bg-slate-900 p-6 rounded-3xl text-white shadow-2xl border-b-4 border-[#ffc600]">
             <div className="flex justify-between items-start">
               <p className="text-[#ffc600] font-black text-[11px] uppercase tracking-widest">Resumen Económico</p>
@@ -392,6 +398,7 @@ function CotizadorContent() {
             <h3 className="text-3xl font-black mt-3 tracking-tighter">{formatCLP(totals.total)}</h3>
             
             <div className="mt-6 space-y-3">
+               {/* INPUT DESCUENTO */}
                <div className="flex items-center justify-between p-2 rounded-xl bg-white/5 border border-white/10">
                   <div className="flex items-center gap-2">
                     <Percent size={14} className="text-[#ffc600]" />
@@ -408,21 +415,37 @@ function CotizadorContent() {
                   </div>
                </div>
 
+               {/* VALOR MATERIALES */}
                <div className="flex items-center justify-between p-2 rounded-xl bg-white/5 border border-white/10">
-                  <div className="flex items-center gap-2">
-                    <Package size={14} className="text-amber-500" />
-                    <span className="text-[10px] font-bold uppercase tracking-tight">Materiales</span>
+                  <div className="flex flex-col gap-0.5">
+                    <div className="flex items-center gap-2">
+                      <Package size={14} className="text-amber-500" />
+                      <span className="text-[10px] font-bold uppercase tracking-tight text-white/70">Materiales</span>
+                    </div>
+                    <span className="text-xs font-black text-amber-500 ml-5">{formatCLP(totals.totalMaterialesFinal)}</span>
                   </div>
-                  <button onClick={() => setMaterialAfecto(!materialAfecto)} className={`px-3 py-1 rounded-full text-[9px] font-black uppercase transition-all ${materialAfecto ? 'bg-amber-500' : 'bg-slate-700'}`}>{materialAfecto ? 'Afecto' : 'Exento'}</button>
+                  <button onClick={() => setMaterialAfecto(!materialAfecto)} className={`px-3 py-1 rounded-full text-[9px] font-black uppercase transition-all ${materialAfecto ? 'bg-amber-500 text-slate-900' : 'bg-slate-700 text-slate-300'}`}>{materialAfecto ? 'Afecto' : 'Exento'}</button>
                </div>
 
+               {/* VALOR MANO DE OBRA */}
                <div className="flex items-center justify-between p-2 rounded-xl bg-white/5 border border-white/10">
-                  <div className="flex items-center gap-2">
-                    <Settings size={14} className="text-blue-400" />
-                    <span className="text-[10px] font-bold uppercase tracking-tight">Mano de Obra</span>
+                  <div className="flex flex-col gap-0.5">
+                    <div className="flex items-center gap-2">
+                      <Settings size={14} className="text-blue-400" />
+                      <span className="text-[10px] font-bold uppercase tracking-tight text-white/70">Mano de Obra</span>
+                    </div>
+                    <span className="text-xs font-black text-blue-400 ml-5">{formatCLP(totals.totalMOFinal)}</span>
                   </div>
-                  <button onClick={() => setMoAfecto(!moAfecto)} className={`px-3 py-1 rounded-full text-[9px] font-black uppercase transition-all ${moAfecto ? 'bg-blue-500' : 'bg-slate-700'}`}>{moAfecto ? 'Afecto' : 'Exento'}</button>
+                  <button onClick={() => setMoAfecto(!moAfecto)} className={`px-3 py-1 rounded-full text-[9px] font-black uppercase transition-all ${moAfecto ? 'bg-blue-500 text-slate-900' : 'bg-slate-700 text-slate-300'}`}>{moAfecto ? 'Afecto' : 'Exento'}</button>
                </div>
+
+               {/* DETALLE DESCUENTO APLICADO */}
+               {totals.descuentoMO > 0 && (
+                 <div className="flex items-center justify-between px-2 py-1 text-[9px] font-bold text-red-400 uppercase tracking-widest italic">
+                    <span>Ahorro por Descuento:</span>
+                    <span>- {formatCLP(totals.descuentoMO)}</span>
+                 </div>
+               )}
             </div>
 
             <div className="mt-6 pt-6 border-t border-white/10 grid grid-cols-2 gap-4">
@@ -510,6 +533,7 @@ function CotizadorContent() {
         </div>
       </main>
 
+      {/* MODAL DE ÉXITO */}
       {showSuccessModal && (
         <div className="fixed inset-0 bg-slate-900/80 backdrop-blur-md z-[200] flex items-end sm:items-center justify-center p-0 sm:p-4" onClick={() => setShowSuccessModal(false)}>
           <div className="bg-white w-full sm:max-w-md rounded-t-[3rem] sm:rounded-[3rem] overflow-hidden shadow-2xl" onClick={(e) => e.stopPropagation()}>
