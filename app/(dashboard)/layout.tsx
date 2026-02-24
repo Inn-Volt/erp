@@ -45,7 +45,6 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     { name: 'Clientes', icon: <Users size={20} />, path: '/clientes' },
     { name: 'Cotizador', icon: <FileText size={20} />, path: '/cotizador' },
     { name: 'Rentabilidad', icon: <TrendingUp size={20} />, path: '/rentabilidad' },
-    { name: 'Catalogo', icon: <ShoppingBag size={20} />, path: '/materiales' },
     { name: 'Inventario', icon: <Package size={20} />, path: '/inventario' }, // Restaurado
     { name: 'Reportes', icon: <BarChart3 size={20} />, path: '/reportes' },         // Restaurado
     { name: 'Herramientas', icon: <Wrench size={20} />, path: '/herramientas' },

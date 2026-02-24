@@ -1,203 +1,239 @@
 /* eslint-disable jsx-a11y/alt-text */
 'use client';
 import React from 'react';
-import { Page, Text, View, Document, StyleSheet, Image } from '@react-pdf/renderer';
+import { Page, Text, View, Document, StyleSheet, Image, Font } from '@react-pdf/renderer';
 import logoInnvolt from './logo-innvolt.png'; 
+
+// Opcional: Registrar una fuente ayuda a que el justificado sea más preciso
+// Si prefieres no registrar fuentes externas, Helvetica (default) funciona bien.
 
 const styles = StyleSheet.create({
   page: { 
-    padding: 50, 
+    padding: 45, 
     fontFamily: 'Helvetica', 
-    fontSize: 10, 
+    fontSize: 9, 
     color: '#334155', 
-    lineHeight: 1.5 
+    lineHeight: 1.6 
+  },
+  pageBody: {
+    flexGrow: 1,
+    flexDirection: 'column',
   },
   header: { 
     flexDirection: 'row', 
     justifyContent: 'space-between', 
-    alignItems: 'flex-start',
-    marginBottom: 30, 
+    alignItems: 'center',
+    marginBottom: 20, 
     borderBottomWidth: 2, 
     borderBottomColor: '#ffc600', 
-    borderBottomStyle: 'solid',
-    paddingBottom: 10 
+    paddingBottom: 15 
   },
-  logoSection: { 
-    flexDirection: 'column',
-    maxWidth: '70%', 
-  },
-  logoImage: {
-    width: 120,      
-    height: 'auto', 
-    marginBottom: 8  
-  },
-  subtitle: { 
-    fontSize: 10, 
-    fontWeight: 'bold', 
-    color: '#1e293b',
-    lineHeight: 1.2,
-    marginBottom: 4 
-  },
-  contactInfo: { 
-    fontSize: 8, 
-    color: '#64748b',
-    lineHeight: 1.4 
-  },
+  logoImage: { width: 130, height: 'auto' },
+  companyInfo: { textAlign: 'right' },
   folioBox: { 
-    textAlign: 'right', 
-    backgroundColor: '#f8fafc', 
-    padding: 10, 
-    borderRadius: 5, 
-    borderWidth: 1, 
-    borderStyle: 'solid', 
-    borderColor: '#e2e8f0' 
-  },
-  title: { 
-    fontSize: 18, 
-    fontWeight: 'bold', 
-    textAlign: 'center', 
-    color: '#1e293b', 
-    marginBottom: 20, 
-    textDecoration: 'underline' 
+    marginTop: 8,
+    backgroundColor: '#1e293b', 
+    color: '#ffffff',
+    padding: 6, 
+    borderRadius: 4, 
+    textAlign: 'center' 
   },
   sectionTitle: { 
-    fontSize: 12, 
+    fontSize: 10, 
     fontWeight: 'bold', 
-    color: '#000000', 
-    marginTop: 15, 
-    marginBottom: 10, 
-    borderBottomWidth: 1, 
-    borderBottomColor: '#e2e8f0', 
-    borderBottomStyle: 'solid',
-    paddingBottom: 2 
+    color: '#0f172a', 
+    marginTop: 18, 
+    marginBottom: 8, 
+    textTransform: 'uppercase',
+    borderLeftWidth: 3,
+    borderLeftColor: '#ffc600',
+    paddingLeft: 8
+  },
+  descriptionContainer: {
+    backgroundColor: '#f8fafc',
+    padding: 15,
+    borderRadius: 6,
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+    marginBottom: 10
+  },
+  descriptionText: { 
+    fontSize: 9.5, 
+    color: '#1e293b',
+    textAlign: 'justify', 
+    lineHeight: 1.6,      // Aumentado levemente para mejorar la distribución
+    letterSpacing: 0.1,    // Espaciado sutil para evitar el error de visualización
+    margin: 20
+  },
+  clientGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    paddingLeft: 10,
+    gap: 10
+  },
+  clientItem: {
+    width: '48%', 
+    marginBottom: 4
+  },
+  label: {
+    fontWeight: 'bold',
+    color: '#64748b',
+    fontSize: 8,
+    textTransform: 'uppercase'
+  },
+  valueText: {
+    color: '#1e293b',
+    fontSize: 9
   },
   tableHeader: { 
     flexDirection: 'row', 
     backgroundColor: '#1e293b', 
     color: 'white', 
-    padding: 6, 
-    fontWeight: 'bold' 
+    padding: 8, 
+    fontWeight: 'bold',
+    marginTop: 5
   },
   tableRow: { 
     flexDirection: 'row', 
     borderBottomWidth: 1, 
     borderBottomColor: '#f1f5f9', 
-    borderBottomStyle: 'solid',
-    padding: 6 
+    padding: 8 
   },
-  colDesc: { width: '60%' },
+  colDesc: { width: '65%' },
   colQty: { width: '10%', textAlign: 'center' },
-  colPrice: { width: '15%', textAlign: 'right' },
-  colTotal: { width: '15%', textAlign: 'right' },
+  colPrice: { width: '12.5%', textAlign: 'right' },
+  colTotal: { width: '12.5%', textAlign: 'right' },
   totalsArea: { 
-    marginTop: 20, 
+    marginTop: 15, 
     flexDirection: 'row', 
     justifyContent: 'flex-end' 
   },
-  totalBox: { width: 180 },
+  totalBox: { 
+    width: 190, 
+    backgroundColor: '#f8fafc', 
+    padding: 8, 
+    borderRadius: 4 
+  },
   totalRow: { 
     flexDirection: 'row', 
-    justifyContent: 'space-between', 
-    paddingVertical: 2 
+    justifyContent: 'space-between',
+    paddingVertical: 2
   },
   grandTotal: { 
-    backgroundColor: '#1e293b', 
-    color: 'white', 
-    padding: 6, 
-    marginTop: 5, 
+    marginTop: 4, 
+    paddingTop: 4,
+    borderTopWidth: 1,
+    borderTopColor: '#cbd5e1',
     fontWeight: 'bold', 
-    borderRadius: 2 
+    fontSize: 10,
+    color: '#0f172a'
   },
-  legalText: { 
-    fontSize: 8, 
-    color: '#475569', 
-    textAlign: 'justify', 
-    marginBottom: 8 
+  signatureWrapper: {
+    marginTop: 'auto',
+    paddingTop: 20,
+    marginBottom: 20,
   },
   signatureSection: { 
     flexDirection: 'row', 
-    justifyContent: 'space-between', 
-    marginTop: 50 
+    justifyContent: 'space-between',
   },
   signatureBox: { 
-    width: '45%', 
+    width: '42%', 
     borderTopWidth: 1, 
     borderTopColor: '#1e293b', 
-    borderTopStyle: 'solid',
     textAlign: 'center', 
-    paddingTop: 5 
+    paddingTop: 8 
   },
+  footer: {
+    position: 'absolute',
+    bottom: 30,
+    left: 45,
+    right: 45,
+    textAlign: 'center',
+    fontSize: 7,
+    color: '#94a3b8',
+    borderTopWidth: 0.5,
+    borderTopColor: '#e2e8f0',
+    paddingTop: 8
+  }
 });
 
-export const PresupuestoPDF = ({ items = [], subtotal, iva, total, cliente, folio, descripcionGeneral, condiciones }: any) => {
-  // Formateador de moneda CL
-  const f = (v: any) => {
-    const num = isNaN(parseFloat(v)) ? 0 : parseFloat(v);
-    return `$ ${Math.round(num).toLocaleString('es-CL')}`;
-  };
-
+export const PresupuestoPDF = ({ 
+  items = [], subtotal, iva, total, cliente, folio, descripcionGeneral, garantia, condicionesComerciales 
+}: any) => {
+  const f = (v: any) => `$ ${Math.round(v || 0).toLocaleString('es-CL')}`;
   const logoPath = (logoInnvolt as any)?.src || logoInnvolt;
 
   return (
     <Document title={`Presupuesto ${folio}`}>
-      {/* PÁGINA 1: DETALLE Y COSTOS */}
+      {/* PÁGINA 1: PROPUESTA TÉCNICA Y ECONÓMICA */}
       <Page size="A4" style={styles.page}>
         <View style={styles.header}>
-          <View style={styles.logoSection}>
-            <Image src={logoPath} style={styles.logoImage} />
-            <Text style={styles.subtitle}>Soluciones Eléctricas y Automatización</Text>
-            <Text style={styles.contactInfo}>inn-volt@outlook.cl | www.innvolt.cl</Text>
-          </View>
-          <View style={styles.folioBox}>
-            <Text style={{ fontWeight: 'bold', color: '#000000' }}>
-               PRESUPUESTO N° {folio ? String(folio).padStart(5, '0') : '---'}
-            </Text>
-            <Text style={styles.contactInfo}>Fecha: {new Date().toLocaleDateString('es-CL')}</Text>
+          <Image src={logoPath} style={styles.logoImage} />
+          <View style={styles.companyInfo}>
+            <Text style={{ fontWeight: 'bold' }}>InnVolt SpA</Text>
+            <Text style={{ fontSize: 8 }}>inn-volt@outlook.cl | www.innvolt.cl</Text>
+            <View style={styles.folioBox}>
+              <Text style={{ fontSize: 9, fontWeight: 'bold' }}>PRESUPUESTO {folio}</Text>
+            </View>
           </View>
         </View>
 
-        <View style={{ marginBottom: 20 }}>
-          <Text style={styles.sectionTitle}>Datos del Cliente / Proyecto</Text>
-          <Text>Nombre: {cliente?.nombre_cliente || '---'}</Text>
-          <Text>RUT: {cliente?.rut || '---'}</Text>
-          <Text>Ubicación: {cliente?.direccion || '---'}</Text>
+        {/* INFORMACIÓN DEL CLIENTE */}
+        <View style={{ marginBottom: 15 }}>
+          <Text style={styles.sectionTitle}>Información del Proyecto / Cliente</Text>
+          <View style={styles.clientGrid}>
+            <View style={styles.clientItem}>
+              <Text style={styles.label}>Cliente / Razón Social:</Text>
+              <Text style={styles.valueText}>{cliente?.nombre_cliente || '---'}</Text>
+            </View>
+            <View style={styles.clientItem}>
+              <Text style={styles.label}>RUT:</Text>
+              <Text style={styles.valueText}>{cliente?.rut || '---'}</Text>
+            </View>
+            <View style={styles.clientItem}>
+              <Text style={styles.label}>Ubicación de Obra:</Text>
+              <Text style={styles.valueText}>{cliente?.direccion || '---'}</Text>
+            </View>
+            <View style={styles.clientItem}>
+              <Text style={styles.label}>Contacto:</Text>
+              <Text style={styles.valueText}>
+                {cliente?.telefono ? `${cliente.telefono} | ` : ''} 
+                {cliente?.email || 'Sin email registrado'}
+              </Text>
+            </View>
+          </View>
         </View>
 
-        <Text style={styles.title}>PRESUPUESTO DE OBRA</Text>
+        <Text style={styles.sectionTitle}>1. Alcance Técnico del Servicio</Text>
+        <View style={styles.descriptionContainer}>
+          {/* Se eliminó hyphenationEnabled para evitar el error de TS */}
+          <Text style={styles.descriptionText}>
+            {descripcionGeneral || "Servicios técnicos eléctricos especializados."}
+          </Text>
+        </View>
 
-        <Text style={styles.sectionTitle}>1. Descripción General del Servicio</Text>
-        <Text style={{ fontSize: 9, marginBottom: 15, textAlign: 'justify' }}>
-          {descripcionGeneral || "Servicio técnico eléctrico integral según requerimientos técnicos conversados con el mandante."}
-        </Text>
-
-        <Text style={styles.sectionTitle}>2. Detalle de Costos (Mano de Obra y Materiales)</Text>
+        <Text break style={styles.sectionTitle}>2. Detalle de Presupuesto</Text>
         <View style={styles.tableHeader}>
-          <Text style={styles.colDesc}>Descripción</Text>
+          <Text style={styles.colDesc}>Descripción de Partida</Text>
           <Text style={styles.colQty}>Cant.</Text>
-          <Text style={styles.colPrice}>Unit.</Text>
+          <Text style={styles.colPrice}>Unitario</Text>
           <Text style={styles.colTotal}>Total</Text>
         </View>
         
-        {items.map((item: any, i: number) => {
-          const desc = item.descripcion || 'Sin descripción';
-          const cant = Number(item.cantidad) || 0;
-          const precio = Number(item.precio) || 0;
-          const totalItem = cant * precio;
-
-          return (
-            <View key={i} style={styles.tableRow} wrap={false}>
-              <Text style={styles.colDesc}>{desc}</Text>
-              <Text style={styles.colQty}>{cant}</Text>
-              <Text style={styles.colPrice}>{f(precio)}</Text>
-              <Text style={styles.colTotal}>{f(totalItem)}</Text>
-            </View>
-          );
-        })}
+        {items.map((item: any, i: number) => (
+          <View key={i} style={styles.tableRow} wrap={false}>
+            <Text style={styles.colDesc}>{item.descripcion}</Text>
+            <Text style={styles.colQty}>{item.cantidad}</Text>
+            <Text style={styles.colPrice}>{f(item.precio)}</Text>
+            <Text style={styles.colTotal}>{f(item.cantidad * item.precio)}</Text>
+          </View>
+        ))}
 
         <View style={styles.totalsArea}>
           <View style={styles.totalBox}>
             <View style={styles.totalRow}>
-              <Text>Neto:</Text>
+              <Text>Monto Neto:</Text>
               <Text>{f(subtotal)}</Text>
             </View>
             <View style={styles.totalRow}>
@@ -205,50 +241,51 @@ export const PresupuestoPDF = ({ items = [], subtotal, iva, total, cliente, foli
               <Text>{f(iva)}</Text>
             </View>
             <View style={[styles.totalRow, styles.grandTotal]}>
-              <Text>TOTAL:</Text>
+              <Text>TOTAL PRESUPUESTO:</Text>
               <Text>{f(total)}</Text>
             </View>
           </View>
         </View>
+        <Text style={styles.footer}>InnVolt SpA - Montajes Eléctricos e Ingeniería NCh Elec. 4/2003</Text>
       </Page>
 
       {/* PÁGINA 2: CONDICIONES Y FIRMAS */}
       <Page size="A4" style={styles.page}>
-        <Text style={styles.sectionTitle}>Condiciones de Servicio y Garantía</Text>
-        <Text style={styles.legalText}>
-          • Garantía: 6 meses sobre la mano de obra. La garantía no cubre fallas por mal uso o intervención de terceros.{"\n"}
-          • Materiales: La garantía de los materiales es responsabilidad del fabricante.{"\n"}
-          • Modificaciones: Cualquier trabajo adicional no presupuestado será valorizado por separado.
-        </Text>
+        <View style={styles.pageBody}>
+          <View style={styles.header}>
+            <Image src={logoPath} style={styles.logoImage} />
+            <Text style={{ fontSize: 8, color: '#64748b' }}>Ref. Folio: {folio}</Text>
+          </View>
 
-        <Text style={styles.sectionTitle}>Condiciones Comerciales</Text>
-        <Text style={styles.legalText}>
-          • Validez de la oferta: 15 días corridos.{"\n"}
-          • Forma de Pago: 50% de anticipo para el inicio de los trabajos y 50% restante al finalizar y entregar la obra conforme.{"\n"}
-          • El retraso en los pagos facultará la suspensión de los trabajos.{"\n"}
-          • Formas de pago: Transferencia electrónica o efectivo a la cuenta de InnVolt SpA.
-        </Text>
+          <Text style={styles.sectionTitle}>3. Garantía y Responsabilidad</Text>
+          <View style={styles.descriptionContainer}>
+              <Text style={styles.descriptionText}>
+                {garantia}
+              </Text>
+          </View>
 
-        {/* --- NUEVA SECCIÓN DINÁMICA --- */}
-        {condiciones && (
-          <>
-            <Text style={styles.sectionTitle}>Notas Adicionales</Text>
-            <Text style={styles.legalText}>{condiciones}</Text>
-          </>
-        )}
+          <Text break style={styles.sectionTitle}>4. Términos y Condiciones Comerciales</Text>
+          <View style={styles.descriptionContainer}>
+              <Text style={styles.descriptionText}>
+                {condicionesComerciales}
+              </Text>
+          </View>
 
-        <View style={{ marginTop: 80 }}>
-          <View style={styles.signatureSection}>
-            <View style={styles.signatureBox}>
-              <Text style={{ fontWeight: 'bold' }}>InnVolt SpA</Text>
-              <Text style={styles.contactInfo}>Firma y Timbre</Text>
-            </View>
-            <View style={styles.signatureBox}>
-              <Text style={{ fontWeight: 'bold' }}>{cliente?.nombre_cliente || 'Aceptación Cliente'}</Text>
-              <Text style={styles.contactInfo}>Firma, Nombre y RUT</Text>
+          <View wrap={false} style={styles.signatureWrapper}>
+            <View style={styles.signatureSection}>
+              <View style={styles.signatureBox}>
+                <Text style={{ fontWeight: 'bold' }}>InnVolt SpA</Text>
+                <Text style={{ fontSize: 7, color: '#64748b' }}>Firma</Text>
+              </View>
+              <View style={styles.signatureBox}>
+                <Text style={{ fontWeight: 'bold' }}>{cliente?.nombre_cliente || 'Aceptación Cliente'}</Text>
+                <Text style={{ fontSize: 7, color: '#64748b' }}>Firma, Nombre y RUT</Text>
+              </View>
             </View>
           </View>
         </View>
+
+        <Text style={styles.footer}>InnVolt SpA - www.innvolt.cl | Especialistas en Automatización e Instalaciones</Text>
       </Page>
     </Document>
   );

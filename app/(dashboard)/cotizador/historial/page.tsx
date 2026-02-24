@@ -5,16 +5,15 @@ import { supabase } from '@/lib/supabase';
 import Link from 'next/link';
 import { 
   ArrowLeft, Search, Calendar, Download, 
-  Trash2, Loader2, Hash, FileText, Edit3, FileBox, X, User, ShieldCheck
+  Trash2, Loader2, Hash, FileText, Edit3, FileBox, X, User, ShieldCheck,
+  ChevronRight, Calculator, History, Package, ExternalLink
 } from 'lucide-react';
 
-// Componentes de PDF y utilerías de generación
 import { PresupuestoPDF } from '@/components/PresupuestoPDF';
 import { ListadoInternoPDF } from '@/components/ListadoInternoPDF';
 import { pdf } from '@react-pdf/renderer';
 import { saveAs } from 'file-saver';
 
-// --- UTILIDADES DE FORMATO ---
 const formatFolio = (num: number | null) => {
   if (!num) return "IV-0000";
   return `IV-${num.toString().padStart(4, '0')}`;
@@ -32,14 +31,14 @@ export default function HistorialPage() {
   const [data, setData] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
-  
-  // ESTADOS PARA EL SELECTOR DE DESCARGA
   const [selectedCotizacion, setSelectedCotizacion] = useState<any>(null);
   const [isGenerating, setIsGenerating] = useState(false);
 
   const datosInnVolt = {
+    nombre: "InnVolt SpA",
     nombre_cliente: "InnVolt SpA",
     rut: "78.299.986-9", 
+    direccion: "Santiago, Chile",
     giro: "Servicios Eléctricos"
   };
 
@@ -58,7 +57,24 @@ export default function HistorialPage() {
     setLoading(false);
   }
 
-  // --- LÓGICA DE GENERACIÓN INDIVIDUAL ---
+  // --- FUNCIÓN CRÍTICA: IGUALAR VISTA CLIENTE ---
+  const getItemsVistaCliente = (itemsArray: any[]) => {
+    const materiales = itemsArray.filter(i => i.esMaterial);
+    const otrosItems = itemsArray.filter(i => !i.esMaterial);
+    if (materiales.length === 0) return itemsArray;
+
+    const totalSoloMateriales = materiales.reduce((acc, curr) => acc + (curr.precio * curr.cantidad), 0);
+    return [
+      ...otrosItems,
+      {
+        descripcion: "SUMINISTROS Y MATERIALES ELÉCTRICOS SEGÚN PROYECTO",
+        cantidad: 1,
+        precio: totalSoloMateriales,
+        esMaterial: true
+      }
+    ];
+  };
+
   const descargarPDF = async (tipo: 'cliente' | 'interno') => {
     if (!selectedCotizacion || isGenerating) return;
     setIsGenerating(true);
@@ -68,44 +84,32 @@ export default function HistorialPage() {
       const clienteNombre = selectedCotizacion.clientes?.nombre_cliente || 'Cliente';
 
       if (tipo === 'cliente') {
-        const materiales = selectedCotizacion.items.filter((i: any) => i.esMaterial);
-        const otrosItems = selectedCotizacion.items.filter((i: any) => !i.esMaterial);
-        const totalM = materiales.reduce((acc: number, curr: any) => acc + (curr.precio * curr.cantidad), 0);
-        
-        const itemsVista = [...otrosItems];
-        if (totalM > 0) {
-          itemsVista.push({
-            descripcion: "SUMINISTROS Y MATERIALES ELÉCTRICOS SEGÚN PROYECTO",
-            cantidad: 1,
-            precio: totalM,
-            esMaterial: true
-          });
-        }
-
         const doc = (
           <PresupuestoPDF 
             cliente={selectedCotizacion.clientes} 
-            items={itemsVista} 
+            items={getItemsVistaCliente(selectedCotizacion.items || [])} 
             subtotal={selectedCotizacion.subtotal} 
             iva={selectedCotizacion.iva} 
             total={selectedCotizacion.total} 
             folio={folioFormateado}
             descripcionGeneral={selectedCotizacion.descripcion_general}
+            garantia={selectedCotizacion.condiciones_servicio}
+            condicionesComerciales={selectedCotizacion.condiciones_comerciales}
           />
         );
         const blob = await pdf(doc).toBlob();
         saveAs(blob, `Cotizacion_${folioFormateado}_${clienteNombre}.pdf`);
       } else {
-        const materiales = selectedCotizacion.items.filter((i: any) => i.esMaterial);
-        const subM = materiales.reduce((acc: number, curr: any) => acc + (curr.precio * curr.cantidad), 0);
+        const soloMateriales = (selectedCotizacion.items || []).filter((i: any) => i.esMaterial);
+        const subtotalM = soloMateriales.reduce((acc: number, curr: any) => acc + (curr.precio * curr.cantidad), 0);
         
         const doc = (
           <ListadoInternoPDF
             cliente={datosInnVolt} 
-            items={materiales} 
-            subtotal={subM} 
-            iva={Math.round(subM * 0.19)} 
-            total={Math.round(subM * 1.19)} 
+            items={soloMateriales} 
+            subtotal={subtotalM} 
+            iva={Math.round(subtotalM * 0.19)} 
+            total={subtotalM + Math.round(subtotalM * 0.19)} 
             folio={folioFormateado} 
             descripcionGeneral="LISTADO INTERNO DE MATERIALES (DETALLE TÉCNICO)" 
           />
@@ -114,16 +118,14 @@ export default function HistorialPage() {
         saveAs(blob, `Interno_${folioFormateado}.pdf`);
       }
     } catch (error) {
-      alert("No se pudo generar el archivo.");
+      console.error("Error al generar PDF:", error);
     } finally {
       setIsGenerating(false);
     }
   };
 
   const handleEliminar = async (id: string, folio: number) => {
-    const confirmar = confirm(`¿Estás seguro de eliminar permanentemente la cotización ${formatFolio(folio)}?`);
-    if (!confirmar) return;
-
+    if (!confirm(`¿Eliminar permanentemente folio ${formatFolio(folio)}?`)) return;
     const { error } = await supabase.from('cotizaciones').delete().eq('id', id);
     if (!error) setData(data.filter(c => c.id !== id));
   };
@@ -134,154 +136,134 @@ export default function HistorialPage() {
   );
 
   return (
-    <div className="p-2 md:p-8 max-w-7xl mx-auto space-y-4 md:space-y-6 bg-[#f8fafc] min-h-screen font-sans">
+    <div className="min-h-screen bg-[#f1f5f9] text-slate-900 pb-20 md:pb-10 font-sans">
       
-      {/* HEADER */}
-      <div className="flex flex-col md:flex-row justify-between items-center bg-white p-4 md:p-6 rounded-[1.5rem] md:rounded-[2rem] shadow-sm border border-slate-100 gap-4">
-        <div className="flex items-center gap-4 w-full md:w-auto">
-          <Link href="/cotizador" className="p-3 bg-slate-50 text-slate-600 rounded-2xl hover:bg-[#ffc600] transition-all group">
-            <ArrowLeft size={20} className="group-hover:-translate-x-1 transition-transform" />
-          </Link>
-          <div>
-            <h2 className="text-xl md:text-2xl font-black uppercase italic text-[#1e293b] leading-none">
-              Historial <span className="text-[#ffc600]">InnVolt</span>
-            </h2>
-            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-1">Registro Central</p>
+      <header className="sticky top-0 z-40 bg-white/80 backdrop-blur-md border-b border-slate-200">
+        <div className="max-w-7xl mx-auto px-4 py-3 md:py-4 flex flex-col sm:flex-row justify-between items-center gap-4">
+          <div className="flex items-center gap-3 w-full sm:w-auto">
+            <Link href="/cotizador" className="bg-slate-900 p-2 md:p-3 rounded-xl shadow-lg hover:bg-black transition-all group">
+              <ArrowLeft className="text-[#ffc600]" size={20} />
+            </Link>
+            <div>
+              <h1 className="text-lg md:text-xl font-black text-slate-900 leading-tight flex items-center gap-2">
+                HISTORIAL DE <span className="text-[#ffc600]">COTIZACIONES</span>
+              </h1>
+              <p className="text-[10px] font-bold text-slate-400 tracking-widest uppercase">InnVolt SpA · Registro</p>
+            </div>
+          </div>
+          <div className="relative w-full sm:w-80">
+            <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
+            <input 
+              placeholder="BUSCAR CLIENTE O FOLIO..." 
+              className="w-full bg-slate-100 pl-11 pr-4 py-2.5 rounded-2xl text-[11px] font-black uppercase outline-none border-2 border-transparent focus:border-[#ffc600] focus:bg-white transition-all"
+              onChange={(e) => setSearch(e.target.value)}
+            />
           </div>
         </div>
+      </header>
 
-        <div className="relative w-full md:w-96">
-          <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-300" size={18} />
-          <input 
-            placeholder="Buscar cliente o folio..." 
-            className="text-slate-900 w-full bg-slate-50 pl-11 pr-4 py-3 rounded-2xl text-sm font-bold outline-none border-2 border-transparent focus:border-[#ffc600] transition-all shadow-inner"
-            onChange={(e) => setSearch(e.target.value)}
-          />
-        </div>
-      </div>
-
-      {/* TABLA / CARDS */}
-      <div className="bg-white rounded-[1.5rem] md:rounded-[2.5rem] shadow-sm overflow-hidden border border-slate-100">
-        {loading ? (
-          <div className="p-20 text-center flex flex-col items-center gap-4">
-            <Loader2 className="animate-spin text-[#ffc600]" size={40} />
-            <p className="font-black text-slate-400 uppercase text-[10px] tracking-widest">Sincronizando...</p>
-          </div>
-        ) : filtered.length === 0 ? (
-          <div className="p-20 text-center flex flex-col items-center gap-4 text-slate-300">
-            <FileBox size={64} strokeWidth={1} />
-            <p className="font-bold uppercase text-[10px] tracking-widest">Sin registros</p>
-          </div>
-        ) : (
-          <div className="overflow-x-auto">
-            {/* Desktop Table (Restaurada columna FECHA) */}
-            <table className="w-full text-left border-collapse hidden md:table">
-              <thead>
-                <tr className="bg-slate-50/50 text-[10px] font-black uppercase text-slate-400 border-b border-slate-50">
-                  <th className="p-6">Folio</th>
-                  <th className="p-6">Fecha</th>
-                  <th className="p-6">Cliente</th>
-                  <th className="p-6 text-right">Total</th>
-                  <th className="p-6 text-center">Acciones</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-50">
-                {filtered.map(c => (
-                  <tr key={c.id} className="hover:bg-slate-50/50 transition-colors">
-                    <td className="p-6">
-                      <div className="flex items-center gap-2">
-                        <div className="p-2 bg-slate-900 rounded-lg"><Hash size={12} className="text-[#ffc600]" /></div>
-                        <span className="text-sm font-black text-slate-700">{formatFolio(c.folio)}</span>
-                      </div>
-                    </td>
-                    <td className="p-6 text-[11px] font-bold text-slate-500 uppercase">
-                      {new Date(c.created_at).toLocaleDateString('es-CL')}
-                    </td>
-                    <td className="p-6">
-                      <p className="text-xs font-black uppercase italic text-slate-800 truncate max-w-[200px]">{c.clientes?.nombre_cliente}</p>
-                      <p className="text-[9px] font-bold text-slate-400 uppercase">RUT: {c.clientes?.rut}</p>
-                    </td>
-                    <td className="p-6 text-right font-black text-slate-900">{formatCLP(c.total)}</td>
-                    <td className="p-6">
-                      <div className="flex justify-center gap-2">
-                        <Link href={`/cotizador?edit=${c.id}`} className="p-2.5 text-slate-400 hover:text-blue-600 rounded-xl transition-all"><Edit3 size={18}/></Link>
-                        <button onClick={() => setSelectedCotizacion(c)} className="p-2.5 bg-green-50 text-green-600 rounded-xl hover:bg-green-600 hover:text-white transition-all"><Download size={18}/></button>
-                        <button onClick={() => handleEliminar(c.id, c.folio)} className="p-2.5 text-slate-300 hover:text-red-500 transition-all"><Trash2 size={18}/></button>
-                      </div>
-                    </td>
+      <main className="max-w-7xl mx-auto p-4 md:p-6">
+        <div className="bg-white rounded-[2.5rem] border border-slate-200 shadow-sm overflow-hidden">
+          {loading ? (
+            <div className="p-24 text-center flex flex-col items-center gap-4">
+              <Loader2 className="animate-spin text-[#ffc600]" size={40} />
+              <p className="font-black text-slate-400 uppercase text-[10px]">Sincronizando...</p>
+            </div>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-left border-collapse hidden md:table">
+                <thead>
+                  <tr className="bg-slate-50/50 text-[10px] font-black uppercase text-slate-400 border-b border-slate-100">
+                    <th className="p-6">Folio / Fecha</th>
+                    <th className="p-6">Cliente</th>
+                    <th className="p-6 text-right">Monto Total</th>
+                    <th className="p-6 text-center">Gestión</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
-
-            {/* Mobile Cards (Restaurados botones EDITAR y ELIMINAR) */}
-            <div className="md:hidden divide-y divide-slate-50">
-              {filtered.map(c => (
-                <div key={c.id} className="p-5 space-y-4">
-                  <div className="flex justify-between items-start">
-                    <div className="flex items-center gap-2">
-                      <div className="p-1.5 bg-slate-900 rounded-md"><Hash size={10} className="text-[#ffc600]" /></div>
-                      <span className="text-sm font-black text-slate-700">{formatFolio(c.folio)}</span>
+                </thead>
+                <tbody className="divide-y divide-slate-50">
+                  {filtered.map(c => (
+                    <tr key={c.id} className="group hover:bg-slate-50/50 transition-colors">
+                      <td className="p-6">
+                        <div className="flex items-center gap-3">
+                          <div className="p-2.5 bg-slate-900 rounded-xl"><Hash size={14} className="text-[#ffc600]" /></div>
+                          <div>
+                            <p className="text-sm font-black text-slate-800">{formatFolio(c.folio)}</p>
+                            <p className="text-[10px] font-bold text-slate-400">{new Date(c.created_at).toLocaleDateString('es-CL')}</p>
+                          </div>
+                        </div>
+                      </td>
+                      <td className="p-6">
+                        <p className="text-xs font-black uppercase italic text-slate-800 truncate max-w-[250px]">{c.clientes?.nombre_cliente}</p>
+                        <p className="text-[9px] font-bold text-slate-400">RUT: {c.clientes?.rut}</p>
+                      </td>
+                      <td className="p-6 text-right font-black text-slate-900">
+                        <span className="bg-slate-100 px-3 py-1.5 rounded-lg text-sm italic">{formatCLP(c.total)}</span>
+                      </td>
+                      <td className="p-6 text-center">
+                        <div className="flex justify-center gap-2">
+                          <Link href={`/cotizador?edit=${c.id}`} className="p-2.5 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-xl transition-all"><Edit3 size={18}/></Link>
+                          <button onClick={() => setSelectedCotizacion(c)} className="p-2.5 bg-green-50 text-green-600 rounded-xl hover:bg-green-600 hover:text-white transition-all"><Download size={18}/></button>
+                          <button onClick={() => handleEliminar(c.id, c.folio)} className="p-2.5 text-slate-300 hover:text-red-500 hover:bg-red-50 transition-all"><Trash2 size={18}/></button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              {/* Mobile Cards */}
+              <div className="md:hidden divide-y divide-slate-50">
+                {filtered.map(c => (
+                  <div key={c.id} className="p-6 space-y-4">
+                    <div className="flex justify-between items-center">
+                      <span className="text-sm font-black text-slate-800">{formatFolio(c.folio)}</span>
+                      <span className="text-[10px] font-bold text-slate-400">{new Date(c.created_at).toLocaleDateString('es-CL')}</span>
                     </div>
-                    <span className="text-[10px] font-bold text-slate-400">{new Date(c.created_at).toLocaleDateString('es-CL')}</span>
-                  </div>
-                  <div>
                     <p className="text-xs font-black uppercase italic text-slate-800">{c.clientes?.nombre_cliente}</p>
-                    <p className="text-sm font-black text-[#ffc600] mt-1">{formatCLP(c.total)}</p>
+                    <p className="text-lg font-black text-[#ffc600]">{formatCLP(c.total)}</p>
+                    <div className="flex gap-2">
+                      <Link href={`/cotizador?edit=${c.id}`} className="flex-1 flex justify-center py-3 bg-slate-50 text-slate-600 rounded-2xl border border-slate-200"><Edit3 size={18}/></Link>
+                      <button onClick={() => setSelectedCotizacion(c)} className="flex-1 flex justify-center py-3 bg-green-50 text-green-600 rounded-2xl border border-green-100"><Download size={18}/></button>
+                      <button onClick={() => handleEliminar(c.id, c.folio)} className="flex-1 flex justify-center py-3 bg-red-50 text-red-400 rounded-2xl border border-red-100"><Trash2 size={18}/></button>
+                    </div>
                   </div>
-                  <div className="flex gap-2 pt-2">
-                    <Link href={`/cotizador?edit=${c.id}`} className="flex-1 flex justify-center py-2.5 bg-slate-50 text-slate-600 rounded-xl border border-slate-100"><Edit3 size={18}/></Link>
-                    <button onClick={() => setSelectedCotizacion(c)} className="flex-1 flex justify-center py-2.5 bg-green-50 text-green-600 rounded-xl border border-green-100"><Download size={18}/></button>
-                    <button onClick={() => handleEliminar(c.id, c.folio)} className="flex-1 flex justify-center py-2.5 bg-red-50 text-red-400 rounded-xl border border-red-100"><Trash2 size={18}/></button>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
-      </div>
-
-      {/* SELECTOR DE DESCARGA (Z-INDEX ALTO PARA MÓVIL) */}
-      {selectedCotizacion && (
-        <div className="fixed inset-0 bg-slate-900/80 backdrop-blur-md z-[9999] flex items-end md:items-center justify-center p-0 md:p-4" onClick={() => setSelectedCotizacion(null)}>
-          <div className="bg-white w-full md:max-w-sm rounded-t-[2.5rem] md:rounded-[2.5rem] overflow-hidden shadow-2xl animate-in slide-in-from-bottom duration-300" onClick={(e) => e.stopPropagation()}>
-            <div className="p-6 border-b border-slate-50 flex justify-between items-center bg-slate-50/50">
-              <div>
-                <h3 className="font-black text-sm uppercase italic text-slate-800">Generar Documentos</h3>
-                <p className="text-[10px] font-bold text-[#ffc600] uppercase tracking-widest">{formatFolio(selectedCotizacion.folio)}</p>
+                ))}
               </div>
-              <button onClick={() => setSelectedCotizacion(null)} className="p-2 bg-white rounded-full text-slate-400 shadow-sm hover:text-red-500"><X size={20}/></button>
             </div>
-            
-            <div className="p-6 space-y-4">
-              <button onClick={() => descargarPDF('cliente')} disabled={isGenerating} className="w-full flex items-center gap-4 p-5 bg-blue-600 text-white rounded-3xl active:scale-95 transition-all">
-                <div className="bg-white/20 p-2 rounded-xl"><User size={24} /></div>
+          )}
+        </div>
+      </main>
+
+      {/* MODAL DE DESCARGA */}
+      {selectedCotizacion && (
+        <div className="fixed inset-0 bg-slate-900/80 backdrop-blur-md z-[9999] flex items-end sm:items-center justify-center p-0 sm:p-4" onClick={() => setSelectedCotizacion(null)}>
+          <div className="bg-white w-full sm:max-w-md rounded-t-[3rem] sm:rounded-[3rem] overflow-hidden shadow-2xl animate-in slide-in-from-bottom duration-300" onClick={(e) => e.stopPropagation()}>
+            <div className="relative p-8 text-center bg-slate-50/80 border-b border-slate-100">
+              <button onClick={() => setSelectedCotizacion(null)} className="absolute top-4 right-4 p-2 text-slate-400"><X size={20}/></button>
+              <div className="w-16 h-16 bg-[#ffc600] text-slate-900 rounded-[1.5rem] flex items-center justify-center mx-auto mb-4 shadow-lg rotate-6"><Download size={32} /></div>
+              <h3 className="font-black text-xl uppercase italic text-slate-900">Generar <span className="text-[#ffc600]">Documentos</span></h3>
+              <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mt-1">Folio: {formatFolio(selectedCotizacion.folio)}</p>
+            </div>
+            <div className="p-8 space-y-4">
+              <button onClick={() => descargarPDF('cliente')} disabled={isGenerating} className="w-full flex items-center gap-4 p-5 bg-slate-900 text-white rounded-[2rem] active:scale-95 transition-all shadow-xl group">
+                <div className="bg-[#ffc600] p-3 rounded-2xl text-slate-900"><User size={24} /></div>
                 <div className="text-left flex-1">
-                  <p className="text-[10px] font-black uppercase opacity-70 leading-none mb-1">Documento Oficial</p>
+                  <p className="text-[10px] font-black uppercase text-[#ffc600] leading-none mb-1">Copia Oficial</p>
                   <p className="text-sm font-black uppercase">PDF Cliente</p>
                 </div>
-                {isGenerating ? <Loader2 className="animate-spin" size={20}/> : <Download size={20} />}
+                {isGenerating ? <Loader2 className="animate-spin" size={20}/> : <ChevronRight size={20} />}
               </button>
-
-              <button onClick={() => descargarPDF('interno')} disabled={isGenerating || !selectedCotizacion.items.some((i: any) => i.esMaterial)} className="w-full flex items-center gap-4 p-5 bg-slate-900 text-white rounded-3xl active:scale-95 transition-all disabled:opacity-40">
-                <div className="bg-[#ffc600] p-2 rounded-xl text-slate-900"><ShieldCheck size={24} /></div>
+              <button onClick={() => descargarPDF('interno')} disabled={isGenerating || !selectedCotizacion.items.some((i: any) => i.esMaterial)} className="w-full flex items-center gap-4 p-5 bg-white border-2 border-slate-100 text-slate-900 rounded-[2rem] active:scale-95 transition-all group">
+                <div className="bg-slate-100 p-3 rounded-2xl text-slate-600"><Package size={24} /></div>
                 <div className="text-left flex-1">
-                  <p className="text-[10px] font-black uppercase text-[#ffc600] leading-none mb-1">Detalle Técnico</p>
+                  <p className="text-[10px] font-black uppercase text-slate-400 leading-none mb-1">Uso Técnico</p>
                   <p className="text-sm font-black uppercase">Listado Interno</p>
                 </div>
-                {isGenerating ? <Loader2 className="animate-spin" size={20}/> : <Download size={20} />}
+                {isGenerating ? <Loader2 className="animate-spin" size={20}/> : <ChevronRight size={20} />}
               </button>
             </div>
-            <div className="p-4 bg-slate-50 text-center text-[9px] font-bold text-slate-300 uppercase tracking-widest">InnVolt SpA © 2026</div>
           </div>
         </div>
       )}
-
-      {/* FOOTER */}
-      <div className="flex flex-col md:flex-row justify-between items-center gap-2 px-6">
-        <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest">Registros Totales: {filtered.length}</p>
-        <p className="text-[9px] font-bold text-slate-300 uppercase italic">InnVolt SpA - Sistema de Cotizaciones</p>
-      </div>
     </div>
   );
 }
