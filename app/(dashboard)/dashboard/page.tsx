@@ -6,7 +6,7 @@ import { useRouter } from 'next/navigation';
 import { 
   FileText, Settings, Users, BarChart3, Plus,
   TrendingUp, Clock, Package, ChevronRight, Activity, Zap,
-  ArrowUpRight, AlertCircle, Calendar, CheckCircle2, DollarSign,
+  ArrowUpRight, AlertCircle, CheckCircle2, DollarSign,
   ArrowDownRight, ShieldCheck, Search
 } from 'lucide-react';
 
@@ -40,6 +40,12 @@ export default function DashboardPage() {
   });
 
   useEffect(() => {
+    const checkUser = async () => {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) router.push('/login');
+    };
+    
+    checkUser();
     fetchDashboardFullData();
   }, []);
 
@@ -47,9 +53,9 @@ export default function DashboardPage() {
     setLoading(true);
     try {
       const [cotsRes, clientesRes, stockRes, rentRes] = await Promise.all([
-        supabase.from('cotizaciones').select('*').order('created_at', { ascending: false }),
+        supabase.from('cotizaciones').select('*').order('created_at', { ascending: false }).limit(50), 
         supabase.from('clientes').select('id, nombre_cliente'),
-        supabase.from('inventario_innvolt').select('*'),
+        supabase.from('inventario_innvolt').select('cantidad_actual, cantidad_minima'),
         supabase.from('analisis_rentabilidad').select('*')
       ]);
 
@@ -69,7 +75,7 @@ export default function DashboardPage() {
         );
         
         const venta = Number(cot.total) || 0;
-        const utilidad = analisis ? Number(analisis.utilidad_neta) : (venta * 0.30);
+        const utilidad = analisis ? Number(analisis.utilidad_neta) : 0;
         const costo = analisis ? Number(analisis.costo_total_real) : (venta * 0.70);
 
         totalVentaAcumulada += venta;
@@ -105,13 +111,13 @@ export default function DashboardPage() {
     try {
       const { error } = await supabase.from('cotizaciones').update({ estado: nuevoEstado }).eq('id', id);
       if (error) throw error;
+      
       setData(prev => ({
         ...prev,
         proyectos: prev.proyectos.map(p => p.id === id ? { ...p, estado: nuevoEstado } : p)
       }));
     } catch (e) {
       console.error(e);
-      alert("Error al sincronizar estado");
     }
   }
 
@@ -122,7 +128,7 @@ export default function DashboardPage() {
   return (
     <div className="min-h-screen bg-[#f8fafc] p-4 md:p-10 lg:p-14 max-w-[1750px] mx-auto space-y-10 animate-in fade-in duration-700 overflow-x-hidden">
       
-      {/* HEADER PRO + RESPONSIVE */}
+      {/* HEADER */}
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-8">
         <div className="space-y-2">
           <div className="flex items-center gap-3">
@@ -147,41 +153,12 @@ export default function DashboardPage() {
         </div>
       </div>
 
-      {/* KPI GRID DINÁMICO */}
+      {/* KPI GRID */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
-        <KpiCard 
-          title="Revenue Operativo" 
-          value={fCLP(data.montoTotal)} 
-          icon={<TrendingUp size={20} />} 
-          color="blue" 
-          trend="+12.5%" 
-          desc="Volumen de Venta Total" 
-        />
-        <KpiCard 
-          title="Margen Neto" 
-          value={fCLP(data.margenEmpresa)} 
-          icon={<DollarSign size={20} />} 
-          color={porcUtilidad < 20 ? "red" : "green"} 
-          trend={`${porcUtilidad.toFixed(1)}%`}
-          desc="Utilidad Acumulada" 
-        />
-        <KpiCard 
-          title="Base Clientes" 
-          value={data.clientesTotales} 
-          icon={<Users size={20} />} 
-          color="yellow" 
-          trend="Activos" 
-          desc="Crecimiento Mensual" 
-        />
-        <KpiCard 
-          title="Alertas Stock" 
-          value={data.stockBajo} 
-          icon={<Package size={20} />} 
-          color="red" 
-          alert={data.stockBajo > 0} 
-          trend="Crítico" 
-          desc="Items bajo el mínimo" 
-        />
+        <KpiCard title="Revenue Operativo" value={fCLP(data.montoTotal)} icon={<TrendingUp size={20} />} color="blue" trend="Global" desc="Facturación total" />
+        <KpiCard title="Margen Real" value={fCLP(data.margenEmpresa)} icon={<DollarSign size={20} />} color={porcUtilidad < 15 ? "red" : "green"} trend={`${porcUtilidad.toFixed(1)}%`} desc="Basado en análisis" />
+        <KpiCard title="Base Clientes" value={data.clientesTotales} icon={<Users size={20} />} color="yellow" trend="Registrados" desc="Directorio InnVolt" />
+        <KpiCard title="Alertas Stock" value={data.stockBajo} icon={<Package size={20} />} color="red" alert={data.stockBajo > 0} trend="Stock Crítico" desc="Items por reponer" />
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-10">
@@ -189,70 +166,64 @@ export default function DashboardPage() {
         {/* PANEL IZQUIERDO */}
         <div className="lg:col-span-8 space-y-10">
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-5">
-            <ActionBtn icon={<FileText size={24} />} label="Cotizador" desc="Generar PDF" onClick={() => router.push('/cotizador')} />
-            <ActionBtn icon={<Settings size={24} />} label="Stock" desc="Logística" onClick={() => router.push('/inventario')} />
-            <ActionBtn icon={<Users size={24} />} label="CRM" desc="Directorio" onClick={() => router.push('/clientes')} />
-            <ActionBtn icon={<BarChart3 size={24} />} label="Finanzas" desc="Métricas" onClick={() => router.push('/reportes')} />
+            <ActionBtn icon={<FileText size={24} />} label="Cotizador" desc="Ventas" onClick={() => router.push('/cotizador')} />
+            <ActionBtn icon={<Settings size={24} />} label="Inventario" desc="Stock" onClick={() => router.push('/inventario')} />
+            <ActionBtn icon={<Users size={24} />} label="Clientes" desc="CRM" onClick={() => router.push('/clientes')} />
+            <ActionBtn icon={<BarChart3 size={24} />} label="Reportes" desc="Finanzas" onClick={() => router.push('/reportes')} />
           </div>
 
           <div className="bg-white rounded-[2rem] md:rounded-[3rem] p-6 md:p-10 shadow-xl shadow-slate-200/40 border border-slate-100 group relative overflow-hidden">
             <div className="flex flex-col sm:flex-row justify-between items-start sm:items-end mb-12 gap-4">
               <div className="space-y-1">
                 <h3 className="text-2xl font-black uppercase italic tracking-tighter flex items-center gap-3 text-slate-800">
-                  <Activity size={24} className="text-[#ffc600] animate-pulse" /> Movimientos Recientes
+                  <Activity size={24} className="text-[#ffc600] animate-pulse" /> Últimos Movimientos
                 </h3>
-                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Últimas 8 operaciones sincronizadas</p>
+                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Sincronizado con base de datos</p>
               </div>
-              <button className="text-[10px] font-black uppercase text-[#ffc600] border-b-2 border-[#ffc600] pb-1 hover:text-black hover:border-black transition-colors">Ver Historial Completo</button>
             </div>
 
             <div className="space-y-3">
               {data.proyectos.length === 0 ? (
-                <EmptyState icon={<Search size={48} />} message="No se encontraron registros activos" />
+                <EmptyState icon={<Search size={48} />} message="Sin registros activos" />
               ) : (
-                data.proyectos.map((proy, idx) => (
+                data.proyectos.map((proy) => (
                   <div key={proy.id} 
-                    className="flex flex-col md:flex-row items-start md:items-center justify-between p-6 rounded-3xl hover:bg-slate-50 transition-all border border-transparent hover:border-slate-100 group/item animate-in fade-in slide-in-from-left-4 duration-500 gap-6"
-                    style={{ animationDelay: `${idx * 80}ms`, animationFillMode: 'both' }}
+                    className="flex flex-col md:flex-row items-start md:items-center justify-between p-6 rounded-3xl hover:bg-slate-50 transition-all border border-transparent hover:border-slate-100 group/item gap-6"
                   >
                     <div className="flex items-center gap-6 w-full md:w-auto">
-                      <div className="flex-shrink-0 w-14 h-14 rounded-2xl bg-slate-100 flex items-center justify-center text-xs font-black text-slate-500 group-hover/item:bg-[#0f172a] group-hover/item:text-[#ffc600] transition-all duration-300">
+                      <div className="flex-shrink-0 w-12 h-12 rounded-2xl bg-slate-100 flex items-center justify-center text-[10px] font-black text-slate-500 group-hover/item:bg-[#0f172a] group-hover/item:text-[#ffc600] transition-all">
                         #{proy.folio}
                       </div>
                       <div className="min-w-0">
                         <div className="flex items-center gap-2">
-                          <p className="text-base font-black text-slate-800 uppercase leading-none tracking-tight truncate">{proy.cliente_nombre}</p>
-                          {proy.es_real && <span title="Auditado"><ShieldCheck size={14} className="text-blue-500" /></span>}
+                          <p className="text-sm font-black text-slate-800 uppercase truncate group-hover/item:text-[#0f172a] transition-colors">{proy.cliente_nombre}</p>
+                          {proy.es_real && <ShieldCheck size={14} className="text-blue-500" />}
                         </div>
-                        <div className="flex items-center gap-3 mt-2 flex-wrap">
-                          <p className={`text-[10px] font-black px-2 py-0.5 rounded-md uppercase ${proy.es_real ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-400 italic'}`}>
-                            {proy.es_real ? 'Auditado' : 'Proyectado'}
-                          </p>
-                          <p className="text-[10px] font-bold text-slate-400 uppercase">Utilidad: <span className={proy.utilidad_proyecto < 0 ? 'text-red-500' : 'text-emerald-600'}>{fCLP(proy.utilidad_proyecto)}</span></p>
+                        <div className="flex items-center gap-3 mt-1">
+                           <span className={`text-[8px] font-black px-1.5 py-0.5 rounded uppercase ${proy.es_real ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-400'}`}>
+                              {proy.es_real ? 'Auditado' : 'Sin Analizar'}
+                           </span>
+                           <p className="text-[10px] font-bold text-slate-400 uppercase">Margen: <span className={proy.utilidad_proyecto <= 0 ? 'text-red-400' : 'text-emerald-500'}>{fCLP(proy.utilidad_proyecto)}</span></p>
                         </div>
                       </div>
                     </div>
 
                     <div className="flex items-center justify-between md:justify-end gap-6 w-full md:w-auto border-t md:border-none pt-4 md:pt-0">
                       <div className="text-left md:text-right">
-                        <p className="text-lg font-black text-slate-900 leading-none">{fCLP(proy.total)}</p>
-                        <p className="text-[10px] font-bold text-slate-400 uppercase mt-1 tracking-widest">Monto Final</p>
+                        <p className="text-base font-black text-slate-900 leading-none">{fCLP(proy.total)}</p>
+                        <p className="text-[9px] font-bold text-slate-400 uppercase mt-1">Monto Total</p>
                       </div>
 
                       <select 
                         value={proy.estado || 'Pendiente'}
                         onChange={(e) => updateEstado(proy.id, e.target.value)}
-                        className={`px-4 md:px-5 py-2.5 rounded-2xl text-[10px] font-black uppercase tracking-[0.1em] border-2 outline-none cursor-pointer transition-all shadow-sm ${getEstadoStyle(proy.estado || 'Pendiente')}`}
+                        className={`px-4 py-2 rounded-xl text-[9px] font-black uppercase border-2 outline-none cursor-pointer transition-all ${getEstadoStyle(proy.estado || 'Pendiente')}`}
                       >
                         <option value="Pendiente">Pendiente</option>
                         <option value="Aceptado">Aceptado</option>
                         <option value="Realizado">Realizado</option>
                         <option value="Rechazado">Rechazado</option>
                       </select>
-
-                      <button onClick={() => router.push(`/cotizador?folio=${proy.folio}`)} className="p-3 bg-slate-50 text-slate-300 rounded-xl hover:bg-[#ffc600] hover:text-[#0f172a] transition-all group-hover/item:shadow-lg">
-                        <ChevronRight size={20} strokeWidth={3} />
-                      </button>
                     </div>
                   </div>
                 ))
@@ -261,52 +232,31 @@ export default function DashboardPage() {
           </div>
         </div>
 
-        {/* PANEL DERECHO: ANALÍTICA */}
+        {/* PANEL DERECHO */}
         <div className="lg:col-span-4 space-y-8">
-          <div className="bg-[#0f172a] rounded-[2.5rem] md:rounded-[3rem] p-8 md:p-10 text-white shadow-2xl relative overflow-hidden flex flex-col min-h-[500px]">
+          <div className="bg-[#0f172a] rounded-[2.5rem] p-8 text-white shadow-2xl relative overflow-hidden flex flex-col min-h-[450px]">
             <div className="absolute top-0 right-0 w-64 h-64 bg-[#ffc600] opacity-[0.03] blur-[100px] -mr-20 -mt-20"></div>
-            
-            <h3 className="text-[11px] font-black uppercase tracking-[0.5em] text-[#ffc600] mb-12">Performance Tracker</h3>
-            
-            <div className="space-y-12 relative z-10 flex-1">
-              <div className="space-y-6">
-                <AnalyticRow label="Costos Operativos" value={data.costoTotalOperativo} total={data.montoTotal} color="bg-red-500" />
-                <AnalyticRow label="Margen Bruto Real" value={data.margenEmpresa} total={data.montoTotal} color="bg-[#ffc600]" />
-              </div>
-
-              <div className="bg-white/5 border border-white/10 rounded-[2.5rem] p-8 space-y-4">
-                <div className="flex items-center gap-3">
-                  <div className={`p-2 rounded-lg ${porcUtilidad > 25 ? 'bg-emerald-500/20 text-emerald-400' : 'bg-red-500/20 text-red-400'}`}>
-                    {porcUtilidad > 25 ? <ArrowUpRight size={20} /> : <ArrowDownRight size={20} />}
+            <h3 className="text-[10px] font-black uppercase tracking-[0.5em] text-[#ffc600] mb-12">Rendimiento Real</h3>
+            <div className="space-y-10 relative z-10 flex-1">
+              <AnalyticRow label="Costo Operativo" value={data.costoTotalOperativo} total={data.montoTotal} color="bg-red-500" />
+              <AnalyticRow label="Utilidad Neta" value={data.margenEmpresa} total={data.montoTotal} color="bg-[#ffc600]" />
+              <div className="bg-white/5 border border-white/10 rounded-3xl p-6">
+                <div className="flex items-center gap-3 mb-3">
+                  <div className={`p-2 rounded-lg ${porcUtilidad > 20 ? 'bg-emerald-500/20 text-emerald-400' : 'bg-red-500/20 text-red-400'}`}>
+                    {porcUtilidad > 20 ? <ArrowUpRight size={20} /> : <ArrowDownRight size={20} />}
                   </div>
-                  <p className="text-[11px] font-black uppercase tracking-widest text-white/90">Estatus del Margen</p>
+                  <p className="text-[10px] font-black uppercase tracking-widest text-white">Salud Financiera</p>
                 </div>
-                <p className="text-sm font-medium text-white/60 leading-relaxed italic">
-                  "El margen neto es del <span className="text-white font-black underline decoration-[#ffc600]">{porcUtilidad.toFixed(1)}%</span>. 
-                  {porcUtilidad > 25 ? " Estás operando en zona de alta eficiencia financiera." : " Se recomienda optimizar costos de proveedores."}"
+                <p className="text-xs font-medium text-white/50 leading-relaxed italic">
+                  "Tu margen real es de <span className="text-white font-black">{porcUtilidad.toFixed(1)}%</span>. 
+                  {porcUtilidad < 15 ? " Es vital revisar los costos de materiales." : " Estás en un rango de operación saludable."}"
                 </p>
-              </div>
-            </div>
-
-            <div className="mt-auto pt-10 border-t border-white/10">
-              <div className="flex justify-between items-center">
-                <span className="text-[10px] font-black uppercase text-white/30 tracking-widest">InnVolt Dashboard</span>
-                <div className="flex gap-1">
-                  <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></div>
-                  <div className="w-1.5 h-1.5 rounded-full bg-emerald-500/50"></div>
-                </div>
               </div>
             </div>
           </div>
 
-          <div className="bg-emerald-600 rounded-[2.5rem] p-8 text-white flex items-center justify-between group hover:bg-emerald-700 transition-colors cursor-pointer active:scale-95" onClick={() => router.push('/reportes')}>
-            <div>
-              <p className="text-[10px] font-black uppercase tracking-widest opacity-80">Exportar Balance</p>
-              <h4 className="text-xl font-black italic tracking-tighter">Cierre de Mes</h4>
-            </div>
-            <div className="bg-white/20 p-4 rounded-2xl group-hover:scale-110 transition-transform">
-              <CheckCircle2 size={24} />
-            </div>
+          <div className="p-8 bg-slate-50 border-2 border-dashed border-slate-200 rounded-[2.5rem] flex items-center justify-center opacity-50 grayscale hover:grayscale-0 transition-all cursor-not-allowed">
+            <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 italic font-bold">Módulo Administrativo</p>
           </div>
         </div>
       </div>
@@ -315,27 +265,22 @@ export default function DashboardPage() {
 }
 
 // --- COMPONENTES ATÓMICOS ---
-
 function KpiCard({ title, value, icon, color, alert, trend, desc }: any) {
   const themes: any = {
-    blue: 'border-blue-600 shadow-blue-200/20 text-blue-600',
-    yellow: 'border-[#ffc600] shadow-[#ffc600]/10 text-[#ffc600]',
-    red: 'border-red-600 shadow-red-200/20 text-red-600',
-    green: 'border-emerald-600 shadow-emerald-200/20 text-emerald-600'
+    blue: 'border-blue-600 text-blue-600',
+    yellow: 'border-[#ffc600] text-[#ffc600]',
+    red: 'border-red-600 text-red-600',
+    green: 'border-emerald-600 text-emerald-600'
   };
-  
   return (
-    <div className={`bg-white p-8 rounded-[2.5rem] border-t-8 shadow-2xl shadow-slate-200/60 transition-all hover:-translate-y-2 hover:shadow-slate-300/60 ${themes[color]}`}>
+    <div className={`bg-white p-8 rounded-[2.5rem] border-t-8 shadow-2xl shadow-slate-200/60 transition-all hover:-translate-y-2 ${themes[color]}`}>
       <div className="flex justify-between items-start mb-8">
         <div className="p-4 bg-slate-50 rounded-2xl text-slate-400">{icon}</div>
-        <span className="text-[10px] font-black text-slate-800 uppercase bg-slate-100 px-3 py-1 rounded-full">{trend}</span>
+        <span className="text-[9px] font-black text-slate-800 uppercase bg-slate-100 px-3 py-1 rounded-full">{trend}</span>
       </div>
-      <p className="text-[11px] font-black uppercase tracking-[0.2em] text-slate-400 mb-2">{title}</p>
-      <h3 className="text-3xl sm:text-4xl font-black tracking-tighter italic leading-none text-slate-900">{value}</h3>
-      <div className="h-1 w-12 bg-slate-100 my-4 rounded-full overflow-hidden">
-        <div className={`h-full w-1/2 ${color === 'red' ? 'bg-red-500' : 'bg-emerald-500'}`}></div>
-      </div>
-      <p className="text-[10px] font-bold text-slate-400 uppercase flex items-center gap-2">
+      <p className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400 mb-2">{title}</p>
+      <h3 className="text-3xl font-black tracking-tighter italic text-slate-900 leading-none">{value}</h3>
+      <p className="text-[10px] font-bold text-slate-400 uppercase mt-4 flex items-center gap-2">
         {desc} {alert && <AlertCircle size={12} className="text-red-500 animate-bounce" />}
       </p>
     </div>
@@ -350,11 +295,8 @@ function AnalyticRow({ label, value, total, color }: any) {
         <p className="text-[10px] font-black uppercase tracking-widest text-white/40">{label}</p>
         <p className="text-sm font-black text-white">{fCLP(value)}</p>
       </div>
-      <div className="h-3 bg-white/5 rounded-full overflow-hidden p-0.5 border border-white/5">
-        <div 
-          className={`h-full ${color} rounded-full transition-all duration-1000 ease-out`} 
-          style={{ width: `${percent}%` }}
-        ></div>
+      <div className="h-2 bg-white/5 rounded-full overflow-hidden">
+        <div className={`h-full ${color} rounded-full transition-all duration-1000`} style={{ width: `${percent}%` }}></div>
       </div>
     </div>
   );
@@ -362,28 +304,25 @@ function AnalyticRow({ label, value, total, color }: any) {
 
 function ActionBtn({ icon, label, desc, onClick }: any) {
   return (
-    <button onClick={onClick} className="flex flex-col items-start p-6 md:p-8 bg-white border-2 border-slate-50 rounded-[2rem] md:rounded-[2.5rem] hover:border-[#ffc600] hover:shadow-2xl transition-all group w-full relative overflow-hidden active:scale-95 shadow-sm">
+    <button onClick={onClick} className="flex flex-col items-start p-8 bg-white border-2 border-slate-50 rounded-[2.5rem] hover:border-[#ffc600] hover:shadow-2xl transition-all group w-full relative overflow-hidden active:scale-95 shadow-sm">
       <div className="mb-6 text-slate-400 group-hover:text-[#ffc600] transition-all p-4 bg-slate-50 rounded-2xl group-hover:bg-[#ffc600]/10">
         {icon}
       </div>
       <span className="text-xs font-black uppercase tracking-[0.2em] text-slate-800">{label}</span>
-      <span className="hidden sm:block text-[9px] font-bold text-slate-400 uppercase mt-2 opacity-60 group-hover:opacity-100 transition-opacity">{desc}</span>
+      <span className="text-[9px] font-bold text-slate-400 uppercase mt-2 opacity-60 group-hover:opacity-100 transition-opacity">{desc}</span>
     </button>
   );
 }
 
 function LoadingScreen() {
   return (
-    <div className="h-screen flex flex-col items-center justify-center bg-[#0f172a] p-6">
+    <div className="h-screen flex flex-col items-center justify-center bg-[#0f172a]">
       <div className="relative">
-        <div className="w-32 h-32 border-[3px] border-[#ffc600]/10 rounded-full"></div>
-        <div className="w-32 h-32 border-t-[3px] border-[#ffc600] rounded-full animate-spin absolute top-0 left-0"></div>
-        <Zap className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 text-[#ffc600] animate-pulse" size={40} />
+        <div className="w-24 h-24 border-[3px] border-[#ffc600]/10 rounded-full"></div>
+        <div className="w-24 h-24 border-t-[3px] border-[#ffc600] rounded-full animate-spin absolute top-0 left-0"></div>
+        <Zap className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 text-[#ffc600]" size={30} />
       </div>
-      <div className="mt-12 text-center space-y-2">
-        <p className="text-[#ffc600] font-black uppercase tracking-[0.6em] text-xs">InnVolt Intelligence</p>
-        <p className="text-slate-500 font-bold text-[10px] uppercase tracking-widest">Sincronizando flujos financieros...</p>
-      </div>
+      <p className="text-[#ffc600] font-black uppercase tracking-[0.6em] text-[10px] mt-8 animate-pulse">Sincronizando InnVolt OS</p>
     </div>
   );
 }
@@ -391,8 +330,8 @@ function LoadingScreen() {
 function EmptyState({ icon, message }: any) {
   return (
     <div className="flex flex-col items-center justify-center py-20 bg-slate-50/50 rounded-[3rem] border-4 border-dashed border-slate-100">
-      <div className="text-slate-200 mb-6 scale-125">{icon}</div>
-      <p className="text-xs font-black uppercase text-slate-400 tracking-[0.3em] italic">{message}</p>
+      <div className="text-slate-200 mb-6">{icon}</div>
+      <p className="text-xs font-black uppercase text-slate-400 tracking-[0.3em]">{message}</p>
     </div>
   );
 }
