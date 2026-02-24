@@ -344,11 +344,11 @@ export default function RentabilidadPro() {
                       <div className="grid grid-cols-2 gap-2">
                         <div className="space-y-1">
                             <label className="text-[7px] font-black text-slate-400 uppercase ml-1">KM/Día</label>
-                            <input type="number" value={calculoBencina.distanciaDiaria || ''} onChange={(e) => setCalculoBencina({...calculoBencina, distanciaDiaria: Number(e.target.value)})} className="w-full p-2 bg-white rounded-lg border border-slate-200 text-[10px] font-bold outline-none"/>
+                            <input type="number" value={calculoBencina.distanciaDiaria || ''} onChange={(e) => setCalculoBencina({...calculoBencina, distanciaDiaria: Number(e.target.value)})} className="w-full p-2 bg-white rounded-lg border border-slate-200 text-[10px] font-bold outline-none text-slate-900"/>
                         </div>
                         <div className="space-y-1">
                             <label className="text-[7px] font-black text-slate-400 uppercase ml-1">Días Viaje</label>
-                            <input type="number" value={calculoBencina.dias || ''} onChange={(e) => setCalculoBencina({...calculoBencina, dias: Number(e.target.value)})} className="w-full p-2 bg-white rounded-lg border border-slate-200 text-[10px] font-bold outline-none"/>
+                            <input type="number" value={calculoBencina.dias || ''} onChange={(e) => setCalculoBencina({...calculoBencina, dias: Number(e.target.value)})} className="w-full p-2 bg-white rounded-lg border border-slate-200 text-[10px] font-bold outline-none text-slate-900"/>
                         </div>
                         <div className="col-span-2 flex items-center justify-end px-2 text-emerald-600 font-black text-[10px] pt-2">
                           {formatCLP(metricas.totalBencina)}
@@ -364,11 +364,11 @@ export default function RentabilidadPro() {
                       <div className="grid grid-cols-2 gap-2">
                         <div className="space-y-1">
                             <label className="text-[7px] font-black text-slate-400 uppercase ml-1">$ p/p</label>
-                            <input type="number" value={calculoColacion.montoPorPersona || ''} onChange={(e) => setCalculoColacion({...calculoColacion, montoPorPersona: Number(e.target.value)})} className="w-full p-2 bg-white rounded-lg border border-slate-200 text-[10px] font-bold outline-none"/>
+                            <input type="number" value={calculoColacion.montoPorPersona || ''} onChange={(e) => setCalculoColacion({...calculoColacion, montoPorPersona: Number(e.target.value)})} className="text-slate-900 w-full p-2 bg-white rounded-lg border border-slate-200 text-[10px] font-bold outline-none"/>
                         </div>
                         <div className="space-y-1">
                             <label className="text-[7px] font-black text-slate-400 uppercase ml-1">Días</label>
-                            <input type="number" value={calculoColacion.dias || ''} onChange={(e) => setCalculoColacion({...calculoColacion, dias: Number(e.target.value)})} className="w-full p-2 bg-white rounded-lg border border-slate-200 text-[10px] font-bold outline-none"/>
+                            <input type="number" value={calculoColacion.dias || ''} onChange={(e) => setCalculoColacion({...calculoColacion, dias: Number(e.target.value)})} className="text-slate-900 w-full p-2 bg-white rounded-lg border border-slate-200 text-[10px] font-bold outline-none"/>
                         </div>
                         <div className="col-span-2 flex items-center justify-between px-2 text-emerald-600 font-black text-[10px] pt-1 border-t border-slate-200/50">
                           <span>Subtotal ({personal.length} pers.):</span>
@@ -393,9 +393,8 @@ export default function RentabilidadPro() {
                 </div>
               </div>
             </div>
-
           </div>
-
+          
           <div className="lg:col-span-4 space-y-6">
             <div className={`rounded-[2rem] md:rounded-[3.5rem] p-6 md:p-10 shadow-2xl transition-all duration-700 relative overflow-hidden ${metricas.utilidadNeta > 0 ? 'bg-slate-900' : 'bg-rose-950'}`}>
               <div className="relative z-10 text-center space-y-6 md:space-y-8">

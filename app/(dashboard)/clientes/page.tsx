@@ -233,13 +233,13 @@ export default function ClientesPage() {
             </div>
         </div>
         <div className="md:col-span-3 relative group">
-          <Search className="absolute left-8 top-1/2 -translate-y-1/2 text-slate-300 group-focus-within:text-[#ffc600] transition-colors" size={24} />
+          <Search className="absolute left-8 top-1/2 -translate-y-6 text-slate-300 group-focus-within:text-[#ffc600] transition-colors" size={24} />
           <input 
             type="text"
             placeholder="Buscar por Empresa, RUT o Contacto..."
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
-            className="w-full bg-white border-2 border-slate-100 rounded-[2.5rem] py-8 pl-20 pr-8 text-sm font-bold outline-none focus:border-[#ffc600] transition-all shadow-sm placeholder:text-slate-200"
+            className="w-full bg-white border-2 border-slate-100 rounded-[2.5rem] py-8 pl-20 pr-8 text-sm font-bold outline-none focus:border-[#ffc600] transition-all shadow-sm placeholder:text-slate-900"
           />
         </div>
       </div>

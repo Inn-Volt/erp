@@ -383,7 +383,7 @@ function CotizadorContent() {
           </section>
 
           {/* TOTALES CON DESCUENTO SOLO EN MANO DE OBRA */}
-          <section className="sticky bottom-4 lg:relative lg:bottom-0 bg-slate-900 p-6 rounded-3xl text-white shadow-2xl border-b-4 border-[#ffc600]">
+          <section className="bottom-4 lg:relative lg:bottom-0 bg-slate-900 p-6 rounded-3xl text-white shadow-2xl border-b-4 border-[#ffc600]">
             <div className="flex justify-between items-start">
               <p className="text-[#ffc600] font-black text-[11px] uppercase tracking-widest">Resumen Económico</p>
               <Calculator size={20} className="opacity-20" />
