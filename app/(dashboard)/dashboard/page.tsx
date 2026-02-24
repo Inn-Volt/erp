@@ -223,7 +223,7 @@ export default function DashboardPage() {
                       <div>
                         <div className="flex items-center gap-2">
                           <p className="text-base font-black text-slate-800 uppercase leading-none tracking-tight">{proy.cliente_nombre}</p>
-                          {proy.es_real && <ShieldCheck size={14} className="text-blue-500" title="Auditado" />}
+                          {proy.es_real && (<span title="Auditado"><ShieldCheck size={14} className="text-blue-500" /></span>)}
                         </div>
                         <div className="flex items-center gap-3 mt-2">
                           <p className={`text-[10px] font-black px-2 py-0.5 rounded-md uppercase ${proy.es_real ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-400 italic'}`}>
@@ -291,7 +291,7 @@ export default function DashboardPage() {
 
             <div className="mt-auto pt-10 border-t border-white/10">
               <div className="flex justify-between items-center">
-                <span className="text-[10px] font-black uppercase text-white/30 tracking-widest">InnVolt OS Core v2.0.4</span>
+                <span className="text-[10px] font-black uppercase text-white/30 tracking-widest">InnVolt Dashboard</span>
                 <div className="flex gap-1">
                   <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></div>
                   <div className="w-1.5 h-1.5 rounded-full bg-emerald-500/50"></div>
