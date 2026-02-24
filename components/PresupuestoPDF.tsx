@@ -1,11 +1,8 @@
 /* eslint-disable jsx-a11y/alt-text */
 'use client';
 import React from 'react';
-import { Page, Text, View, Document, StyleSheet, Image, Font } from '@react-pdf/renderer';
+import { Page, Text, View, Document, StyleSheet, Image, Link } from '@react-pdf/renderer';
 import logoInnvolt from './logo-innvolt.png'; 
-
-// Opcional: Registrar una fuente ayuda a que el justificado sea más preciso
-// Si prefieres no registrar fuentes externas, Helvetica (default) funciona bien.
 
 const styles = StyleSheet.create({
   page: { 
@@ -61,8 +58,8 @@ const styles = StyleSheet.create({
     fontSize: 9.5, 
     color: '#1e293b',
     textAlign: 'justify', 
-    lineHeight: 1.6,      // Aumentado levemente para mejorar la distribución
-    letterSpacing: 0.1,    // Espaciado sutil para evitar el error de visualización
+    lineHeight: 1.6,
+    letterSpacing: 0.1,
     margin: 20
   },
   clientGrid: {
@@ -84,6 +81,16 @@ const styles = StyleSheet.create({
   valueText: {
     color: '#1e293b',
     fontSize: 9
+  },
+  // Estilo para enlaces que no parecen enlaces (como el logo o dirección)
+  interactiveLink: {
+    textDecoration: 'none',
+    color: 'inherit'
+  },
+  // Estilo para destacar que algo es cliqueable (opcional para email/tel)
+  blueLink: {
+    color: '#2563eb',
+    textDecoration: 'none'
   },
   tableHeader: { 
     flexDirection: 'row', 
@@ -109,21 +116,28 @@ const styles = StyleSheet.create({
     justifyContent: 'flex-end' 
   },
   totalBox: { 
-    width: 190, 
+    width: 210, 
     backgroundColor: '#f8fafc', 
     padding: 8, 
-    borderRadius: 4 
+    borderRadius: 4,
+    borderWidth: 1,
+    borderColor: '#e2e8f0'
   },
   totalRow: { 
     flexDirection: 'row', 
     justifyContent: 'space-between',
     paddingVertical: 2
   },
+  categoryLabel: {
+    fontSize: 8,
+    color: '#64748b',
+    fontStyle: 'italic'
+  },
   grandTotal: { 
     marginTop: 4, 
     paddingTop: 4,
     borderTopWidth: 1,
-    borderTopColor: '#cbd5e1',
+    borderTopColor: '#ffc600',
     fontWeight: 'bold', 
     fontSize: 10,
     color: '#0f172a'
@@ -164,12 +178,32 @@ export const PresupuestoPDF = ({
   const f = (v: any) => `$ ${Math.round(v || 0).toLocaleString('es-CL')}`;
   const logoPath = (logoInnvolt as any)?.src || logoInnvolt;
 
+  // Lógica de separación de ítems
+  const materiales = items.filter((i: any) => i.esMaterial);
+  const moItems = items.filter((i: any) => !i.esMaterial);
+  const totalSumaMateriales = materiales.reduce((acc: number, curr: any) => acc + (curr.precio * curr.cantidad), 0);
+  const totalSumaMO = moItems.reduce((acc: number, curr: any) => acc + (curr.precio * curr.cantidad), 0);
+
+  const itemsParaMostrar = [
+    ...moItems,
+    ...(totalSumaMateriales > 0 ? [{
+      descripcion: "SUMINISTROS Y MATERIALES ELÉCTRICOS SEGÚN PROYECTO",
+      cantidad: 1,
+      precio: totalSumaMateriales
+    }] : [])
+  ];
+
+  // Limpieza de teléfono para WhatsApp (solo números)
+  const wspNumber = cliente?.telefono?.replace(/\D/g, '');
+
   return (
     <Document title={`Presupuesto ${folio}`}>
-      {/* PÁGINA 1: PROPUESTA TÉCNICA Y ECONÓMICA */}
       <Page size="A4" style={styles.page}>
         <View style={styles.header}>
-          <Image src={logoPath} style={styles.logoImage} />
+          {/* Logo con enlace a la web */}
+          <Link src="https://www.innvolt.cl" style={styles.interactiveLink}>
+            <Image src={logoPath} style={styles.logoImage} />
+          </Link>
           <View style={styles.companyInfo}>
             <Text style={{ fontWeight: 'bold' }}>InnVolt SpA</Text>
             <Text style={{ fontSize: 8 }}>inn-volt@outlook.cl | www.innvolt.cl</Text>
@@ -179,7 +213,6 @@ export const PresupuestoPDF = ({
           </View>
         </View>
 
-        {/* INFORMACIÓN DEL CLIENTE */}
         <View style={{ marginBottom: 15 }}>
           <Text style={styles.sectionTitle}>Información del Proyecto / Cliente</Text>
           <View style={styles.clientGrid}>
@@ -193,21 +226,32 @@ export const PresupuestoPDF = ({
             </View>
             <View style={styles.clientItem}>
               <Text style={styles.label}>Ubicación de Obra:</Text>
-              <Text style={styles.valueText}>{cliente?.direccion || '---'}</Text>
+              {/* Enlace a Google Maps */}
+              <Link src={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(cliente?.direccion || '')}`} style={styles.interactiveLink}>
+                <Text style={[styles.valueText, { color: '#2563eb', textDecoration: 'underline' }]}>
+                  {cliente?.direccion || '---'}
+                </Text>
+              </Link>
             </View>
             <View style={styles.clientItem}>
-              <Text style={styles.label}>Contacto:</Text>
-              <Text style={styles.valueText}>
-                {cliente?.telefono ? `${cliente.telefono} | ` : ''} 
-                {cliente?.email || 'Sin email registrado'}
-              </Text>
+              <Text style={styles.label}>Contacto (Email | Tel/Cel):</Text>
+              <View style={{ flexDirection: 'row', gap: 5 }}>
+                {/* Enlace a Email */}
+                <Link src={`mailto:${cliente?.email}`} style={styles.blueLink}>
+                  <Text style={styles.valueText}>{cliente?.email || '---'}</Text>
+                </Link>
+                <Text style={styles.valueText}>|</Text>
+                {/* Enlace a WhatsApp */}
+                <Link src={`https://wa.me/${wspNumber}`} style={styles.blueLink}>
+                  <Text style={styles.valueText}>{cliente?.telefono || '---'}</Text>
+                </Link>
+              </View>
             </View>
           </View>
         </View>
 
         <Text style={styles.sectionTitle}>1. Alcance Técnico del Servicio</Text>
         <View style={styles.descriptionContainer}>
-          {/* Se eliminó hyphenationEnabled para evitar el error de TS */}
           <Text style={styles.descriptionText}>
             {descripcionGeneral || "Servicios técnicos eléctricos especializados."}
           </Text>
@@ -221,7 +265,7 @@ export const PresupuestoPDF = ({
           <Text style={styles.colTotal}>Total</Text>
         </View>
         
-        {items.map((item: any, i: number) => (
+        {itemsParaMostrar.map((item: any, i: number) => (
           <View key={i} style={styles.tableRow} wrap={false}>
             <Text style={styles.colDesc}>{item.descripcion}</Text>
             <Text style={styles.colQty}>{item.cantidad}</Text>
@@ -233,8 +277,16 @@ export const PresupuestoPDF = ({
         <View style={styles.totalsArea}>
           <View style={styles.totalBox}>
             <View style={styles.totalRow}>
-              <Text>Monto Neto:</Text>
-              <Text>{f(subtotal)}</Text>
+              <Text style={styles.categoryLabel}>Total Materiales:</Text>
+              <Text style={styles.categoryLabel}>{f(totalSumaMateriales)}</Text>
+            </View>
+            <View style={styles.totalRow}>
+              <Text style={styles.categoryLabel}>Total Mano de Obra:</Text>
+              <Text style={styles.categoryLabel}>{f(totalSumaMO)}</Text>
+            </View>
+            <View style={[styles.totalRow, { marginTop: 4, borderTopWidth: 0.5, borderTopColor: '#cbd5e1', paddingTop: 2 }]}>
+              <Text style={{ fontWeight: 'bold' }}>Monto Neto:</Text>
+              <Text style={{ fontWeight: 'bold' }}>{f(subtotal)}</Text>
             </View>
             <View style={styles.totalRow}>
               <Text>IVA (19%):</Text>
@@ -249,11 +301,12 @@ export const PresupuestoPDF = ({
         <Text style={styles.footer}>InnVolt SpA - Montajes Eléctricos e Ingeniería NCh Elec. 4/2003</Text>
       </Page>
 
-      {/* PÁGINA 2: CONDICIONES Y FIRMAS */}
       <Page size="A4" style={styles.page}>
         <View style={styles.pageBody}>
           <View style={styles.header}>
-            <Image src={logoPath} style={styles.logoImage} />
+            <Link src="https://www.innvolt.cl" style={styles.interactiveLink}>
+                <Image src={logoPath} style={styles.logoImage} />
+            </Link>
             <Text style={{ fontSize: 8, color: '#64748b' }}>Ref. Folio: {folio}</Text>
           </View>
 

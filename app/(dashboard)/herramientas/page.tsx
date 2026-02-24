@@ -8,6 +8,8 @@ import {
   Gauge, FileText, Printer, CheckCircle2, Scale, 
   Lightbulb, Activity, ChevronRight, Info
 } from 'lucide-react';
+import { PDFDownloadLink } from '@react-pdf/renderer';
+import { InformeRICDocument } from '@/components/InformeRICPDF'; 
 
 type CargaTipo = 'iluminacion' | 'uso_general' | 'motores' | 'transformadores';
 
@@ -33,7 +35,7 @@ export default function InnVoltMasterRIC() {
     orden_peinado: false
   });
 
-  // --- TABLAS TÉCNICAS (Basadas en RIC 04 - Instalación al aire/ducto) ---
+  // --- TABLAS TÉCNICAS ---
   const capacidadCables: Record<string, number> = { '1.5': 15, '2.5': 20, '4': 28, '6': 36, '10': 50, '16': 66, '25': 88, '35': 109 };
   const diametroExternoCable: Record<string, number> = { '1.5': 3.0, '2.5': 3.6, '4': 4.2, '6': 4.8, '10': 6.2, '16': 7.4, '25': 9.2, '35': 10.5 };
   const diametroInternoDucto: Record<string, number> = { '16mm': 13.0, '20mm': 16.2, '25mm': 20.4, '32mm': 27.2, '40mm': 35.0, '50mm': 44.0 };
@@ -60,7 +62,6 @@ export default function InnVoltMasterRIC() {
     const disyuntores = [6, 10, 16, 20, 25, 32, 40, 50, 63, 80, 100, 125];
     const sugerido = disyuntores.find(d => d >= I * 1.25) || 125;
     
-    // Obtener capacidad del cable
     const ampacidadCable = capacidadCables[calc.seccion];
     const cableSoporta = I <= ampacidadCable;
 
@@ -194,7 +195,6 @@ export default function InnVoltMasterRIC() {
                   <span className={`text-5xl font-black ${resCaida.cumpleVoltaje ? 'text-emerald-400' : 'text-rose-500'}`}>{resCaida.p}%</span>
                 </div>
 
-                {/* NUEVO: CAPACIDAD DEL CABLE */}
                 <div className="bg-white/5 p-6 rounded-2xl space-y-4 border border-white/5">
                   <div className="flex justify-between items-center">
                     <p className="text-[9px] uppercase text-slate-400 font-black">Capacidad Conductor {resCaida.seccion}mm²</p>
@@ -377,63 +377,29 @@ export default function InnVoltMasterRIC() {
           </div>
         )}
 
-        {/* INFORME TÉCNICO */}
         {activeTab === 'informe' && (
-          <div className="animate-in zoom-in-95 duration-500">
-            <div id="print-area" className="border-[10px] border-slate-900 p-8 md:p-16 rounded-[4rem] bg-white text-slate-900 relative overflow-hidden">
-              <div className="absolute top-0 right-0 p-8 opacity-10"><Zap size={200}/></div>
+          <div className="animate-in zoom-in-95 duration-500 max-w-4xl mx-auto">
+            <div className="bg-white p-8 rounded-3xl border-2 border-slate-100 mb-6">
+              <h2 className="text-2xl font-black mb-4 italic uppercase">Vista Previa del Informe</h2>
+              <p className="text-slate-500 text-sm mb-6">El documento se generará siguiendo los estándares de la norma RIC vigente.</p>
               
-              <div className="flex flex-col md:flex-row justify-between items-start border-b-8 border-slate-900 pb-10 mb-12 gap-8">
-                <div className="space-y-4">
-                  <h2 className="text-6xl font-black uppercase italic tracking-tighter leading-[0.8]">Informe <br/>Técnico <br/><span className="text-[#ffc600]">RIC N°18/19</span></h2>
-                  <p className="text-xs font-black uppercase bg-slate-900 text-white inline-block px-4 py-1">Memoria de Ingeniería Eléctrica</p>
-                </div>
-                <div className="md:text-right font-black italic space-y-1">
-                  <p className="text-slate-400 text-[10px] uppercase not-italic">Proyecto</p>
-                  <p className="text-3xl">INN-VOLT-2026</p>
-                  <p className="text-slate-400 text-[10px] uppercase not-italic mt-4">Fecha de Emisión</p>
-                  <p className="text-lg uppercase">{new Date().toLocaleDateString()}</p>
-                </div>
-              </div>
-
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-16">
-                <section className="space-y-6">
-                  <h4 className="flex items-center gap-3 text-sm font-black uppercase border-b-2 border-slate-900 pb-2"><Scale size={18}/> 01. Parámetros del Alimentador</h4>
-                  <div className="space-y-3 text-[12px] font-bold uppercase text-slate-600 border-l-8 border-[#ffc600] pl-6">
-                    <p>• Carga Declarada: <span className="text-slate-900">{calc.valor} {calc.modo}</span></p>
-                    <p>• Corriente Calculada: <span className="text-slate-900">{resCaida?.i || '---'} A</span></p>
-                    <p>• Sección Conductor: <span className="text-slate-900">{resCaida?.seccion || '---'} mm²</span></p>
-                    <p>• Ampacidad Máx: <span className="text-slate-900">{resCaida?.ampacidadMax || '---'} A</span></p>
-                    <p>• Caída Tensión: <span className={resCaida?.cumpleVoltaje ? 'text-emerald-600' : 'text-rose-600'}>{resCaida?.p || '0.00'} %</span></p>
-                    <p>• ITM Recomendado: <span className="text-slate-900">{resCaida?.mcb || '---'} A</span></p>
-                  </div>
-                </section>
-
-                <section className="space-y-6">
-                  <h4 className="flex items-center gap-3 text-sm font-black uppercase border-b-2 border-slate-900 pb-2"><Gauge size={18}/> 02. Pruebas de Terreno</h4>
-                  <div className="space-y-3 text-[12px] font-bold uppercase text-slate-600 border-l-8 border-[#ffc600] pl-6">
-                    <p>• V. Medido: <span className="text-slate-900">{medicion.voltajeReal || '---'} V</span></p>
-                    <p>• P. a Tierra: <span className="text-slate-900">{medicion.tierra || '---'} Ω</span></p>
-                    <p>• Aislamiento: <span className="text-slate-900">{medicion.aislamiento || '---'} MΩ</span></p>
-                  </div>
-                </section>
-              </div>
-
-              <div className="mt-24 pt-10 border-t-8 border-slate-900 flex flex-col md:flex-row justify-between gap-12">
-                <div className="flex-1 text-center">
-                  <div className="h-1 bg-slate-900 mb-4 opacity-10"></div>
-                  <p className="text-[10px] font-black uppercase italic tracking-widest">Responsable Técnico</p>
-                </div>
-                <div className="flex-1 text-center">
-                  <div className="h-1 bg-slate-900 mb-4 opacity-10"></div>
-                  <p className="text-[10px] font-black uppercase italic tracking-widest">Aprobación Cliente</p>
-                </div>
-              </div>
+              <PDFDownloadLink
+                document={<InformeRICDocument calc={calc} resCaida={resCaida} medicion={medicion} checklist={checklist} />}
+                fileName={`Informe_RIC_InnVolt_${calc.valor || 'Calculo'}.pdf`}
+              >
+                {({ loading }) => (
+                  <button 
+                    disabled={loading}
+                    className={`w-full py-8 rounded-[2.5rem] font-black uppercase text-sm flex items-center justify-center gap-4 transition-all shadow-2xl ${
+                      loading ? 'bg-slate-400 cursor-not-allowed' : 'bg-emerald-600 hover:bg-emerald-700 text-white hover:scale-[1.02]'
+                    }`}
+                  >
+                    <FileText />
+                    {loading ? 'Generando Documento...' : 'Descargar PDF Oficial RIC'}
+                  </button>
+                )}
+              </PDFDownloadLink>
             </div>
-            
-            <button onClick={() => window.print()} className="w-full mt-10 bg-slate-900 text-white py-8 rounded-[2.5rem] font-black uppercase text-sm flex items-center justify-center gap-4 hover:scale-[1.02] transition-all shadow-2xl">
-              <Printer /> Generar PDF / Imprimir
-            </button>
           </div>
         )}
 

@@ -177,23 +177,36 @@ function CotizadorContent() {
     };
   }, [items, materialAfecto, moAfecto, descuentoPorcentajeMO]);
 
-  const getItemsVistaCliente = (itemsArray: any[]) => {
-    const materiales = itemsArray.filter(i => i.esMaterial);
-    const otrosItems = itemsArray.filter(i => !i.esMaterial);
-    if (materiales.length === 0) return itemsArray;
-    const totalSoloMateriales = materiales.reduce((acc, curr) => acc + (curr.precio * curr.cantidad), 0);
-    return [
-      ...otrosItems,
-      {
-        descripcion: "SUMINISTROS Y MATERIALES ELÉCTRICOS SEGÚN PROYECTO",
-        cantidad: 1,
-        precio: totalSoloMateriales,
-        esMaterial: true
-      }
-    ];
-  };
+const getItemsVistaCliente = (itemsArray: any[]) => {
+  const materiales = itemsArray.filter(i => i.esMaterial);
+  const moItems = itemsArray.filter(i => !i.esMaterial);
+  
+  const resultado = [];
 
-  const descargarPDF = async (tipo: 'cliente' | 'interno') => {
+  // 1. Agregamos la Mano de Obra desglosada
+  moItems.forEach(item => {
+    resultado.push({
+      ...item,
+      tipo: 'MO' // Marcamos para control interno si fuera necesario
+    });
+  });
+
+  // 2. Agregamos los materiales como una sola línea sumada
+  if (materiales.length > 0) {
+    const totalSoloMateriales = materiales.reduce((acc, curr) => acc + (curr.precio * curr.cantidad), 0);
+    resultado.push({
+      descripcion: "SUMINISTROS Y MATERIALES ELÉCTRICOS SEGÚN PROYECTO",
+      cantidad: 1,
+      precio: totalSoloMateriales,
+      esMaterial: true,
+      tipo: 'MATERIAL'
+    });
+  }
+
+  return resultado;
+};
+
+const descargarPDF = async (tipo: 'cliente' | 'interno') => {
     if (!folioGenerado || !clienteSeleccionado) return;
     setLoading(true);
     try {

@@ -7,7 +7,7 @@ import {
   Users, ArrowLeft, ChevronRight, TrendingUp, Search, Briefcase, 
   Activity, Receipt, ShieldCheck, Layers, Trash2, UserPlus, Zap, 
   Save, LayoutDashboard, Target, AlertTriangle, CheckCircle2, Plus,
-  Fuel, Utensils, DollarSign, ShieldAlert
+  Fuel, Utensils, DollarSign, ShieldAlert, Wallet, Clock
 } from 'lucide-react';
 
 // --- UTILIDADES ---
@@ -31,9 +31,8 @@ export default function RentabilidadPro() {
   const [isEditing, setIsEditing] = useState(false);
 
   // --- ESTADOS DE ANÁLISIS ---
-  const [personal, setPersonal] = useState<{rol: string, hh: number, costo_hh: number}[]>([]);
+  const [personal, setPersonal] = useState<{rol: string, hh: number, costo_hh: number, pago_dia?: number, dias_trabajados?: number}[]>([]);
   const [gastosAdicionales, setGastosAdicionales] = useState<number>(0);
-  // Nuevo estado para BI: Factor de riesgo
   const [factorRiesgo, setFactorRiesgo] = useState<number>(0.05);
 
   // --- GASTOS OPERACIONALES DETALLADOS ---
@@ -49,15 +48,28 @@ export default function RentabilidadPro() {
   });
 
   // --- LÓGICA DE PERSONAL ---
-  const agregarPersonal = () => setPersonal([...personal, { rol: '', hh: 0, costo_hh: 0 }]);
+  const agregarPersonal = () => setPersonal([...personal, { rol: '', hh: 0, costo_hh: 0, pago_dia: 0, dias_trabajados: 0 }]);
   
-  const updatePersonal = (index: number, field: 'rol' | 'hh' | 'costo_hh', value: any) => {
+  const updatePersonal = (index: number, field: string, value: any) => {
     const newPersonal = [...personal];
+    const item = { ...newPersonal[index] };
+
     if (field === 'rol') {
-      newPersonal[index][field] = value;
+      item.rol = value;
     } else {
-      newPersonal[index][field] = Number(value);
+      const numValue = Number(value);
+      (item as any)[field] = numValue;
+
+      if (field === 'pago_dia' || field === 'dias_trabajados') {
+        const pDia = field === 'pago_dia' ? numValue : (item.pago_dia || 0);
+        const dias = field === 'dias_trabajados' ? numValue : (item.dias_trabajados || 0);
+        
+        item.hh = dias * 9; 
+        item.costo_hh = item.hh > 0 ? Math.round((pDia * dias) / item.hh) : 0;
+      }
     }
+    
+    newPersonal[index] = item;
     setPersonal(newPersonal);
   };
 
@@ -137,17 +149,15 @@ export default function RentabilidadPro() {
     }
   };
 
-  // --- CÁLCULOS BI (MÉTRICAS) ---
+  // --- CÁLCULOS BI (MÉTRICAS ACTUALIZADAS) ---
   const metricas = useMemo(() => {
     if (!selectedCotizacion) return null;
     const items = selectedCotizacion.items || [];
     
-    // Tus funciones originales de cálculo restauradas
     const totalBencina = (calculoBencina.distanciaDiaria * calculoBencina.dias / Math.max(calculoBencina.rendimiento, 1)) * calculoBencina.precioLitro;
     const totalColacion = calculoColacion.montoPorPersona * calculoColacion.dias * personal.length;
     const gastosOperativosTotales = totalBencina + totalColacion + gastosAdicionales;
 
-    // Aplicación de Factor 1.25 (Costo Empresa Real)
     const factorCostoEmpresa = 1.25;
     const costoMOReal = personal.reduce((acc, curr) => acc + (curr.hh * (curr.costo_hh * factorCostoEmpresa)), 0);
     const totalHhReales = personal.reduce((acc, curr) => acc + curr.hh, 0);
@@ -163,13 +173,17 @@ export default function RentabilidadPro() {
     const subtotalNetoSII = Number(selectedCotizacion.subtotal);
     const ivaRetenido = subtotalNetoSII * 0.19;
 
-    // Costo Total Incluyendo Reserva de Imprevistos
     const costosDirectos = materialesPresupuestados + costoMOReal + gastosOperativosTotales;
     const reservaImprevistos = costosDirectos * factorRiesgo;
     const costoTotalReal = costosDirectos + reservaImprevistos;
 
     const utilidadNeta = subtotalNetoSII - costoTotalReal;
-    const margenReal = subtotalNetoSII > 0 ? (utilidadNeta / subtotalNetoSII) * 100 : 0;
+
+    // --- NUEVO CÁLCULO DE MARGEN ---
+    // El margen se calcula sobre (Venta Neta - Costo Materiales) para ver rentabilidad de ejecución
+    const baseCalculoMargen = subtotalNetoSII - materialesPresupuestados;
+    const margenReal = baseCalculoMargen > 0 ? (utilidadNeta / baseCalculoMargen) * 100 : 0;
+    
     const desviacionMO = moPresupuestada - (costoMOReal / factorCostoEmpresa);
 
     return {
@@ -187,7 +201,8 @@ export default function RentabilidadPro() {
       totalHhReales,
       totalBencina,
       totalColacion,
-      gastosOperativosTotales
+      gastosOperativosTotales,
+      baseCalculoMargen
     };
   }, [selectedCotizacion, personal, gastosAdicionales, calculoBencina, calculoColacion, factorRiesgo]);
 
@@ -258,8 +273,8 @@ export default function RentabilidadPro() {
 
           <div className="flex flex-wrap items-center justify-center gap-4 w-full lg:w-auto">
             <div className="text-center md:text-right px-4 border-r border-slate-800">
-              <p className="text-[9px] font-black text-slate-500 uppercase">IVA SII (19%)</p>
-              <p className="font-black text-blue-400 uppercase text-xs">{formatCLP(metricas.ivaRetenido)}</p>
+              <p className="text-[9px] font-black text-slate-500 uppercase">Costo Materiales</p>
+              <p className="font-black text-rose-400 uppercase text-xs">{formatCLP(metricas.materialesPresupuestados)}</p>
             </div>
             <button 
               onClick={guardarAnalisis}
@@ -279,8 +294,8 @@ export default function RentabilidadPro() {
               <div className="bg-white rounded-[1.5rem] md:rounded-[2.5rem] p-5 md:p-8 border border-slate-100 shadow-sm">
                 <div className="flex justify-between items-center mb-6">
                   <div>
-                    <h3 className="text-slate-900 font-black text-base md:text-lg uppercase italic leading-none">Recursos Humanos</h3>
-                    <p className="text-[9px] text-slate-400 font-bold uppercase tracking-tighter mt-1">* Factor 1.25 Costo Empresa aplicado</p>
+                    <h3 className="text-slate-900 font-black text-base md:text-lg uppercase italic leading-none">Ingreso de Personal</h3>
+                    <p className="text-[9px] text-slate-400 font-bold uppercase tracking-tighter mt-1">Calcula HH x Día laborado</p>
                   </div>
                   <button onClick={agregarPersonal} className="p-2 md:p-3 bg-slate-900 text-[#ffc600] rounded-xl hover:rotate-90 transition-all">
                     <Plus size={18}/>
@@ -295,27 +310,24 @@ export default function RentabilidadPro() {
                         <button onClick={() => eliminarPersonal(idx)} className="p-1 text-rose-500 hover:bg-rose-50 rounded-lg"><Trash2 size={14}/></button>
                       </div>
                       <input value={p.rol} onChange={(e) => updatePersonal(idx, 'rol', e.target.value)} placeholder="Ej: Maestro Liniero" className="text-slate-900 w-full bg-transparent font-black text-xs uppercase outline-none border-b border-slate-200 pb-1 focus:border-[#ffc600]"/>
+                      
                       <div className="grid grid-cols-2 gap-3 mt-1">
                         <div>
-                          <label className="text-[8px] font-black text-slate-400 uppercase">Horas (HH)</label>
-                          <input type="number" value={p.hh || ''} onChange={(e) => updatePersonal(idx, 'hh', e.target.value)} className="text-slate-900 w-full bg-white rounded-lg p-2 font-black text-xs border border-slate-200" placeholder="0"/>
+                          <label className="text-[8px] font-black text-slate-400 uppercase">Pago x Día ($)</label>
+                          <input type="number" value={p.pago_dia || ''} onChange={(e) => updatePersonal(idx, 'pago_dia', e.target.value)} className="text-slate-900 w-full bg-white rounded-lg p-2 font-black text-xs border border-slate-200" placeholder="0"/>
                         </div>
                         <div>
-                          <label className="text-[8px] font-black text-slate-400 uppercase">Valor HH (Base)</label>
-                          <div className="relative">
-                            <span className="absolute left-2 top-1/2 -translate-y-1/2 text-emerald-600 font-black text-xs">$</span>
-                            <input type="number" value={p.costo_hh || ''} onChange={(e) => updatePersonal(idx, 'costo_hh', e.target.value)} className="w-full bg-white rounded-lg p-2 pl-5 font-black text-xs text-emerald-600 border border-slate-200" placeholder="0"/>
-                          </div>
+                          <label className="text-[8px] font-black text-slate-400 uppercase">Días Trabajados</label>
+                          <input type="number" value={p.dias_trabajados || ''} onChange={(e) => updatePersonal(idx, 'dias_trabajados', e.target.value)} className="text-slate-900 w-full bg-white rounded-lg p-2 font-black text-xs border border-slate-200" placeholder="0"/>
                         </div>
+                      </div>
+
+                      <div className="flex justify-between items-center pt-2 border-t border-slate-200/50">
+                        <div className="text-[8px] font-bold text-slate-400 uppercase">Desglose: <span className="text-slate-600">{p.hh} HH Totales</span></div>
+                        <div className="text-[8px] font-bold text-slate-400 uppercase">Valor HH: <span className="text-emerald-600">{formatCLP(p.costo_hh)}</span></div>
                       </div>
                     </div>
                   ))}
-                  {personal.length === 0 && (
-                    <div className="text-center py-10 border-2 border-dashed border-slate-100 rounded-2xl md:rounded-3xl">
-                      <UserPlus size={32} className="mx-auto text-slate-200 mb-2"/>
-                      <p className="text-[10px] font-black text-slate-400 uppercase">Sin personal asignado</p>
-                    </div>
-                  )}
                 </div>
               </div>
 
@@ -324,7 +336,7 @@ export default function RentabilidadPro() {
                   <ShieldAlert size={80} className="absolute -right-5 -bottom-5 opacity-10" />
                   <h3 className="font-black uppercase italic mb-4">Gestión de Imprevistos</h3>
                   <div className="grid grid-cols-3 gap-2 mb-4">
-                    {[0.05, 0.10, 0.15].map(v => (
+                    {[0, 0.05, 0.10, 0.15].map(v => (
                       <button key={v} onClick={() => setFactorRiesgo(v)} className={`py-2 rounded-xl text-[10px] font-black transition-all ${factorRiesgo === v ? 'bg-[#ffc600] text-black' : 'bg-white/10'}`}>
                         {v*100}%
                       </button>
@@ -370,10 +382,6 @@ export default function RentabilidadPro() {
                             <label className="text-[7px] font-black text-slate-400 uppercase ml-1">Días</label>
                             <input type="number" value={calculoColacion.dias || ''} onChange={(e) => setCalculoColacion({...calculoColacion, dias: Number(e.target.value)})} className="text-slate-900 w-full p-2 bg-white rounded-lg border border-slate-200 text-[10px] font-bold outline-none"/>
                         </div>
-                        <div className="col-span-2 flex items-center justify-between px-2 text-emerald-600 font-black text-[10px] pt-1 border-t border-slate-200/50">
-                          <span>Subtotal ({personal.length} pers.):</span>
-                          <span>{formatCLP(metricas.totalColacion)}</span>
-                        </div>
                       </div>
                     </div>
 
@@ -393,24 +401,104 @@ export default function RentabilidadPro() {
                 </div>
               </div>
             </div>
+
+            {/* --- TABLA DE TRANSPARENCIA --- */}
+            <div className="bg-white rounded-[2rem] p-6 md:p-8 border border-slate-100 shadow-sm overflow-hidden">
+                <div className="flex items-center gap-3 mb-6">
+                    <Wallet className="text-[#ffc600]" size={24} />
+                    <h3 className="text-slate-900 font-black text-lg uppercase italic leading-none">Resumen de Pagos y Transparencia</h3>
+                </div>
+                <div className="overflow-x-auto">
+                    <table className="w-full text-left">
+                        <thead>
+                            <tr className="border-b border-slate-100">
+                                <th className="pb-4 text-[10px] font-black text-slate-400 uppercase">Item / Técnico</th>
+                                <th className="pb-4 text-[10px] font-black text-slate-400 uppercase text-center">Cálculo</th>
+                                <th className="pb-4 text-[10px] font-black text-slate-400 uppercase text-right">Total a Pagar</th>
+                            </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-50">
+                            {personal.map((p, i) => (
+                                <tr key={i} className="group">
+                                    <td className="py-4">
+                                        <p className="text-xs font-black text-slate-800 uppercase italic">{p.rol || 'Sin Nombre'}</p>
+                                        <p className="text-[9px] text-slate-400 font-bold uppercase">Mano de Obra Directa</p>
+                                    </td>
+                                    <td className="py-4 text-center text-[10px] font-bold text-slate-500">
+                                        {p.dias_trabajados} días x {formatCLP(p.pago_dia || 0)}
+                                    </td>
+                                    <td className="py-4 text-right text-xs font-black text-emerald-600">
+                                        {formatCLP((p.pago_dia || 0) * (p.dias_trabajados || 0))}
+                                    </td>
+                                </tr>
+                            ))}
+                            <tr>
+                                <td className="py-4">
+                                    <p className="text-xs font-black text-slate-800 uppercase italic">Combustible</p>
+                                    <p className="text-[9px] text-slate-400 font-bold uppercase">Logística</p>
+                                </td>
+                                <td className="py-4 text-center text-[10px] font-bold text-slate-500">
+                                    {calculoBencina.dias} días operando
+                                </td>
+                                <td className="py-4 text-right text-xs font-black text-slate-800">
+                                    {formatCLP(metricas.totalBencina)}
+                                </td>
+                            </tr>
+                            <tr>
+                                <td className="py-4">
+                                    <p className="text-xs font-black text-slate-800 uppercase italic">Colaciones</p>
+                                    <p className="text-[9px] text-slate-400 font-bold uppercase">Alimentación</p>
+                                </td>
+                                <td className="py-4 text-center text-[10px] font-bold text-slate-500">
+                                    {personal.length} pers. x {calculoColacion.dias} días
+                                </td>
+                                <td className="py-4 text-right text-xs font-black text-slate-800">
+                                    {formatCLP(metricas.totalColacion)}
+                                </td>
+                            </tr>
+                            {gastosAdicionales > 0 && (
+                                <tr>
+                                    <td className="py-4">
+                                        <p className="text-xs font-black text-slate-800 uppercase italic">Otros Gastos</p>
+                                        <p className="text-[9px] text-slate-400 font-bold uppercase">Insumos/Viáticos</p>
+                                    </td>
+                                    <td className="py-4 text-center text-[10px] font-bold text-slate-500">-</td>
+                                    <td className="py-4 text-right text-xs font-black text-slate-800">
+                                        {formatCLP(gastosAdicionales)}
+                                    </td>
+                                </tr>
+                            )}
+                        </tbody>
+                        <tfoot>
+                            <tr className="bg-slate-900 text-white">
+                                <td colSpan={2} className="p-4 rounded-l-2xl text-[10px] font-black uppercase italic">Costo Operativo Directo (Sin Materiales)</td>
+                                <td className="p-4 rounded-r-2xl text-right text-sm font-black text-[#ffc600]">
+                                    {formatCLP((metricas.costoMOReal / 1.25) + metricas.gastosOperativosTotales)}
+                                </td>
+                            </tr>
+                        </tfoot>
+                    </table>
+                </div>
+            </div>
           </div>
           
           <div className="lg:col-span-4 space-y-6">
             <div className={`rounded-[2rem] md:rounded-[3.5rem] p-6 md:p-10 shadow-2xl transition-all duration-700 relative overflow-hidden ${metricas.utilidadNeta > 0 ? 'bg-slate-900' : 'bg-rose-950'}`}>
               <div className="relative z-10 text-center space-y-6 md:space-y-8">
                 <div>
-                  <p className="text-[10px] md:text-[11px] font-black text-slate-500 uppercase tracking-[0.3em] mb-2">Utilidad Neta Real (Post-Impuestos/Reserva)</p>
+                  <p className="text-[10px] md:text-[11px] font-black text-slate-500 uppercase tracking-[0.3em] mb-2">Utilidad Neta Final</p>
                   <h4 className={`text-4xl md:text-5xl font-black italic tracking-tighter ${metricas.utilidadNeta >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
                     {formatCLP(metricas.utilidadNeta)}
                   </h4>
                 </div>
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="bg-white/5 backdrop-blur-md p-4 rounded-2xl border border-white/10 text-center">
-                    <p className="text-[9px] font-black text-slate-400 uppercase mb-1">Margen Real</p>
-                    <p className="text-xl md:text-2xl font-black text-white">{metricas.margenReal.toFixed(1)}%</p>
+                <div className="space-y-4">
+                  <div className="bg-white/5 backdrop-blur-md p-6 rounded-2xl border border-white/10 text-center">
+                    <p className="text-[10px] font-black text-[#ffc600] uppercase mb-1 italic">Margen sobre Ejecución</p>
+                    <p className="text-3xl md:text-4xl font-black text-white">{metricas.margenReal.toFixed(1)}%</p>
+                    <p className="text-[8px] text-slate-400 uppercase mt-2">* Calculado sobre Venta Neta - Costo Materiales</p>
                   </div>
-                  <div className="bg-white/5 backdrop-blur-md p-4 rounded-2xl border border-white/10 text-center">
-                    <p className="text-[9px] font-black text-slate-400 uppercase mb-1">Costo Total</p>
+                  <div className="bg-white/5 backdrop-blur-md p-4 rounded-2xl border border-white/10 flex justify-between items-center px-6">
+                    <p className="text-[9px] font-black text-slate-400 uppercase">Costo Total Real</p>
                     <p className="text-xs font-black text-white">{formatCLP(metricas.costoTotalReal)}</p>
                   </div>
                 </div>
@@ -423,19 +511,15 @@ export default function RentabilidadPro() {
                   {metricas.desviacionMO >= 0 ? <CheckCircle2 size={24}/> : <AlertTriangle size={24}/>}
                 </div>
                 <div>
-                  <p className="text-xs font-black text-slate-900 uppercase italic">Análisis de Ejecución</p>
-                  <p className="text-[10px] font-bold text-slate-400 uppercase">Eficiencia en MO</p>
+                  <p className="text-xs font-black text-slate-900 uppercase italic">Eficiencia MO</p>
+                  <p className="text-[10px] font-bold text-slate-400 uppercase">Análisis</p>
                 </div>
               </div>
               <p className="text-[11px] md:text-xs font-bold text-slate-600 leading-relaxed uppercase">
                 {metricas.desviacionMO >= 0 
-                  ? `Eficiencia detectada: Estás operando con un ahorro de ${formatCLP(metricas.desviacionMO)} respecto a lo presupuestado originalmente.`
-                  : `Alerta de sobrecosto: La ejecución de mano de obra ha superado el presupuesto inicial en ${formatCLP(Math.abs(metricas.desviacionMO))}.`}
+                  ? `Eficiencia: Ahorro de ${formatCLP(metricas.desviacionMO)} en MO.`
+                  : `Alerta: Sobrecosto de ${formatCLP(Math.abs(metricas.desviacionMO))} en MO.`}
               </p>
-              <div className="pt-6 border-t border-slate-50 flex items-center justify-between text-[10px] font-black uppercase">
-                <span className="text-slate-400">Punto de Equilibrio</span>
-                <span className="text-slate-900">{formatCLP(metricas.costoTotalReal)}</span>
-              </div>
             </div>
           </div>
         </div>
@@ -443,7 +527,12 @@ export default function RentabilidadPro() {
     );
   }
 
-  // --- VISTA 2: SELECCIÓN DE PROYECTO ---
+  // --- RESTO DEL COMPONENTE (SELECCION CLIENTE/BUSCADOR) SE MANTIENE IGUAL ---
+  const filteredClientes = clientes.filter(c => 
+    c.nombre_cliente.toLowerCase().includes(searchTerm.toLowerCase()) || 
+    c.rut?.toLowerCase().includes(searchTerm.toLowerCase())
+  );
+
   if (selectedCliente) {
     return (
       <div className="p-4 md:p-8 max-w-6xl mx-auto space-y-6 md:space-y-8 animate-in slide-in-from-bottom duration-700">
@@ -476,19 +565,12 @@ export default function RentabilidadPro() {
                 <p className="text-[9px] font-black text-slate-400 uppercase mb-1">Venta Neta</p>
                 <p className="text-lg md:text-xl font-black text-emerald-600">{formatCLP(cot.subtotal)}</p>
               </div>
-              <div className="absolute right-0 top-0 h-full w-1.5 bg-[#ffc600] opacity-0 group-hover:opacity-100 transition-all hidden sm:block"></div>
             </button>
           ))}
         </div>
       </div>
     );
   }
-
-  // --- VISTA 1: BUSCADOR DE CLIENTES ---
-  const filteredClientes = clientes.filter(c => 
-    c.nombre_cliente.toLowerCase().includes(searchTerm.toLowerCase()) || 
-    c.rut?.toLowerCase().includes(searchTerm.toLowerCase())
-  );
 
   return (
     <div className="p-4 md:p-8 lg:p-12 max-w-7xl mx-auto space-y-8 md:space-y-12 animate-in fade-in duration-1000">
