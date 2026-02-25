@@ -473,7 +473,7 @@ export default function RentabilidadPro() {
                             <tr className="bg-slate-900 text-white">
                                 <td colSpan={2} className="p-4 rounded-l-2xl text-[10px] font-black uppercase italic">Costo Operativo Directo (Sin Materiales)</td>
                                 <td className="p-4 rounded-r-2xl text-right text-sm font-black text-[#ffc600]">
-                                    {formatCLP((metricas.costoMOReal / 1.25) + metricas.gastosOperativosTotales)}
+                                    {formatCLP((metricas.costoMOReal / 1) + metricas.gastosOperativosTotales)}
                                 </td>
                             </tr>
                         </tfoot>
