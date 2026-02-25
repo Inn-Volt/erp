@@ -158,7 +158,7 @@ export default function RentabilidadPro() {
     const totalColacion = calculoColacion.montoPorPersona * calculoColacion.dias * personal.length;
     const gastosOperativosTotales = totalBencina + totalColacion + gastosAdicionales;
 
-    const factorCostoEmpresa = 1.25;
+    const factorCostoEmpresa = 1;
     const costoMOReal = personal.reduce((acc, curr) => acc + (curr.hh * (curr.costo_hh * factorCostoEmpresa)), 0);
     const totalHhReales = personal.reduce((acc, curr) => acc + curr.hh, 0);
     
