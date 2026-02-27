@@ -1,15 +1,17 @@
+/* eslint-disable jsx-a11y/alt-text */
 /* eslint-disable @typescript-eslint/no-explicit-any */
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/lib/supabase';
 import Link from 'next/link';
 import { 
   ArrowLeft, Search, Calendar, Download, 
-  Trash2, Loader2, Hash, Edit3, X, User, 
-  ChevronRight, History, Package, Copy, CheckCircle2, Clock, AlertCircle
+  Trash2, Loader2, Hash, Edit3, User, 
+  ChevronRight, Package, Copy
 } from 'lucide-react';
 
+// --- IMPORTACIONES PARA PDF ---
 import { PresupuestoPDF } from '@/components/PresupuestoPDF';
 import { ListadoInternoPDF } from '@/components/ListadoInternoPDF';
 import { pdf } from '@react-pdf/renderer';
@@ -26,26 +28,18 @@ const formatCLP = (valor: number) => {
     style: 'currency',
     currency: 'CLP',
     minimumFractionDigits: 0
-  }).format(valor);
+  }).format(valor || 0);
 };
 
-// Componente para los Estados visuales
-const StatusBadge = ({ estado }: { estado: string }) => {
-  const styles: any = {
-    pendiente: "bg-amber-100 text-amber-700 border-amber-200",
-    aprobado: "bg-green-100 text-green-700 border-green-200",
-    rechazado: "bg-red-100 text-red-700 border-red-200",
-  };
-  const icons: any = {
-    pendiente: <Clock size={10} />,
-    aprobado: <CheckCircle2 size={10} />,
-    rechazado: <AlertCircle size={10} />,
-  };
-  return (
-    <span className={`flex items-center gap-1 px-2 py-0.5 rounded-full border text-[9px] font-black uppercase tracking-tighter ${styles[estado] || styles.pendiente}`}>
-      {icons[estado] || icons.pendiente} {estado || 'pendiente'}
-    </span>
-  );
+const getEstadoStyle = (estado: string) => {
+  switch (estado) {
+    case 'Realizado': return 'bg-emerald-50 text-emerald-600 border-emerald-100';
+    case 'Aceptado': return 'bg-blue-50 text-blue-600 border-blue-100';
+    case 'Entregado': return 'bg-purple-50 text-purple-600 border-purple-100';
+    case 'Pendiente': return 'bg-amber-50 text-amber-600 border-amber-100';
+    case 'Rechazado': return 'bg-red-50 text-red-600 border-red-100';
+    default: return 'bg-slate-50 text-slate-600 border-slate-100';
+  }
 };
 
 export default function HistorialPage() {
@@ -57,18 +51,13 @@ export default function HistorialPage() {
 
   const datosInnVolt = {
     nombre: "InnVolt SpA",
-    nombre_cliente: "InnVolt SpA",
     rut: "78.299.986-9", 
     direccion: "Santiago, Chile",
     giro: "Servicios Eléctricos"
   };
 
-  useEffect(() => {
-    fetchData();
-  }, []);
-
-  async function fetchData() {
-    setLoading(true);
+  const fetchData = useCallback(async (silent = false) => {
+    if (!silent) setLoading(true);
     const { data: res, error } = await supabase
       .from('cotizaciones')
       .select('*, clientes(*)')
@@ -76,65 +65,139 @@ export default function HistorialPage() {
 
     if (!error && res) setData(res);
     setLoading(false);
-  }
+  }, []);
 
-  const getItemsVistaCliente = (itemsArray: any[]) => {
+  useEffect(() => {
+    fetchData();
+    const channel = supabase
+      .channel('historial_realtime')
+      .on('postgres_changes', 
+        { event: '*', schema: 'public', table: 'cotizaciones' }, 
+        () => fetchData(true)
+      )
+      .subscribe();
+    return () => { supabase.removeChannel(channel); };
+  }, [fetchData]);
+
+  const updateEstado = async (id: string, nuevoEstado: string) => {
+    try {
+      const { error } = await supabase
+        .from('cotizaciones')
+        .update({ estado: nuevoEstado }) 
+        .eq('id', id);
+      
+      if (error) throw error;
+      
+      setData(prev => prev.map(c => c.id === id ? { ...c, estado: nuevoEstado } : c));
+    } catch (e: any) {
+      console.error("Error al actualizar:", e.message);
+    }
+  };
+
+  // --- LÓGICA DE ITEMS PARA CLIENTE ---
+  const prepareItemsForClientPDF = (itemsArray: any[]) => {
+    if (!itemsArray) return [];
+    
+    // Separar materiales y mano de obra
     const materiales = itemsArray.filter(i => i.esMaterial);
-    const otrosItems = itemsArray.filter(i => !i.esMaterial);
+    const manoDeObra = itemsArray.filter(i => !i.esMaterial);
+    
     if (materiales.length === 0) return itemsArray;
-    const totalSoloMateriales = materiales.reduce((acc, curr) => acc + (curr.precio * curr.cantidad), 0);
+    
+    // Calcular total de materiales bruto para agrupar
+    const totalSoloMateriales = materiales.reduce((acc, curr) => {
+      return acc + (Number(curr.precio) * Number(curr.cantidad));
+    }, 0);
+    
     return [
-      ...otrosItems,
+      ...manoDeObra,
       {
         descripcion: "SUMINISTROS Y MATERIALES ELÉCTRICOS SEGÚN PROYECTO",
         cantidad: 1,
         precio: totalSoloMateriales,
-        esMaterial: true
+        esMaterial: true,
+        iva_incluido: true
       }
     ];
   };
 
+  // --- FUNCIÓN DE DESCARGA PDF CORREGIDA ---
   const descargarPDF = async (tipo: 'cliente' | 'interno') => {
     if (!selectedCotizacion || isGenerating) return;
     setIsGenerating(true);
+    
     try {
-      const folioFormateado = formatFolio(selectedCotizacion.folio);
-      const clienteNombre = selectedCotizacion.clientes?.nombre_cliente || 'Cliente';
+      const c = selectedCotizacion;
+      const folioFormateado = formatFolio(c.folio);
+      const clienteNombre = c.clientes?.nombre_cliente || 'Cliente';
+
+      // --- BLINDAJE DE DATOS ---
+      const itemsEstructurados = (c.items || []).map((item: any) => ({
+        ...item,
+        precio: Number(item.precio) || 0,
+        cantidad: Number(item.cantidad) || 0,
+        iva_incluido: item.iva_incluido !== undefined ? item.iva_incluido : true 
+      }));
+
+      // --- CÁLCULO REUTILIZANDO LÓGICA COMPARTIDA ---
+      // 1. Obtenemos el porcentaje desde la BD (ej: 10)
+      const porcDesc = Number(c.descuento_global) || 0;
+      
+      // 2. Calculamos el subtotal real de la Mano de Obra (sin aplicar el descuento aún)
+      // Esto asegura que si se guardó mal, al menos aquí se recalcula bien.
+      const subtotalMO = itemsEstructurados
+        .filter((item: any) => !item.esMaterial)
+        .reduce((acc: number, curr: any) => acc + (curr.cantidad * curr.precio), 0);
+      
+      // 3. Calculamos el monto real del descuento
+      const montoDesc = (subtotalMO * porcDesc) / 100;
 
       if (tipo === 'cliente') {
+        const itemsAgrupados = prepareItemsForClientPDF(itemsEstructurados);
+
         const doc = (
           <PresupuestoPDF 
-            cliente={selectedCotizacion.clientes} 
-            items={getItemsVistaCliente(selectedCotizacion.items || [])} 
-            subtotal={selectedCotizacion.subtotal} 
-            iva={selectedCotizacion.iva} 
-            total={selectedCotizacion.total} 
+            cliente={c.clientes} 
+            items={itemsAgrupados} 
+            // Pasamos los totales finales que guardamos en la DB
+            subtotal={Number(c.subtotal) || 0}
+            iva={Number(c.iva) || 0}
+            total={Number(c.total) || 0}
             folio={folioFormateado}
-            descripcionGeneral={selectedCotizacion.descripcion_general}
-            garantia={selectedCotizacion.condiciones_servicio}
-            condicionesComerciales={selectedCotizacion.condiciones_comerciales}
+            descripcionGeneral={c.descripcion_general}
+            garantia={c.condiciones_servicio}
+            condicionesComerciales={c.condiciones_comerciales}
+            
+            // --- DATOS DE DESCUENTO ---
+            descuentoPorcentajeMO={porcDesc}
+            montoDescuentoMO={montoDesc}
           />
         );
         const blob = await pdf(doc).toBlob();
         saveAs(blob, `Cotizacion_${folioFormateado}_${clienteNombre}.pdf`);
       } else {
-        const soloMateriales = (selectedCotizacion.items || []).filter((i: any) => i.esMaterial);
-        const subtotalM = soloMateriales.reduce((acc: number, curr: any) => acc + (curr.precio * curr.cantidad), 0);
+        // ... Lógica reporte interno igual
+        const soloMateriales = itemsEstructurados.filter((i: any) => i.esMaterial);
         const doc = (
           <ListadoInternoPDF
             cliente={datosInnVolt} 
             items={soloMateriales} 
-            subtotal={subtotalM} 
-            iva={Math.round(subtotalM * 0.19)} 
-            total={subtotalM + Math.round(subtotalM * 0.19)} 
+            subtotal={Number(c.subtotal) || 0}
+            iva={Number(c.iva) || 0}
+            total={Number(c.total) || 0}
             folio={folioFormateado} 
-            descripcionGeneral="LISTADO INTERNO DE MATERIALES" 
+            descripcionGeneral={`Listado materiales: ${clienteNombre}`}
           />
         );
         const blob = await pdf(doc).toBlob();
         saveAs(blob, `Interno_${folioFormateado}.pdf`);
       }
-    } catch (error) { console.error(error); } finally { setIsGenerating(false); }
+    } catch (error) { 
+      console.error("Error generando PDF:", error); 
+    } finally { 
+      setIsGenerating(false); 
+      setSelectedCotizacion(null);
+    }
   };
 
   const handleEliminar = async (id: string, folio: number) => {
@@ -150,11 +213,10 @@ export default function HistorialPage() {
 
   return (
     <div className="min-h-screen bg-[#f1f5f9] text-slate-900 pb-20 md:pb-10 font-sans">
-      
       <header className="sticky top-0 z-40 bg-white/80 backdrop-blur-md border-b border-slate-200">
         <div className="max-w-7xl mx-auto px-4 py-3 md:py-4 flex flex-col sm:flex-row justify-between items-center gap-4">
           <div className="flex items-center gap-3 w-full sm:w-auto">
-            <Link href="/cotizador" className="bg-slate-900 p-2 md:p-3 rounded-xl shadow-lg hover:rotate-[-5deg] transition-all">
+            <Link href="/dashboard" className="bg-slate-900 p-2 md:p-3 rounded-xl shadow-lg hover:rotate-[-5deg] transition-all">
               <ArrowLeft className="text-[#ffc600]" size={20} />
             </Link>
             <div>
@@ -191,12 +253,12 @@ export default function HistorialPage() {
                     <th className="p-6">Cliente</th>
                     <th className="p-6">Estado</th>
                     <th className="p-6 text-right">Monto Total</th>
-                    <th className="p-6 text-center">Gestión</th>
+                    <th className="p-6 text-center">Acciones</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
                   {filtered.map(c => (
-                    <tr key={c.id} className="group hover:bg-slate-50 transition-colors">
+                    <tr key={c.id} className={`group hover:bg-slate-50 transition-colors ${c.estado === 'Rechazado' ? 'opacity-60' : ''}`}>
                       <td className="p-6">
                         <div className="flex items-center gap-3">
                           <div className="p-3 bg-slate-100 rounded-xl group-hover:bg-[#ffc600] group-hover:text-slate-900 transition-all">
@@ -213,44 +275,32 @@ export default function HistorialPage() {
                         <p className="text-[9px] font-bold text-slate-400">RUT: {c.clientes?.rut}</p>
                       </td>
                       <td className="p-6">
-                        <StatusBadge estado={c.estado} />
+                        <select 
+                          value={c.estado || 'Pendiente'} 
+                          onChange={(e) => updateEstado(c.id, e.target.value)}
+                          className={`text-[10px] font-black uppercase py-1.5 px-3 rounded-xl border-2 outline-none cursor-pointer transition-all ${getEstadoStyle(c.estado || 'Pendiente')}`}
+                        >
+                          <option value="Pendiente">Pendiente</option>
+                          <option value="Aceptado">Aceptado</option>
+                          <option value="Realizado">Realizado</option>
+                          <option value="Rechazado">Rechazado</option>
+                        </select>
                       </td>
                       <td className="p-6 text-right">
                         <p className="font-black text-slate-900 text-sm">{formatCLP(c.total)}</p>
                       </td>
                       <td className="p-6">
                         <div className="flex justify-center gap-1">
-                          {/* BOTÓN EDITAR: Modifica la original */}
-                          <Link 
-                            title="Editar Corregir" 
-                            href={`/cotizador?edit=${c.id}`} 
-                            className="p-2.5 text-blue-600 hover:bg-blue-600 hover:text-white rounded-xl transition-all border border-blue-100"
-                          >
+                          <Link href={`/cotizador?edit=${c.id}`} className="p-2.5 text-blue-600 hover:bg-blue-600 hover:text-white rounded-xl transition-all border border-blue-100">
                             <Edit3 size={16}/>
                           </Link>
-                          
-                          {/* BOTÓN CLONAR: Crea una nueva copia */}
-                          <Link 
-                            title="Clonar / Duplicar" 
-                            href={`/cotizador?clone=${c.id}`} 
-                            className="p-2.5 text-amber-600 hover:bg-amber-600 hover:text-white rounded-xl transition-all border border-amber-100"
-                          >
+                          <Link href={`/cotizador?clone=${c.id}`} className="p-2.5 text-amber-600 hover:bg-amber-600 hover:text-white rounded-xl transition-all border border-amber-100">
                             <Copy size={16}/>
                           </Link>
-
-                          <button 
-                            title="Descargar PDF" 
-                            onClick={() => setSelectedCotizacion(c)} 
-                            className="p-2.5 text-green-600 hover:bg-green-600 hover:text-white rounded-xl transition-all border border-green-100"
-                          >
+                          <button onClick={() => setSelectedCotizacion(c)} className="p-2.5 text-green-600 hover:bg-green-600 hover:text-white rounded-xl transition-all border border-green-100">
                             <Download size={16}/>
                           </button>
-
-                          <button 
-                            title="Eliminar" 
-                            onClick={() => handleEliminar(c.id, c.folio)} 
-                            className="p-2.5 text-slate-300 hover:text-red-500 hover:bg-red-50 transition-all"
-                          >
+                          <button onClick={() => handleEliminar(c.id, c.folio)} className="p-2.5 text-slate-300 hover:text-red-500 hover:bg-red-50 transition-all">
                             <Trash2 size={16}/>
                           </button>
                         </div>
@@ -259,13 +309,23 @@ export default function HistorialPage() {
                   ))}
                 </tbody>
               </table>
+
               {/* VISTA MÓVIL */}
               <div className="md:hidden divide-y divide-slate-100">
                 {filtered.map(c => (
-                  <div key={c.id} className="p-6 space-y-4">
+                  <div key={c.id} className={`p-6 space-y-4 ${c.estado === 'Rechazado' ? 'bg-slate-50 opacity-80' : ''}`}>
                     <div className="flex justify-between items-center">
                       <span className="text-sm font-black text-slate-800">{formatFolio(c.folio)}</span>
-                      <StatusBadge estado={c.estado} />
+                      <select 
+                        value={c.estado || 'Pendiente'} 
+                        onChange={(e) => updateEstado(c.id, e.target.value)}
+                        className={`text-[9px] font-black uppercase py-1 px-3 rounded-xl border-2 outline-none ${getEstadoStyle(c.estado || 'Pendiente')}`}
+                      >
+                        <option value="Pendiente">Pendiente</option>
+                        <option value="Aceptado">Aceptado</option>
+                        <option value="Realizado">Realizado</option>
+                        <option value="Rechazado">Rechazado</option>
+                      </select>
                     </div>
                     <p className="text-xs font-black uppercase text-slate-800">{c.clientes?.nombre_cliente}</p>
                     <div className="flex gap-2">

@@ -1,13 +1,13 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { supabase } from '@/lib/supabase';
 import { useRouter } from 'next/navigation';
 import { 
   FileText, Settings, Users, BarChart3, Plus,
   TrendingUp, Clock, Package, ChevronRight, Activity, Zap,
   ArrowUpRight, AlertCircle, CheckCircle2, DollarSign,
-  ArrowDownRight, ShieldCheck, Search
+  ArrowDownRight, ShieldCheck, Search, Loader2
 } from 'lucide-react';
 
 // --- UTILIDADES ---
@@ -39,18 +39,9 @@ export default function DashboardPage() {
     proyectos: [] as any[]
   });
 
-  useEffect(() => {
-    const checkUser = async () => {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session) router.push('/login');
-    };
-    
-    checkUser();
-    fetchDashboardFullData();
-  }, []);
-
-  async function fetchDashboardFullData() {
-    setLoading(true);
+  // Usamos useCallback para poder llamarlo desde el useEffect y la suscripción Realtime
+  const fetchDashboardFullData = useCallback(async (silent = false) => {
+    if (!silent) setLoading(true);
     try {
       const [cotsRes, clientesRes, stockRes, rentRes] = await Promise.all([
         supabase.from('cotizaciones').select('*').order('created_at', { ascending: false }).limit(50), 
@@ -105,11 +96,43 @@ export default function DashboardPage() {
     } catch (e) {
       console.error("Critical Dashboard Error:", e);
     } finally {
-      setTimeout(() => setLoading(false), 800);
+      if (!silent) setTimeout(() => setLoading(false), 800);
     }
-  }
+  }, []);
 
-  // --- FUNCIÓN CORREGIDA ---
+  useEffect(() => {
+    const checkUser = async () => {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) router.push('/login');
+    };
+    
+    checkUser();
+    fetchDashboardFullData();
+
+    // --- LÓGICA DE ACTUALIZACIÓN EN TIEMPO REAL ---
+    const channel = supabase
+      .channel('innvolt-os-realtime')
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'cotizaciones' },
+        (payload) => {
+          console.log('Cambio detectado en cotizaciones:', payload);
+          // Refrescamos los datos de forma silenciosa para que el usuario no vea el loading screen de nuevo
+          fetchDashboardFullData(true);
+        }
+      )
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'analisis_rentabilidad' },
+        () => fetchDashboardFullData(true)
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [fetchDashboardFullData, router]);
+
   async function updateEstado(id: string, nuevoEstado: string) {
     try {
       const { error } = await supabase
@@ -122,12 +145,12 @@ export default function DashboardPage() {
         return;
       }
       
+      // Actualizamos el estado local inmediatamente para feedback visual rápido
       setData(prev => ({
         ...prev,
         proyectos: prev.proyectos.map(p => p.id === id ? { ...p, estado: nuevoEstado } : p)
       }));
     } catch (e: any) {
-      // Captura errores de red o excepciones inesperadas
       console.error("Error inesperado en updateEstado:", e.message || e);
     }
   }
@@ -272,7 +295,7 @@ export default function DashboardPage() {
           </div>
 
           <div className="p-8 bg-slate-50 border-2 border-dashed border-slate-200 rounded-[2.5rem] flex items-center justify-center opacity-50 grayscale hover:grayscale-0 transition-all cursor-not-allowed">
-            <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 italic font-bold">Módulo Administrativo</p>
+            <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 italic">Módulo Administrativo</p>
           </div>
         </div>
       </div>

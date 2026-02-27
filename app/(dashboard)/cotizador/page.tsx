@@ -8,8 +8,7 @@ import Link from 'next/link';
 import { 
   Plus, Trash2, Save, FileText, Calculator, History,
   Package, X, User, Download, UserPlus, Loader2, RefreshCcw,
-  Settings, ShieldCheck, ClipboardCheck, ChevronRight, FileUp,
-  Info, Percent, Clock, Copy
+  Percent, Check, FileUp, ChevronRight, Tags 
 } from 'lucide-react';
 import { PresupuestoPDF } from '@/components/PresupuestoPDF';
 import { pdf } from '@react-pdf/renderer';
@@ -36,6 +35,22 @@ const cleanNumber = (val: any): number => {
   return Number(String(val).replace(/\D/g, '')) || 0;
 };
 
+// --- ESTRUCTURA DE ITEM ---
+interface CotizacionItem {
+  descripcion: string;
+  cantidad: number;
+  precio: number; 
+  esMaterial: boolean;
+  // --- LÓGICA DE IVA ---
+  // Materiales: 
+  //    TRUE: Precio ingresado es BRUTO (1000 con iva incluido -> neto es 840)
+  //    FALSE: Precio ingresado es NETO (1000 sin iva -> total es 1190)
+  // Mano de Obra:
+  //    TRUE: Precio ingresado es NETO (1000 + iva)
+  //    FALSE: Precio ingresado es FINAL (1000 exento)
+  iva_incluido: boolean; 
+}
+
 function CotizadorContent() {
   const searchParams = useSearchParams();
   const router = useRouter();
@@ -52,14 +67,10 @@ function CotizadorContent() {
   const [showClienteDropdown, setShowClienteDropdown] = useState(false);
   const [clienteSeleccionado, setClienteSeleccionado] = useState<any>(null);
   
-  const [items, setItems] = useState<any[]>([]);
+  const [items, setItems] = useState<CotizacionItem[]>([]);
   const [descripcionGeneral, setDescripcionGeneral] = useState(''); 
 
-  const [materialAfecto, setMaterialAfecto] = useState(true);
-  const [moAfecto, setMoAfecto] = useState(true);
-
   const [descuentoPorcentajeMO, setDescuentoPorcentajeMO] = useState(0);
-  const [validezOferta, setValidezOferta] = useState("15 DÍAS CORRIDOS");
   
   const [garantia, setGarantia] = useState(
     "• Garantía: 6 meses sobre la mano de obra instalada.\n• La garantía no cubre fallas por mal uso, sobrecargas o intervención de terceros.\n• Materiales: La garantía de los componentes es responsabilidad del fabricante según sus políticas."
@@ -103,9 +114,8 @@ function CotizadorContent() {
       setClienteSeleccionado(data.clientes);
       setSearchCliente(data.clientes.nombre_cliente);
       setItems(data.items || []);
-      setMoAfecto(data.iva > 0); // Aproximación si no se guardó el flag
       setDescripcionGeneral(data.descripcion_general || '');
-      setDescuentoPorcentajeMO(data.descuento_global || 0);
+      setDescuentoPorcentajeMO(data.descuento_global || 0); 
       if (data.condiciones_servicio) setGarantia(data.condiciones_servicio);
       if (data.condiciones_comerciales) setCondicionesComerciales(data.condiciones_comerciales);
       if (!isCloning) setFolioGenerado(data.folio);
@@ -113,6 +123,63 @@ function CotizadorContent() {
     }
     setLoading(false);
   }
+
+  // --- LÓGICA DE CÁLCULO CORREGIDA ---
+  const totals = useMemo(() => {
+    let subtotalNetoMateriales = 0;
+    let ivaMateriales = 0;
+    
+    let subtotalNetoMO = 0; 
+    let ivaMO = 0;
+
+    items.forEach(item => {
+      const totalLinea = item.cantidad * item.precio;
+
+      if (item.esMaterial) {
+        if (item.iva_incluido) {
+          // TRUE: Ingresado es BRUTO -> Desglosar Neto e IVA
+          const neto = totalLinea / 1.19;
+          subtotalNetoMateriales += neto;
+          ivaMateriales += (totalLinea - neto);
+        } else {
+          // FALSE: Ingresado es NETO -> Neto es total, sumar IVA
+          subtotalNetoMateriales += totalLinea;
+          ivaMateriales += (totalLinea * 0.19);
+        }
+      } else {
+        if (item.iva_incluido) {
+          // TRUE: Ingresado es NETO (se suma IVA)
+          subtotalNetoMO += totalLinea;
+          ivaMO += (totalLinea * 0.19);
+        } else {
+          // FALSE: Ingresado es FINAL (exento)
+          subtotalNetoMO += totalLinea;
+          // ivaMO se mantiene igual
+        }
+      }
+    });
+
+    // Aplicar descuento sobre la base NETA de Mano de Obra
+    const montoDescuentoTotalMO = subtotalNetoMO * (descuentoPorcentajeMO / 100);
+    const netoMOConDescuento = subtotalNetoMO - montoDescuentoTotalMO;
+
+    // Recalcular IVA MO proporcionalmente al descuento
+    const ivaMOFinal = ivaMO * (1 - (descuentoPorcentajeMO / 100));
+
+    const totalNetoFinal = subtotalNetoMateriales + netoMOConDescuento;
+    const totalIVA = ivaMateriales + ivaMOFinal;
+
+    return {
+      netoMateriales: subtotalNetoMateriales,
+      ivaMateriales,
+      netoMO: netoMOConDescuento,
+      ivaMO: ivaMOFinal,
+      netoGeneral: totalNetoFinal,
+      ivaGeneral: totalIVA,
+      total: totalNetoFinal + totalIVA,
+      montoDescuentoMO: montoDescuentoTotalMO
+    };
+  }, [items, descuentoPorcentajeMO]);
 
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -126,11 +193,12 @@ function CotizadorContent() {
         const wsname = wb.SheetNames[0];
         const ws = wb.Sheets[wsname];
         const data: any[] = XLSX.utils.sheet_to_json(ws);
-        const newItems = data.map(row => ({
+        const newItems: CotizacionItem[] = data.map(row => ({
           descripcion: row['Descripcion'] || row['descripcion'] || 'Sin descripción',
           cantidad: cleanNumber(row['Cantidad'] || row['cantidad'] || 0),
           precio: cleanNumber(row['Precio unitario'] || row['precio unitario'] || 0),
-          esMaterial: true
+          esMaterial: true,
+          iva_incluido: true // Por defecto materiales llevan IVA
         })).filter(item => item.descripcion !== 'Sin descripción');
         setItems([...newItems, ...items]);
       } catch (error) {
@@ -143,70 +211,7 @@ function CotizadorContent() {
     reader.readAsBinaryString(file);
   };
 
-  // --- LÓGICA DE CÁLCULO MEJORADA ---
-  const totals = useMemo(() => {
-    const rawNetoMateriales = items.filter(i => i.esMaterial).reduce((acc, item) => acc + (item.cantidad * item.precio), 0);
-    const rawNetoMO = items.filter(i => !i.esMaterial).reduce((acc, item) => acc + (item.cantidad * item.precio), 0);
-    
-    // Descuento MO
-    const montoDescuentoMO = Math.round(rawNetoMO * (descuentoPorcentajeMO / 100));
-    const netoMOConDescuento = rawNetoMO - montoDescuentoMO;
-
-    const subtotalNetoFinal = rawNetoMateriales + netoMOConDescuento;
-
-    // IVA individual
-    const ivaMateriales = materialAfecto ? Math.round(rawNetoMateriales * 0.19) : 0;
-    const ivaMO = moAfecto ? Math.round(netoMOConDescuento * 0.19) : 0;
-    
-    const ivaTotal = ivaMateriales + ivaMO;
-
-    return {
-      netoMateriales: rawNetoMateriales,
-      ivaMateriales,
-      totalMaterialesFinal: rawNetoMateriales + ivaMateriales,
-      
-      netoMOOriginal: rawNetoMO,
-      descuentoMO: montoDescuentoMO,
-      netoMOFinal: netoMOConDescuento,
-      ivaMO,
-      totalMOFinal: netoMOConDescuento + ivaMO,
-
-      subtotalNeto: subtotalNetoFinal,
-      iva: ivaTotal,
-      total: subtotalNetoFinal + ivaTotal
-    };
-  }, [items, materialAfecto, moAfecto, descuentoPorcentajeMO]);
-
-const getItemsVistaCliente = (itemsArray: any[]) => {
-  const materiales = itemsArray.filter(i => i.esMaterial);
-  const moItems = itemsArray.filter(i => !i.esMaterial);
-  
-  const resultado = [];
-
-  // 1. Agregamos la Mano de Obra desglosada
-  moItems.forEach(item => {
-    resultado.push({
-      ...item,
-      tipo: 'MO' // Marcamos para control interno si fuera necesario
-    });
-  });
-
-  // 2. Agregamos los materiales como una sola línea sumada
-  if (materiales.length > 0) {
-    const totalSoloMateriales = materiales.reduce((acc, curr) => acc + (curr.precio * curr.cantidad), 0);
-    resultado.push({
-      descripcion: "SUMINISTROS Y MATERIALES ELÉCTRICOS SEGÚN PROYECTO",
-      cantidad: 1,
-      precio: totalSoloMateriales,
-      esMaterial: true,
-      tipo: 'MATERIAL'
-    });
-  }
-
-  return resultado;
-};
-
-const descargarPDF = async (tipo: 'cliente' | 'interno') => {
+  const descargarPDF = async (tipo: 'cliente' | 'interno') => {
     if (!folioGenerado || !clienteSeleccionado) return;
     setLoading(true);
     try {
@@ -215,10 +220,17 @@ const descargarPDF = async (tipo: 'cliente' | 'interno') => {
         const docCliente = (
           <PresupuestoPDF 
             cliente={clienteSeleccionado} 
-            items={getItemsVistaCliente(items)} 
-            subtotal={totals.subtotalNeto} 
-            iva={totals.iva} 
-            total={totals.total} 
+            items={items} // Enviamos los items originales para que el PDF los liste
+            
+            // Enviamos los totales calculados por el cotizador
+            totalNetoMat={totals.netoMateriales}
+            totalIvaMat={totals.ivaMateriales}
+            totalNetoMO={totals.netoMO}
+            totalIvaMO={totals.ivaMO}
+            montoDescuentoMO={totals.montoDescuentoMO}
+            descuentoPorcentajeMO={descuentoPorcentajeMO}
+            totalFinal={totals.total}
+            
             folio={folioFormateado} 
             descripcionGeneral={descripcionGeneral} 
             garantia={garantia} 
@@ -228,15 +240,26 @@ const descargarPDF = async (tipo: 'cliente' | 'interno') => {
         const blobCliente = await pdf(docCliente).toBlob();
         saveAs(blobCliente, `Cotizacion_${folioFormateado}_${clienteSeleccionado.nombre_cliente}.pdf`);
       } else {
+        // Lógica PDF Interno (Solo materiales)
         const soloMateriales = items.filter(i => i.esMaterial);
-        const subtotalM = soloMateriales.reduce((acc, curr) => acc + (curr.precio * curr.cantidad), 0);
+        
+        // El PDF interno usualmente necesita el total por item ya calculado
+        const itemsConTotal = soloMateriales.map(item => ({
+          ...item,
+          total: item.iva_incluido 
+            ? (item.cantidad * item.precio) // Ingresado es Bruto
+            : (item.cantidad * item.precio * 1.19) // Ingresado es Neto
+        }));
+        
+        const totalM = itemsConTotal.reduce((acc, item) => acc + item.total, 0);
+        
         const docInterno = (
           <ListadoInternoPDF
             cliente={datosInnVolt} 
-            items={soloMateriales} 
-            subtotal={subtotalM} 
-            iva={materialAfecto ? Math.round(subtotalM * 0.19) : 0} 
-            total={subtotalM + (materialAfecto ? Math.round(subtotalM * 0.19) : 0)} 
+            items={itemsConTotal} 
+            subtotal={totalM / 1.19} 
+            iva={totalM - (totalM / 1.19)} 
+            total={totalM} 
             folio={folioFormateado} 
             descripcionGeneral="LISTADO INTERNO DE MATERIALES (DETALLE TÉCNICO)" 
           />
@@ -257,9 +280,9 @@ const descargarPDF = async (tipo: 'cliente' | 'interno') => {
     setLoading(true);
     const payload = {
       cliente_id: clienteSeleccionado.id,
-      items,
-      subtotal: totals.subtotalNeto,
-      iva: totals.iva,
+      items, 
+      subtotal: totals.netoGeneral,
+      iva: totals.ivaGeneral,
       total: totals.total,
       descuento_global: descuentoPorcentajeMO,
       descripcion_general: descripcionGeneral,
@@ -286,7 +309,7 @@ const descargarPDF = async (tipo: 'cliente' | 'interno') => {
 
   const handleKeyDown = (e: React.KeyboardEvent, index: number) => {
     if (e.key === 'Enter' && items[index].descripcion !== '') {
-      setItems([{ descripcion: '', cantidad: 1, precio: 0, esMaterial: true }, ...items]);
+      setItems([{ descripcion: '', cantidad: 1, precio: 0, esMaterial: true, iva_incluido: true }, ...items]);
     }
   };
 
@@ -300,6 +323,13 @@ const descargarPDF = async (tipo: 'cliente' | 'interno') => {
     setDescuentoPorcentajeMO(0);
     obtenerUltimoFolio();
     router.push('/cotizador');
+  };
+
+  const setAllIVA = (incluye: boolean) => {
+    setItems(prevItems => prevItems.map(item => ({
+      ...item,
+      iva_incluido: incluye
+    })));
   };
 
   return (
@@ -401,7 +431,7 @@ const descargarPDF = async (tipo: 'cliente' | 'interno') => {
             />
           </section>
 
-          {/* --- SECCIÓN MODIFICADA: TOTALES CON DETALLE INDIVIDUAL --- */}
+          {/* --- RESUMEN ECONÓMICO DETALLADO --- */}
           <section className="bottom-4 lg:relative lg:bottom-0 bg-slate-900 p-6 rounded-3xl text-white shadow-2xl border-b-4 border-[#ffc600]">
             <div className="flex justify-between items-start">
               <p className="text-[#ffc600] font-black text-[11px] uppercase tracking-widest">Resumen Económico</p>
@@ -410,8 +440,16 @@ const descargarPDF = async (tipo: 'cliente' | 'interno') => {
             
             <h3 className="text-3xl font-black mt-3 tracking-tighter">{formatCLP(totals.total)}</h3>
             
-            <div className="mt-6 space-y-3">
-               {/* INPUT DESCUENTO */}
+            <div className="mt-6 space-y-4">
+               {/* Desglose detallado */}
+               <div className="space-y-1 text-[10px] font-bold border-b border-white/10 pb-4">
+                  <div className="flex justify-between text-slate-400"><span>Neto Materiales:</span> <span>{formatCLP(totals.netoMateriales)}</span></div>
+                  <div className="flex justify-between text-slate-400"><span>IVA Materiales:</span> <span>{formatCLP(totals.ivaMateriales)}</span></div>
+                  <div className="flex justify-between text-slate-400"><span>Neto Mano de Obra:</span> <span>{formatCLP(totals.netoMO + totals.montoDescuentoMO)}</span></div>
+                  <div className="flex justify-between text-red-400"><span>Descuento ({descuentoPorcentajeMO}%):</span> <span>-{formatCLP(totals.montoDescuentoMO)}</span></div>
+                  <div className="flex justify-between text-slate-400"><span>IVA Mano de Obra:</span> <span>{formatCLP(totals.ivaMO)}</span></div>
+               </div>
+
                <div className="flex items-center justify-between p-2 rounded-xl bg-white/5 border border-white/10">
                   <div className="flex items-center gap-2">
                     <Percent size={14} className="text-[#ffc600]" />
@@ -419,56 +457,24 @@ const descargarPDF = async (tipo: 'cliente' | 'interno') => {
                   </div>
                   <div className="flex items-center bg-slate-800 rounded-lg px-2">
                     <input 
-                      type="number" 
-                      className="w-10 bg-transparent text-right text-[11px] font-black outline-none p-1"
+                      type="text" 
+                      className="w-12 bg-transparent text-lg font-black outline-none"
                       value={descuentoPorcentajeMO}
                       onChange={(e) => setDescuentoPorcentajeMO(cleanNumber(e.target.value))}
                     />
                     <span className="text-[10px] font-black">%</span>
                   </div>
                </div>
-
-               {/* VALOR MATERIALES */}
-               <div className="flex items-center justify-between p-2 rounded-xl bg-white/5 border border-white/10">
-                  <div className="flex flex-col gap-0.5">
-                    <div className="flex items-center gap-2">
-                      <Package size={14} className="text-amber-500" />
-                      <span className="text-[10px] font-bold uppercase tracking-tight text-white/70">Materiales</span>
-                    </div>
-                    <span className="text-xs font-black text-amber-500 ml-5">{formatCLP(totals.totalMaterialesFinal)}</span>
-                  </div>
-                  <button onClick={() => setMaterialAfecto(!materialAfecto)} className={`px-3 py-1 rounded-full text-[9px] font-black uppercase transition-all ${materialAfecto ? 'bg-amber-500 text-slate-900' : 'bg-slate-700 text-slate-300'}`}>{materialAfecto ? 'Afecto' : 'Exento'}</button>
-               </div>
-
-               {/* VALOR MANO DE OBRA */}
-               <div className="flex items-center justify-between p-2 rounded-xl bg-white/5 border border-white/10">
-                  <div className="flex flex-col gap-0.5">
-                    <div className="flex items-center gap-2">
-                      <Settings size={14} className="text-blue-400" />
-                      <span className="text-[10px] font-bold uppercase tracking-tight text-white/70">Mano de Obra</span>
-                    </div>
-                    <span className="text-xs font-black text-blue-400 ml-5">{formatCLP(totals.totalMOFinal)}</span>
-                  </div>
-                  <button onClick={() => setMoAfecto(!moAfecto)} className={`px-3 py-1 rounded-full text-[9px] font-black uppercase transition-all ${moAfecto ? 'bg-blue-500 text-slate-900' : 'bg-slate-700 text-slate-300'}`}>{moAfecto ? 'Afecto' : 'Exento'}</button>
-               </div>
-
-               {/* DETALLE DESCUENTO APLICADO */}
-               {totals.descuentoMO > 0 && (
-                 <div className="flex items-center justify-between px-2 py-1 text-[9px] font-bold text-red-400 uppercase tracking-widest italic">
-                    <span>Ahorro por Descuento:</span>
-                    <span>- {formatCLP(totals.descuentoMO)}</span>
-                 </div>
-               )}
             </div>
 
             <div className="mt-6 pt-6 border-t border-white/10 grid grid-cols-2 gap-4">
               <div>
                 <p className="text-[9px] font-bold text-slate-400 uppercase tracking-tight">Neto Total</p>
-                <p className="font-black text-sm">{formatCLP(totals.subtotalNeto)}</p>
+                <p className="font-black text-sm">{formatCLP(totals.netoGeneral)}</p>
               </div>
               <div className="text-right">
                 <p className="text-[9px] font-bold text-slate-400 uppercase tracking-tight">IVA Total</p>
-                <p className="font-black text-sm">{formatCLP(totals.iva)}</p>
+                <p className="font-black text-sm">{formatCLP(totals.ivaGeneral)}</p>
               </div>
             </div>
           </section>
@@ -476,14 +482,14 @@ const descargarPDF = async (tipo: 'cliente' | 'interno') => {
           <section className="bg-white p-6 rounded-3xl border border-slate-200 shadow-sm space-y-6">
             <div>
               <header className="flex items-center gap-2 mb-3">
-                <ShieldCheck size={16} className="text-blue-500" />
+                <span className="text-blue-500">🛡️</span>
                 <h3 className="text-[11px] font-black uppercase text-slate-500 tracking-widest">3. Garantía</h3>
               </header>
               <textarea value={garantia} onChange={(e) => setGarantia(e.target.value)} className="w-full bg-slate-50 p-4 rounded-xl text-[10px] font-bold h-24 resize-none border-2 border-transparent focus:border-[#ffc600] transition-all outline-none" />
             </div>
             <div>
               <header className="flex items-center gap-2 mb-3">
-                <ClipboardCheck size={16} className="text-green-500" />
+                <span className="text-green-500">📋</span>
                 <h3 className="text-[11px] font-black uppercase text-slate-500 tracking-widest">4. Condiciones Comerciales</h3>
               </header>
               <textarea value={condicionesComerciales} onChange={(e) => setCondicionesComerciales(e.target.value)} className="w-full bg-slate-50 p-4 rounded-xl text-[10px] font-bold h-32 resize-none border-2 border-transparent focus:border-[#ffc600] transition-all outline-none" />
@@ -493,23 +499,35 @@ const descargarPDF = async (tipo: 'cliente' | 'interno') => {
 
         <div className="lg:col-span-8 flex flex-col gap-6">
           <section className="bg-white rounded-3xl border border-slate-200 shadow-sm flex flex-col min-h-[600px] overflow-hidden">
-            <header className="p-6 md:p-8 bg-slate-50/50 border-b border-slate-100 flex flex-col sm:flex-row justify-between items-center gap-4">
-              <div>
-                <h3 className="font-black text-[12px] uppercase text-slate-800 tracking-widest flex items-center gap-2">
-                  <Package size={16} className="text-[#ffc600]" /> 2. Detalle de Presupuesto
-                </h3>
-              </div>
-              <div className="flex flex-wrap gap-2 w-full sm:w-auto">
-                <button onClick={() => fileInputRef.current?.click()} className="flex-1 sm:flex-none bg-[#ffc600] text-slate-900 px-4 py-2.5 rounded-xl text-[10px] font-black uppercase flex items-center justify-center gap-2 hover:scale-105 transition-all shadow-sm">
-                  <FileUp size={14}/> Importar Excel
-                </button>
-                <button onClick={() => setItems([{ descripcion: '', cantidad: 1, precio: 0, esMaterial: true}, ...items])} className="flex-1 sm:flex-none bg-white border border-slate-200 text-slate-700 px-4 py-2.5 rounded-xl text-[10px] font-black uppercase flex items-center justify-center gap-2">
-                  <Plus size={14}/> Material
-                </button>
-                <button onClick={() => setItems([{ descripcion: '', cantidad: 1, precio: 0, esMaterial: false}, ...items])} className="flex-1 sm:flex-none bg-slate-900 text-white px-4 py-2.5 rounded-xl text-[10px] font-black uppercase flex items-center justify-center gap-2">
-                  <Plus size={14}/> Mano de Obra
-                </button>
-              </div>
+            <header className="p-6 md:p-8 bg-slate-50/50 border-b border-slate-100 flex flex-col gap-4">
+                <div className="flex flex-col sm:flex-row justify-between items-center gap-4 w-full">
+                    <h3 className="font-black text-[12px] uppercase text-slate-800 tracking-widest flex items-center gap-2">
+                    <Package size={16} className="text-[#ffc600]" /> 2. Detalle de Presupuesto
+                    </h3>
+                    <div className="flex flex-wrap gap-2 w-full sm:w-auto">
+                        <button onClick={() => fileInputRef.current?.click()} className="flex-1 sm:flex-none bg-[#ffc600] text-slate-900 px-4 py-2.5 rounded-xl text-[10px] font-black uppercase flex items-center justify-center gap-2 hover:scale-105 transition-all shadow-sm">
+                        <FileUp size={14}/> Importar Excel
+                        </button>
+                        <button onClick={() => setItems([{ descripcion: '', cantidad: 1, precio: 0, esMaterial: true, iva_incluido: true}, ...items])} className="flex-1 sm:flex-none bg-white border border-slate-200 text-slate-700 px-4 py-2.5 rounded-xl text-[10px] font-black uppercase flex items-center justify-center gap-2">
+                        <Plus size={14}/> Material
+                        </button>
+                        <button onClick={() => setItems([{ descripcion: '', cantidad: 1, precio: 0, esMaterial: false, iva_incluido: true}, ...items])} className="flex-1 sm:flex-none bg-slate-900 text-white px-4 py-2.5 rounded-xl text-[10px] font-black uppercase flex items-center justify-center gap-2">
+                        <Plus size={14}/> Mano de Obra
+                        </button>
+                    </div>
+                </div>
+
+                {/* --- BARRA DE ACCIONES RÁPIDAS --- */}
+                <div className="flex items-center gap-2 p-3 bg-white rounded-2xl border border-slate-100 shadow-inner">
+                    <Tags size={16} className="text-slate-400" />
+                    <span className="text-[9px] font-black text-slate-500 uppercase tracking-widest mr-2">Acción Rápida IVA:</span>
+                    <button onClick={() => setAllIVA(true)} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-green-50 hover:bg-green-100 text-green-700 text-[9px] font-black uppercase transition-all">
+                        <Check size={12}/> Todo Con IVA
+                    </button>
+                    <button onClick={() => setAllIVA(false)} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 text-[9px] font-black uppercase transition-all">
+                        <X size={12}/> Todo Exento
+                    </button>
+                </div>
             </header>
 
             <div className="p-4 md:p-6 space-y-4 flex-1">
@@ -525,7 +543,7 @@ const descargarPDF = async (tipo: 'cliente' | 'interno') => {
                       value={item.descripcion} 
                       onKeyDown={(e) => handleKeyDown(e, i)}
                       onChange={(e) => { const n = [...items]; n[i].descripcion = e.target.value; setItems(n); }} 
-                      placeholder="Ej: Instalación eléctrica..." 
+                      placeholder="Ej: Cable eléctrico..." 
                     />
                   </div>
                   <div className="flex items-end gap-3 justify-between md:justify-end">
@@ -537,6 +555,18 @@ const descargarPDF = async (tipo: 'cliente' | 'interno') => {
                       <label className="text-[8px] font-black text-slate-400 text-right block mb-1">Precio Unit.</label>
                       <input type="text" className="w-full bg-slate-100 p-2 rounded-xl text-right text-[11px] font-black outline-none" value={item.precio ? item.precio.toLocaleString('es-CL') : ""} onChange={(e) => { const n = [...items]; n[i].precio = cleanNumber(e.target.value); setItems(n); }} />
                     </div>
+                    
+                    <div className="w-24">
+                        <label className="text-[8px] font-black text-slate-400 text-center block mb-1">Tipo</label>
+                        <button 
+                          onClick={() => { const n = [...items]; n[i].iva_incluido = !n[i].iva_incluido; setItems(n); }}
+                          className={`w-full p-2 rounded-xl text-[10px] font-black uppercase flex items-center justify-center gap-1 transition-all ${item.iva_incluido ? 'bg-green-100 text-green-700' : 'bg-slate-100 text-slate-700'}`}
+                        >
+                          {item.iva_incluido ? <Check size={12}/> : null}
+                          {item.iva_incluido ? 'Con IVA' : 'Exento'}
+                        </button>
+                    </div>
+                    
                     <button onClick={() => setItems(items.filter((_, idx) => idx !== i))} className="mb-1 p-2 text-slate-300 hover:text-red-500 transition-all"><Trash2 size={16}/></button>
                   </div>
                 </div>
@@ -553,7 +583,7 @@ const descargarPDF = async (tipo: 'cliente' | 'interno') => {
             <div className="relative p-10 text-center bg-slate-50/80">
                 <div className="absolute top-0 left-0 w-full h-2 bg-[#ffc600]"></div>
                 <div className="w-20 h-20 bg-green-500 text-white rounded-[2rem] flex items-center justify-center mx-auto mb-6 shadow-xl rotate-12">
-                  <ShieldCheck size={40} />
+                  <Check size={40} />
                 </div>
                 <h3 className="font-black text-2xl uppercase italic text-slate-900 leading-tight">¡Documento <br/><span className="text-[#ffc600]">Generado!</span></h3>
             </div>
@@ -581,7 +611,7 @@ const descargarPDF = async (tipo: 'cliente' | 'interno') => {
             <span className="text-lg font-black text-slate-900">{formatCLP(totals.total)}</span>
         </div>
         <button onClick={handleGuardar} className="bg-slate-900 text-[#ffc600] px-8 py-3 rounded-2xl font-black text-[10px] uppercase shadow-lg">
-            {loading ? <Loader2 size={16} className="animate-spin" /> : 'Guardar Cotización'}
+            {loading ? <Loader2 size={16} className="animate-spin" /> : 'Guardar'}
         </button>
       </div>
     </div>
