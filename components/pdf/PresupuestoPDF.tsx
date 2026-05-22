@@ -301,7 +301,7 @@ const buildGarantiasEquipos = (empresa: EmpresaInfo) => [
   },
   {
     l: 'c.',
-    t: 'La garantía cubre exclusivamente defectos atribuibles a errores de instalación, montaje o configuración realizados por personal de la empresa.'
+    t: 'La garantía cubre exclusivamente trabajos realizados por INNVOLT SpA.'
   },
   {
     l: 'd.',
