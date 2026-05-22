@@ -442,12 +442,11 @@ function CotizadorContent() {
   const [condicionesComerciales, setCondicionesComerciales] = useState(CONDICIONES_DEFAULT);
   const [showPDFModal,           setShowPDFModal]           = useState(false);
 
-  // ── Estado empresa ──
-  const [empresa, setEmpresa] = useState<EmpresaInfo>({} as EmpresaInfo);
-  const [empresaSelec,      setEmpresaSelec]      = useState<EmpresaInfo | null>(null);
-  const [showEmpresaModal,  setShowEmpresaModal]  = useState(false);
-  const [empresaEditing,    setEmpresaEditing]    = useState<EmpresaInfo | null>(null);
-
+// ── Estado empresa ──
+const [empresas, setEmpresas] = useState<EmpresaInfo[]>([]);
+const [empresaSelec, setEmpresaSelec] = useState<EmpresaInfo | null>(null);
+const [showEmpresaModal, setShowEmpresaModal] = useState(false);
+const [empresaEditing, setEmpresaEditing] = useState<EmpresaInfo | null>(null);
   // ── Cargar datos iniciales ──
   useEffect(() => {
     loadInitialData();
