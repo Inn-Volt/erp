@@ -78,7 +78,7 @@ export function calcularTotals(items: CotizacionItem[], descuentoPorcentajeMO: n
     } else {
       // servicio
       if (item.iva_incluido) {
-        const neto = tot / 1.19;
+        const neto = tot * 1.19;
         nServ += neto;
         ivaServ += tot - neto;
       } else {
