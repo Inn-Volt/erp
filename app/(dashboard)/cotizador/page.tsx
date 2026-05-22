@@ -476,9 +476,7 @@ const [empresaEditing, setEmpresaEditing] = useState<EmpresaInfo | null>(null);
         .order('nombre');
       if (error) throw error;
       const list = (data || []) as EmpresaInfo[];
-      if (list.length > 0) {
-  setEmpresa(list[0]); // Aquí cargas el objeto único
-}
+      setEmpresas(list);
       // Auto-seleccionar la primera si no hay ninguna seleccionada
       if (list.length > 0 && !empresaSelec) {
         setEmpresaSelec(list[0]);
