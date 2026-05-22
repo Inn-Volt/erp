@@ -337,11 +337,11 @@ const GARANTIAS_SERVICIOS = [
   },
   {
     l: 'e.',
-    t: 'Los servicios de soporte técnico se prestan en horario hábil de lunes a viernes entre las 09:00 y las 18:00 horas, salvo contratación de cobertura especial.'
+    t: 'Los servicios de soporte técnico se prestan en horario hábil de lunes a jueves entre las 09:00 y las 18:00 horas, día viernes entre las 09:00 14:00 salvo contratación de cobertura especial.'
   },
   {
     l: 'f.',
-    t: 'Los trabajos ejecutados fuera de la Región Metropolitana podrán considerar costos adicionales por traslado, alojamiento, alimentación y logística.'
+    t: 'Los trabajos ejecutados fuera de la Región Metropolitana se considerarán con costos adicionales por conceptos de traslado, alojamiento, alimentación y logística.'
   },
 ];
 
