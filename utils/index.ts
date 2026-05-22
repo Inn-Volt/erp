@@ -69,7 +69,7 @@ export function calcularTotals(items: CotizacionItem[], descuentoPorcentajeMO: n
       }
     } else if (cat === 'mano_obra') {
       if (item.iva_incluido) {
-        const neto = tot / 1.19;
+        const neto = tot * 1.19;
         nMO += neto;
         ivaMO += tot - neto;
       } else {
