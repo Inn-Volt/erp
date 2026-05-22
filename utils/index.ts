@@ -68,21 +68,24 @@ export function calcularTotals(items: CotizacionItem[], descuentoPorcentajeMO: n
         ivaMat += tot * 0.19;
       }
     } else if (cat === 'mano_obra') {
+      // MO: El valor ingresado SIEMPRE es el neto
+      nMO += tot; 
       if (item.iva_incluido) {
-        const neto = tot * 1.19;
-        nMO += neto;
-        ivaMO += tot - neto;
+        // Se le SUMA el IVA sobre el valor ingresado
+        ivaMO += tot * 0.19; 
       } else {
-        nMO += tot;
+        // No se cobra IVA para este ítem
+        ivaMO += 0; 
       }
     } else {
-      // servicio
+      // Servicios: El valor ingresado SIEMPRE es el neto
+      nServ += tot;
       if (item.iva_incluido) {
-        const neto = tot * 1.19;
-        nServ += neto;
-        ivaServ += tot - neto;
+        // Se le SUMA el IVA sobre el valor ingresado
+        ivaServ += tot * 0.19;
       } else {
-        nServ += tot;
+        // No se cobra IVA para este ítem
+        ivaServ += 0;
       }
     }
   }
