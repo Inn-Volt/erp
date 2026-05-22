@@ -1,0 +1,1030 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
+'use client';
+
+import { useState, useEffect, useMemo, useRef, Suspense, useCallback } from 'react';
+import { useSearchParams, useRouter } from 'next/navigation';
+import Link from 'next/link';
+import {
+  Plus, Trash2, Save, FileText, History, User, Download,
+  Loader2, RefreshCcw, Check, FileUp, Eye,
+  Copy, Package, Wrench, Settings2, X, ArrowUp, ArrowDown,
+  Building2, ChevronDown, Pencil, Handshake, HardHat, BrickWall, 
+} from 'lucide-react';
+import { pdf } from '@react-pdf/renderer';
+import { saveAs } from 'file-saver';
+import * as XLSX from 'xlsx';
+
+import { supabase } from '@/lib/supabase';
+import { clientesService } from '@/services/clientes';
+import { cotizacionesService } from '@/services/cotizaciones';
+import { useToast } from '@/hooks/useToast';
+import {
+  formatCLP, formatFolio, cleanNumber, calcularTotals,
+  newItem, precioDesdeMargen, margenDesdePrecio, itemsToExcelRows,
+} from '@/utils';
+import type { CotizacionItem, Cliente, CategoriaItem } from '@/types';
+import { CATEGORIA_LABELS, UNIDADES } from '@/types';
+import PresupuestoPDF from '@/components/pdf/PresupuestoPDF';
+import type { EmpresaInfo } from '@/components/pdf/PresupuestoPDF';
+import ListadoInternoPDF from '@/components/pdf/ListadoInternoPDF';
+import EmpresaModal from '@/components/EmpresaModal';
+
+// ─── Estilos base ─────────────────────────────────────────────────────────────
+const panelY: React.CSSProperties = {
+  background: 'var(--bg2)', border: '1px solid var(--border2)', borderTop: '2px solid var(--y)',
+};
+const sectionLabel: React.CSSProperties = {
+  fontFamily: 'var(--font-display)', fontWeight: 700, fontSize: '0.58rem',
+  letterSpacing: '0.3em', textTransform: 'uppercase', color: 'var(--y)',
+  display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.875rem',
+};
+const btnGhost: React.CSSProperties = {
+  background: 'var(--bg2)', border: '1px solid var(--border2)', color: 'rgba(255,255,255,0.4)',
+  cursor: 'pointer', padding: '0 0.875rem', height: 36,
+  fontFamily: 'var(--font-display)', fontWeight: 700, fontSize: '0.68rem',
+  letterSpacing: '0.12em', textTransform: 'uppercase',
+  display: 'inline-flex', alignItems: 'center', gap: '0.4rem',
+};
+
+const GARANTIA_DEFAULT =
+  '• Garantía: 6 meses sobre la mano de obra instalada.\n• La garantía no cubre fallas por mal uso, sobrecargas o intervención de terceros.\n• Materiales: La garantía de los componentes es responsabilidad del fabricante.';
+const CONDICIONES_DEFAULT =
+  '• Validez de la oferta: 15 días corridos.\n• Forma de Pago: 50% anticipo al inicio y 50% al finalizar conforme.\n• Medios de pago: Transferencia electrónica o efectivo.';
+
+const CAT_COLORS: Record<CategoriaItem, string> = {
+  material: '#ffc600', mano_obra: '#60a5fa', servicio: '#a78bfa',
+};
+const CAT_ICONS: Record<CategoriaItem, React.ElementType> = {
+  material: BrickWall, mano_obra: HardHat, servicio: Handshake,
+};
+
+// ─── Empresa Selector ─────────────────────────────────────────────────────────
+function EmpresaSelector({
+  empresas, selected, onSelect, onNew, onEdit,
+}: {
+  empresas: EmpresaInfo[];
+  selected: EmpresaInfo | null;
+  onSelect: (e: EmpresaInfo) => void;
+  onNew: () => void;
+  onEdit: (e: EmpresaInfo) => void;
+}) {
+  const [open, setOpen] = useState(false);
+
+  return (
+    <div style={{ ...panelY, padding: '1rem', borderRadius: '4px' }}>
+      <p style={sectionLabel}><Building2 size={12} /> Empresa Emisora</p>
+
+      {/* Dropdown selector */}
+      <div style={{ position: 'relative' }}>
+        <button
+          onClick={() => setOpen(o => !o)}
+          style={{
+            width: '100%', background: 'rgba(0,0,0,0.2)',
+            border: '1px solid var(--border2)', color: selected ? '#fff' : 'rgba(255,255,255,0.3)',
+            padding: '0.5rem 0.7rem', cursor: 'pointer',
+            fontFamily: 'var(--font-body)', fontSize: '0.82rem',
+            display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+            borderRadius: '4px',
+          }}
+        >
+          <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+            {selected ? selected.nombre : 'Seleccionar empresa...'}
+          </span>
+          <ChevronDown size={14} style={{ flexShrink: 0, marginLeft: '0.4rem', opacity: 0.5 }} />
+        </button>
+
+        {open && (
+          <div
+            style={{
+              position: 'absolute', top: '100%', left: 0, right: 0,
+              background: 'var(--bg3)', border: '1px solid var(--border2)',
+              zIndex: 50, maxHeight: 200, overflowY: 'auto',
+              borderRadius: '0 0 4px 4px',
+            }}
+            onBlur={() => setOpen(false)}
+          >
+            {empresas.length === 0 && (
+              <div style={{ padding: '0.75rem', fontSize: '0.78rem', color: 'var(--muted)', textAlign: 'center' }}>
+                Sin empresas registradas
+              </div>
+            )}
+            {empresas.map(emp => (
+              <div
+                key={emp.id}
+                onClick={() => { onSelect(emp); setOpen(false); }}
+                style={{
+                  padding: '0.55rem 0.75rem', cursor: 'pointer',
+                  borderBottom: '1px solid rgba(255,255,255,0.04)',
+                  display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                  background: selected?.id === emp.id ? 'rgba(255,198,0,0.07)' : 'transparent',
+                  transition: 'background 0.1s',
+                }}
+                onMouseEnter={e => (e.currentTarget.style.background = 'rgba(255,255,255,0.04)')}
+                onMouseLeave={e => (e.currentTarget.style.background = selected?.id === emp.id ? 'rgba(255,198,0,0.07)' : 'transparent')}
+              >
+                <div>
+                  <p style={{ margin: 0, fontSize: '0.82rem', fontWeight: 600 }}>{emp.nombre}</p>
+                  <p style={{ margin: 0, fontSize: '0.68rem', color: 'var(--muted)' }}>RUT: {emp.rut}</p>
+                </div>
+                {selected?.id === emp.id && <Check size={13} color="var(--y)" />}
+              </div>
+            ))}
+            {/* Nueva empresa */}
+            <div
+              onClick={() => { onNew(); setOpen(false); }}
+              style={{
+                padding: '0.55rem 0.75rem', cursor: 'pointer',
+                borderTop: '1px solid var(--border2)',
+                color: 'var(--y)', fontSize: '0.78rem',
+                fontFamily: 'var(--font-display)', fontWeight: 700,
+                letterSpacing: '0.1em', textTransform: 'uppercase',
+                display: 'flex', alignItems: 'center', gap: '0.4rem',
+              }}
+            >
+              <Plus size={12} /> Nueva empresa
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* Info de la empresa seleccionada */}
+      {selected && (
+        <div style={{
+          marginTop: '0.6rem', padding: '0.6rem 0.75rem',
+          background: 'var(--bg3)', borderRadius: '3px',
+          display: 'flex', flexDirection: 'column', gap: '0.2rem',
+        }}>
+          <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '0.5rem' }}>
+            <div style={{ minWidth: 0 }}>
+              {selected.logo_url && (
+                <img
+                  src={selected.logo_url}
+                  alt="Logo"
+                  style={{
+                    height: 30, maxWidth: 120, objectFit: 'contain',
+                    display: 'block', marginBottom: '0.4rem',
+                  }}
+                />
+              )}
+              <p style={{ fontFamily: 'var(--font-display)', fontWeight: 700, fontSize: '0.8rem', color: 'var(--y)', textTransform: 'uppercase', margin: 0 }}>
+                {selected.nombre}
+              </p>
+              {selected.slogan && <p style={{ fontSize: '0.68rem', color: 'var(--muted)', margin: '0.1rem 0 0' }}>{selected.slogan}</p>}
+              <p style={{ fontSize: '0.7rem', color: 'var(--muted)', fontFamily: 'monospace', margin: '0.1rem 0 0' }}>
+                RUT: {selected.rut}
+              </p>
+              {selected.telefono && <p style={{ fontSize: '0.7rem', color: 'var(--muted)', margin: '0.1rem 0 0' }}>{selected.telefono}</p>}
+              {selected.email    && <p style={{ fontSize: '0.7rem', color: 'var(--muted)', margin: '0.1rem 0 0' }}>{selected.email}</p>}
+            </div>
+            <button
+              onClick={() => onEdit(selected)}
+              style={{
+                background: 'none', border: '1px solid var(--border2)',
+                cursor: 'pointer', color: 'rgba(255,255,255,0.4)',
+                padding: '0.25rem 0.5rem', borderRadius: '3px',
+                display: 'flex', alignItems: 'center', gap: '0.3rem',
+                fontSize: '0.6rem', fontFamily: 'var(--font-display)',
+                fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase',
+                flexShrink: 0,
+              }}
+            >
+              <Pencil size={10} /> Editar
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── Componente PDF Modal ─────────────────────────────────────────────────────
+function PDFModal({
+  folio, cliente, items, totals, descuentoPorcentajeMO,
+  descripcionGeneral, garantia, condicionesComerciales,
+  ocultarSuministros, empresa, onClose,
+}: {
+  folio: number; cliente: any; items: CotizacionItem[];
+  totals: ReturnType<typeof calcularTotals>; descuentoPorcentajeMO: number;
+  descripcionGeneral: string; garantia: string; condicionesComerciales: string;
+  ocultarSuministros: boolean; empresa: EmpresaInfo; onClose: () => void;
+}) {
+  const [gen, setGen] = useState(false);
+  const folioStr = formatFolio(folio);
+
+  const download = async (tipo: 'cliente' | 'interno') => {
+    setGen(true);
+    try {
+      if (tipo === 'cliente') {
+        const blob = await pdf(
+          <PresupuestoPDF
+            cliente={cliente} items={items} totals={totals}
+            descuentoPorcentajeMO={descuentoPorcentajeMO} folio={folioStr}
+            descripcionGeneral={descripcionGeneral} garantia={garantia}
+            condicionesComerciales={condicionesComerciales}
+            ocultarSuministros={ocultarSuministros}
+            empresa={empresa}
+          />
+        ).toBlob();
+        saveAs(blob, `Cotizacion_${folioStr}_${cliente.nombre_cliente}.pdf`);
+      } else {
+        const soloMat = items.filter(i => i.categoria === 'material' || i.esMaterial);
+        const blob = await pdf(
+          <ListadoInternoPDF
+            items={soloMat} folio={folioStr}
+            clienteNombre={cliente.nombre_cliente}
+            descripcion={descripcionGeneral}
+          />
+        ).toBlob();
+        saveAs(blob, `Interno_${folioStr}.pdf`);
+      }
+    } catch (e) { console.error(e); }
+    finally { setGen(false); }
+  };
+
+  return (
+    <div className="modal-overlay" onClick={e => { if (e.target === e.currentTarget) onClose(); }}>
+      <div className="modal-box" style={{ maxWidth: 420, width: '90%', margin: '0 auto' }}>
+        <div style={{ padding: '1.25rem 1.5rem', borderBottom: '1px solid var(--border2)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <span style={sectionLabel as any}><Download size={13} /> Generar PDF</span>
+          <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--muted)' }}><X size={16} /></button>
+        </div>
+        <div style={{ padding: '1.5rem', display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+          <div style={{ background: 'var(--bg3)', padding: '1rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <div>
+              <p style={{ fontFamily: 'var(--font-display)', fontWeight: 900, fontSize: '1rem', color: 'var(--y)' }}>{folioStr}</p>
+              <p style={{ fontSize: '0.82rem', color: 'var(--muted)', marginTop: '0.15rem' }}>{cliente.nombre_cliente}</p>
+              <p style={{ fontFamily: 'var(--font-display)', fontWeight: 900, fontSize: '1.2rem', color: '#fff', marginTop: '0.25rem' }}>{formatCLP(totals.total)}</p>
+            </div>
+            <div style={{ width: 36, height: 36, background: 'rgba(74,222,128,0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <Check size={18} color="#4ade80" />
+            </div>
+          </div>
+
+          {/* Info empresa emisora */}
+          <div style={{ background: 'rgba(255,198,0,0.06)', border: '1px solid rgba(255,198,0,0.2)', padding: '0.6rem 0.8rem', borderRadius: '3px', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+            {empresa.logo_url && (
+              <img src={empresa.logo_url} alt="" style={{ height: 22, width: 'auto', objectFit: 'contain', flexShrink: 0 }} />
+            )}
+            <div>
+              <p style={{ margin: 0, fontSize: '0.75rem', fontWeight: 700, color: 'var(--y)', fontFamily: 'var(--font-display)' }}>{empresa.nombre}</p>
+              <p style={{ margin: 0, fontSize: '0.65rem', color: 'var(--muted)' }}>RUT {empresa.rut}</p>
+            </div>
+          </div>
+
+          <button onClick={() => download('cliente')} disabled={gen} style={{ ...btnGhost, width: '100%', justifyContent: 'center', height: 44, borderColor: 'rgba(74,222,128,0.3)', color: '#4ade80' }}>
+            {gen ? <Loader2 size={14} className="iv-spin" /> : <FileText size={14} />}
+            PDF Cliente (con IVA)
+          </button>
+          <button onClick={() => download('interno')} disabled={gen} style={{ ...btnGhost, width: '100%', justifyContent: 'center', height: 44 }}>
+            {gen ? <Loader2 size={14} className="iv-spin" /> : <Package size={14} />}
+            Listado interno de materiales
+          </button>
+          <div className="iv-divider" />
+          <button onClick={onClose} style={{ ...btnGhost, width: '100%', justifyContent: 'center' }}>Cerrar</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── Item Row ─────────────────────────────────────────────────────────────────
+function ItemRow({ item, index, total, onUpdate, onDelete, onDuplicate, onMoveUp, onMoveDown, isFirst, isLast, ocultarCostos }: {
+  item: CotizacionItem; index: number; total: number;
+  onUpdate: (i: number, u: Partial<CotizacionItem>) => void;
+  onDelete: (i: number) => void;
+  onDuplicate: (i: number) => void;
+  onMoveUp: (i: number) => void;
+  onMoveDown: (i: number) => void;
+  isFirst: boolean; isLast: boolean; ocultarCostos: boolean;
+}) {
+  const CatIcon = CAT_ICONS[item.categoria];
+  const [isEditingCosto, setIsEditingCosto] = useState(false);
+  const [isEditingPrecio, setIsEditingPrecio] = useState(false);
+
+  const handleCostoChange = (v: string) => {
+    const costo = cleanNumber(v);
+    const precio = precioDesdeMargen(costo, item.margen || 30);
+    onUpdate(index, { costo, precio: Math.round(precio) });
+  };
+  const handleMargenChange = (v: string) => {
+    const margen = parseFloat(v) || 0;
+    const precio = precioDesdeMargen(item.costo || 0, margen);
+    onUpdate(index, { margen, precio: Math.round(precio) });
+  };
+  const handlePrecioChange = (v: string) => {
+    const precio = cleanNumber(v);
+    const margen = margenDesdePrecio(item.costo || 0, precio);
+    onUpdate(index, { precio, margen: Math.round(margen * 10) / 10 });
+  };
+
+  const inputStyle: React.CSSProperties = {
+    background: 'rgba(0,0,0,0.2)', border: '1px solid var(--border2)', color: '#fff',
+    fontFamily: 'var(--font-body)', fontSize: '0.85rem',
+    padding: '0.45rem 0.5rem', outline: 'none', width: '100%',
+    textAlign: 'right', transition: 'all 0.15s ease', borderRadius: '4px',
+  };
+
+  return (
+    <div className="iv-item-row" style={{
+      background: 'var(--bg3)', borderLeft: `4px solid ${CAT_COLORS[item.categoria]}`,
+      marginBottom: '6px', display: 'flex', flexDirection: 'column', gap: 0,
+      boxShadow: '0 2px 4px rgba(0,0,0,0.1)', borderRadius: '4px',
+    }}>
+      <div className="iv-item-grid-container">
+        <div className="cell-desc" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+          <CatIcon size={14} color={CAT_COLORS[item.categoria]} style={{ flexShrink: 0, opacity: 0.8 }} />
+          <input
+            value={item.descripcion}
+            onChange={e => onUpdate(index, { descripcion: e.target.value })}
+            placeholder="Descripción del ítem o servicio..."
+            className="input-row-focus"
+            style={{ ...inputStyle, textAlign: 'left', fontSize: '0.88rem', background: 'transparent', border: 'none', paddingLeft: 0 }}
+          />
+        </div>
+
+        <div className="iv-item-inputs-group">
+          <div className="input-field-wrapper min-w-50">
+            <span className="mobile-label">Cant.</span>
+            <input type="number" min="0" step="0.01" value={item.cantidad || ''} onChange={e => onUpdate(index, { cantidad: parseFloat(e.target.value) || 0 })} className="no-spin-arrows input-row-focus" style={{ ...inputStyle, textAlign: 'center', fontWeight: 'bold' }} placeholder="0" />
+          </div>
+          <div className="input-field-wrapper min-w-60">
+            <span className="mobile-label">Unid.</span>
+            <select value={item.unidad} onChange={e => onUpdate(index, { unidad: e.target.value })} className="input-row-focus" style={{ ...inputStyle, cursor: 'pointer', textAlign: 'center', padding: '0.45rem 0.2rem' }}>
+              {UNIDADES.map(u => <option key={u} value={u}>{u}</option>)}
+            </select>
+          </div>
+          {!ocultarCostos && (
+            <div className="input-field-wrapper">
+              <span className="mobile-label">Costo Unit.</span>
+              <input type={isEditingCosto ? 'number' : 'text'} className="no-spin-arrows input-row-focus" value={isEditingCosto ? (item.costo || '') : formatCLP(item.costo || 0)} onChange={e => handleCostoChange(e.target.value)} onFocus={() => setIsEditingCosto(true)} onBlur={() => setIsEditingCosto(false)} placeholder="$ 0" style={{ ...inputStyle, color: 'rgba(255,255,255,0.6)', fontSize: '0.8rem' }} />
+            </div>
+          )}
+          {!ocultarCostos && (
+            <div className="input-field-wrapper min-w-55">
+              <span className="mobile-label">Margen</span>
+              <div style={{ display: 'flex', alignItems: 'center', position: 'relative', width: '100%' }}>
+                <input type="number" min="0" max="99" step="1" value={item.margen || ''} onChange={e => handleMargenChange(e.target.value)} className="no-spin-arrows input-row-focus" placeholder="30" style={{ ...inputStyle, paddingRight: '1.1rem', color: '#a78bfa', fontWeight: '500' }} />
+                <span style={{ fontSize: '0.7rem', color: '#a78bfa', position: 'absolute', right: '0.4rem', pointerEvents: 'none' }}>%</span>
+              </div>
+            </div>
+          )}
+          <div className="input-field-wrapper">
+            <span className="mobile-label">Precio Venta</span>
+            <input type={isEditingPrecio ? 'number' : 'text'} className="no-spin-arrows input-row-focus" value={isEditingPrecio ? (item.precio || '') : formatCLP(item.precio || 0)} onChange={e => handlePrecioChange(e.target.value)} onFocus={() => setIsEditingPrecio(true)} onBlur={() => setIsEditingPrecio(false)} placeholder="$ 0" style={{ ...inputStyle, color: 'var(--y)', fontWeight: '700' }} />
+          </div>
+          <div className="input-field-wrapper min-w-65">
+            <span className="mobile-label">Impuesto</span>
+            <button onClick={() => onUpdate(index, { iva_incluido: !item.iva_incluido })} style={{ background: item.iva_incluido ? 'rgba(96,165,250,0.12)' : 'rgba(255,255,255,0.02)', border: `1px solid ${item.iva_incluido ? 'rgba(96,165,250,0.3)' : 'var(--border2)'}`, cursor: 'pointer', padding: '0.45rem 0.4rem', fontSize: '0.65rem', fontFamily: 'var(--font-display)', fontWeight: 700, letterSpacing: '0.05em', color: item.iva_incluido ? '#60a5fa' : 'var(--muted)', whiteSpace: 'nowrap', width: '100%', textAlign: 'center', borderRadius: '4px' }}>
+              {item.iva_incluido ? '+ IVA' : 'NETO'}
+            </button>
+          </div>
+          <div className="input-field-wrapper cell-subtotal">
+            <span className="mobile-label">Subtotal</span>
+            <span style={{ fontFamily: 'var(--font-display)', fontWeight: 700, fontSize: '0.9rem', color: '#fff', textAlign: 'right', display: 'block', padding: '0.45rem 0' }}>
+              {formatCLP(total)}
+            </span>
+          </div>
+        </div>
+
+        <div className="cell-actions">
+          <button onClick={() => onMoveUp(index)}   disabled={isFirst} title="Subir" style={{ background: 'none', border: 'none', cursor: isFirst ? 'default' : 'pointer', color: isFirst ? 'rgba(255,255,255,0.1)' : 'rgba(255,255,255,0.3)', padding: '4px' }}><ArrowUp size={12} /></button>
+          <button onClick={() => onMoveDown(index)} disabled={isLast}  title="Bajar" style={{ background: 'none', border: 'none', cursor: isLast ? 'default' : 'pointer', color: isLast ? 'rgba(255,255,255,0.1)' : 'rgba(255,255,255,0.3)', padding: '4px' }}><ArrowDown size={12} /></button>
+          <button onClick={() => onDuplicate(index)} title="Duplicar"  style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'rgba(255,255,255,0.3)', padding: '4px' }}><Copy size={12} /></button>
+          <button onClick={() => onDelete(index)}    title="Eliminar"  style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'rgba(248,113,113,0.5)', padding: '4px' }}><Trash2 size={12} /></button>
+        </div>
+      </div>
+
+      {/* Selector categoría */}
+      <div style={{ display: 'flex', gap: '1px', padding: '0 0.75rem 0.5rem' }}>
+        {(['material', 'mano_obra', 'servicio'] as CategoriaItem[]).map(cat => (
+          <button key={cat} onClick={() => onUpdate(index, { categoria: cat, esMaterial: cat === 'material' })}
+            style={{
+              background: 'none', border: 'none', cursor: 'pointer', padding: '0.2rem 0.5rem',
+              fontSize: '0.6rem', fontFamily: 'var(--font-display)', fontWeight: 700,
+              letterSpacing: '0.12em', textTransform: 'uppercase',
+              color: item.categoria === cat ? CAT_COLORS[cat] : 'rgba(255,255,255,0.2)',
+              transition: 'all 0.1s ease',
+            }}
+          >
+            {CATEGORIA_LABELS[cat]}
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// ─── Contenido principal ──────────────────────────────────────────────────────
+function CotizadorContent() {
+  const searchParams = useSearchParams();
+  const router = useRouter();
+  const { success, error: toastError, warning } = useToast();
+
+  const editId        = searchParams.get('edit');
+  const cloneId       = searchParams.get('clone');
+  const clienteParam  = searchParams.get('cliente');
+  const fileInputRef  = useRef<HTMLInputElement>(null);
+
+  // ── Estado formulario ──
+  const [loading,                setLoading]                = useState(false);
+  const [folioGenerado,          setFolioGenerado]          = useState<number | null>(null);
+  const [proximoFolio,           setProximoFolio]           = useState<number | null>(null);
+  const [clientes,               setClientes]               = useState<Cliente[]>([]);
+  const [searchCliente,          setSearchCliente]          = useState('');
+  const [showClienteDropdown,    setShowClienteDropdown]    = useState(false);
+  const [clienteSeleccionado,    setClienteSeleccionado]    = useState<Cliente | null>(null);
+  const [items,                  setItems]                  = useState<CotizacionItem[]>([]);
+  const [descripcionGeneral,     setDescripcionGeneral]     = useState('');
+  const [descuentoPorcentajeMO,  setDescuentoPorcentajeMO] = useState(0);
+  const [ocultarSuministros,     setOcultarSuministros]     = useState(false);
+  const [ocultarCostos,          setOcultarCostos]          = useState(true);
+  const [garantia,               setGarantia]               = useState(GARANTIA_DEFAULT);
+  const [condicionesComerciales, setCondicionesComerciales] = useState(CONDICIONES_DEFAULT);
+  const [showPDFModal,           setShowPDFModal]           = useState(false);
+
+  // ── Estado empresa ──
+  const [empresas,          setEmpresas]          = useState<EmpresaInfo[]>([]);
+  const [empresaSelec,      setEmpresaSelec]      = useState<EmpresaInfo | null>(null);
+  const [showEmpresaModal,  setShowEmpresaModal]  = useState(false);
+  const [empresaEditing,    setEmpresaEditing]    = useState<EmpresaInfo | null>(null);
+
+  // ── Cargar datos iniciales ──
+  useEffect(() => {
+    loadInitialData();
+    if (editId)       cargarDatosEdicion(editId, false);
+    else if (cloneId) cargarDatosEdicion(cloneId, true);
+    else              obtenerUltimoFolio();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [editId, cloneId]);
+
+  async function loadInitialData() {
+    const [dataClientes, dataEmpresas] = await Promise.all([
+      clientesService.getAll(),
+      loadEmpresas(),
+    ]);
+    setClientes(dataClientes);
+    if (clienteParam) {
+      const c = dataClientes.find((x: Cliente) => x.id === clienteParam);
+      if (c) { setClienteSeleccionado(c); setSearchCliente(c.nombre_cliente); }
+    }
+  }
+
+  async function loadEmpresas(): Promise<EmpresaInfo[]> {
+    try {
+      const { data, error } = await supabase
+        .from('empresas')
+        .select('*')
+        .order('nombre');
+      if (error) throw error;
+      const list = (data || []) as EmpresaInfo[];
+      setEmpresas(list);
+      // Auto-seleccionar la primera si no hay ninguna seleccionada
+      if (list.length > 0 && !empresaSelec) {
+        setEmpresaSelec(list[0]);
+      }
+      return list;
+    } catch {
+      return [];
+    }
+  }
+
+  async function obtenerUltimoFolio() {
+    const f = await cotizacionesService.getNextFolio();
+    setProximoFolio(f);
+  }
+
+  async function cargarDatosEdicion(id: string, isCloning: boolean) {
+    setLoading(true);
+    const cot = await cotizacionesService.getById(id);
+    if (cot) {
+      setClienteSeleccionado(cot.clientes || null);
+      setSearchCliente(cot.clientes?.nombre_cliente || '');
+      const itemsNorm = (cot.items || []).map((item: any) => ({
+        id: item.id || newItem().id,
+        descripcion: item.descripcion || '',
+        categoria: item.categoria || (item.esMaterial ? 'material' : 'mano_obra') as CategoriaItem,
+        cantidad: item.cantidad || 1,
+        unidad: item.unidad || 'un',
+        costo: item.costo || 0,
+        margen: item.margen || 0,
+        precio: item.precio || 0,
+        iva_incluido: item.iva_incluido !== undefined ? item.iva_incluido : true,
+        esMaterial: item.esMaterial !== undefined ? item.esMaterial : true,
+      }));
+      setItems(itemsNorm);
+      setDescripcionGeneral(cot.descripcion_general || '');
+      setDescuentoPorcentajeMO(cot.descuento_global || 0);
+      if (cot.condiciones_servicio)    setGarantia(cot.condiciones_servicio);
+      if (cot.condiciones_comerciales) setCondicionesComerciales(cot.condiciones_comerciales);
+      setOcultarSuministros(cot.ocultar_suministros ?? false);
+      if (!isCloning) setFolioGenerado(cot.folio);
+      else            obtenerUltimoFolio();
+    }
+    setLoading(false);
+  }
+
+  const totals = useMemo(() => calcularTotals(items, descuentoPorcentajeMO), [items, descuentoPorcentajeMO]);
+
+  const addItem = useCallback((categoria: CategoriaItem = 'material') => {
+    setItems(prev => [newItem({ categoria, esMaterial: categoria === 'material' }), ...prev]);
+  }, []);
+
+  const updateItem = useCallback((index: number, updates: Partial<CotizacionItem>) => {
+    setItems(prev => prev.map((item, i) => i === index ? { ...item, ...updates } : item));
+  }, []);
+
+  const deleteItem = useCallback((index: number) => {
+    setItems(prev => prev.filter((_, i) => i !== index));
+  }, []);
+
+  const duplicateItem = useCallback((index: number) => {
+    setItems(prev => {
+      const copy = { ...prev[index], id: newItem().id };
+      const next = [...prev];
+      next.splice(index + 1, 0, copy);
+      return next;
+    });
+  }, []);
+
+  const moveItem = useCallback((index: number, direction: 'up' | 'down') => {
+    setItems(prev => {
+      const next = [...prev];
+      const targetIdx = direction === 'up' ? index - 1 : index + 1;
+      if (targetIdx < 0 || targetIdx >= next.length) return prev;
+      [next[index], next[targetIdx]] = [next[targetIdx], next[index]];
+      return next;
+    });
+  }, []);
+
+  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setLoading(true);
+    const reader = new FileReader();
+    reader.onload = (evt) => {
+      try {
+        const wb = XLSX.read(evt.target?.result, { type: 'binary' });
+        const ws = wb.Sheets[wb.SheetNames[0]];
+        const raw: any[] = XLSX.utils.sheet_to_json(ws);
+        const newItems: CotizacionItem[] = raw
+          .filter(r => r['Descripcion'] || r['descripcion'])
+          .map(r => newItem({
+            descripcion: r['Descripcion'] || r['descripcion'] || '',
+            cantidad:    cleanNumber(r['Cantidad']       || r['cantidad']  || 1),
+            precio:      cleanNumber(r['Precio venta']   || r['precio']    || 0),
+            costo:       cleanNumber(r['Costo unitario'] || r['costo']     || 0),
+            margen:      parseFloat(r['Margen (%)']      || r['margen']    || '30') || 30,
+            categoria:   (r['Categoria'] || r['categoria'] || 'material') as CategoriaItem,
+            unidad:      r['Unidad'] || r['unidad'] || 'un',
+            iva_incluido: true, esMaterial: true,
+          }));
+        setItems(prev => [...newItems, ...prev]);
+        success(`${newItems.length} ítems importados desde Excel`);
+      } catch {
+        toastError('Error al procesar el archivo Excel. Verifica el formato.');
+      } finally {
+        setLoading(false);
+        if (fileInputRef.current) fileInputRef.current.value = '';
+      }
+    };
+    reader.readAsBinaryString(file);
+  };
+
+  const exportExcel = () => {
+    if (items.length === 0) { warning('Agrega ítems antes de exportar'); return; }
+    const rows = itemsToExcelRows(items);
+    const ws = XLSX.utils.json_to_sheet(rows);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Cotización');
+    const totSheet = XLSX.utils.json_to_sheet([
+      { Concepto: 'Neto Materiales',   Monto: totals.netoMateriales },
+      { Concepto: 'IVA Materiales',    Monto: totals.ivaMateriales  },
+      { Concepto: 'Neto Mano de Obra', Monto: totals.netoMO         },
+      { Concepto: 'Neto Servicios',    Monto: totals.netoServicios  },
+      { Concepto: 'Total Neto',        Monto: totals.netoGeneral    },
+      { Concepto: 'IVA Total',         Monto: totals.ivaGeneral     },
+      { Concepto: 'TOTAL',             Monto: totals.total          },
+    ]);
+    XLSX.utils.book_append_sheet(wb, totSheet, 'Totales');
+    XLSX.writeFile(wb, `Cotizacion_${formatFolio(folioGenerado || proximoFolio)}.xlsx`);
+  };
+
+  const handleGuardar = async () => {
+    if (!clienteSeleccionado) { warning('Selecciona un cliente antes de guardar'); return; }
+    if (items.length === 0)   { warning('Agrega al menos un ítem'); return; }
+    if (!empresaSelec)        { warning('Selecciona una empresa emisora'); return; }
+    setLoading(true);
+    const payload = {
+      cliente_id: clienteSeleccionado.id,
+      items,
+      subtotal: totals.netoGeneral,
+      iva: totals.ivaGeneral,
+      total: totals.total,
+      descuento_global: descuentoPorcentajeMO,
+      descripcion_general: descripcionGeneral,
+      condiciones_servicio: garantia,
+      condiciones_comerciales: condicionesComerciales,
+      estado: 'Pendiente' as const,
+      ocultar_suministros: ocultarSuministros,
+    };
+    try {
+      let result;
+      if (editId && !cloneId) {
+        result = await cotizacionesService.update(editId, payload);
+        success('Cotización actualizada correctamente');
+      } else {
+        result = await cotizacionesService.create(payload);
+        success('Cotización guardada correctamente');
+      }
+      setFolioGenerado(result.folio);
+      if (!editId || cloneId) router.replace(`/cotizador?edit=${result.id}`);
+    } catch (e: any) {
+      toastError('Error al guardar: ' + (e?.message || 'Error desconocido'));
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const nuevoPresupuesto = () => {
+    setItems([]);
+    setClienteSeleccionado(null);
+    setSearchCliente('');
+    setDescripcionGeneral('');
+    setFolioGenerado(null);
+    setDescuentoPorcentajeMO(0);
+    setOcultarSuministros(false);
+    setGarantia(GARANTIA_DEFAULT);
+    setCondicionesComerciales(CONDICIONES_DEFAULT);
+    obtenerUltimoFolio();
+    router.push('/cotizador');
+  };
+
+  const setAllIVA = (v: boolean) => setItems(prev => prev.map(i => ({ ...i, iva_incluido: v })));
+
+  const clientesFiltrados = useMemo(() => {
+    if (!searchCliente) return clientes.slice(0, 8);
+    const q = searchCliente.toLowerCase();
+    return clientes.filter(c =>
+      c.nombre_cliente.toLowerCase().includes(q) ||
+      (c.empresa || '').toLowerCase().includes(q) ||
+      c.rut.includes(q)
+    ).slice(0, 8);
+  }, [clientes, searchCliente]);
+
+  const isEditing = !!(editId && !cloneId);
+  const hasFolio  = folioGenerado !== null;
+
+  // ── Empresa fallback (para PDF siempre tener algo) ──
+  const empresaPDF: EmpresaInfo = empresaSelec || {
+    nombre: 'InnVolt SpA',
+    slogan: 'Servicios Eléctricos y Tecnológicos',
+    rut: '78.299.986-9',
+    giro: 'Ingeniería Eléctrica',
+    email: 'inn-volt@outlook.cl',
+    telefono: '+56 9 8920 3902',
+    direccion: 'Santiago, Chile',
+    website: 'www.innvolt.cl',
+  };
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 0, padding: '0 4px' }} className="anim-in">
+
+      {/* Estilos globales */}
+      <style dangerouslySetInnerHTML={{__html: `
+        .no-spin-arrows::-webkit-outer-spin-button,
+        .no-spin-arrows::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+        .no-spin-arrows { -moz-appearance: textfield; appearance: textfield; }
+        .input-row-focus:focus { border-color: var(--y) !important; background: rgba(0,0,0,0.4) !important; }
+        .cotizador-grid-responsive { display: grid; grid-template-columns: 1fr; gap: 12px; align-items: start; }
+        .input-field-wrapper { display: flex; flex-direction: column; gap: 2px; flex: 1; min-width: 75px; }
+        .min-w-50 { min-width: 50px !important; }
+        .min-w-55 { min-width: 55px !important; }
+        .min-w-60 { min-width: 60px !important; }
+        .min-w-65 { min-width: 65px !important; }
+        .mobile-label { display: none; font-family: var(--font-display); font-size: 0.55rem; text-transform: uppercase; color: var(--muted); letter-spacing: 0.05em; }
+        .iv-item-grid-container { display: grid; grid-template-columns: 1.5fr 4fr auto; align-items: center; gap: 10px; padding: 0.6rem 0.75rem; }
+        .iv-item-inputs-group { display: flex; align-items: center; gap: 6px; width: 100%; }
+        .cell-actions { display: flex; gap: 1px; align-items: center; background: rgba(0,0,0,0.2); padding: 0.25rem; border-radius: 4px; justify-content: center; }
+        .desktop-header-columns { display: grid; grid-template-columns: 1.5fr 4fr auto; gap: 10px; padding: 0.4rem 0.75rem; background: var(--bg3); }
+        @media (min-width: 1025px) { .cotizador-grid-responsive { grid-template-columns: 300px 1fr; } }
+        @media (max-width: 1024px) {
+          .desktop-header-columns { display: none !important; }
+          .iv-item-grid-container { grid-template-columns: 1fr !important; gap: 12px !important; padding: 1rem !important; }
+          .iv-item-inputs-group { display: grid !important; grid-template-columns: repeat(auto-fit, minmax(95px, 1fr)) !important; gap: 10px !important; }
+          .cell-subtotal span { text-align: right !important; font-size: 1.05rem !important; }
+          .cell-actions { width: 100%; justify-content: space-around; padding: 0.5rem; }
+          .mobile-label { display: block !important; }
+          .iv-header-actions { width: 100%; grid-template-columns: repeat(auto-fit, minmax(110px, 1fr)) !important; }
+        }
+        @media (min-width: 1025px) { .iv-financial-layout { flex-direction: row !important; } .iv-financial-layout > * { flex: 1; } }
+      `}} />
+
+      <input type="file" ref={fileInputRef} onChange={handleFileUpload} accept=".xlsx,.xls,.csv" style={{ display: 'none' }} />
+
+      {/* Modales */}
+      {showPDFModal && hasFolio && clienteSeleccionado && (
+        <PDFModal
+          folio={folioGenerado!} cliente={clienteSeleccionado}
+          items={items} totals={totals}
+          descuentoPorcentajeMO={descuentoPorcentajeMO}
+          descripcionGeneral={descripcionGeneral}
+          garantia={garantia} condicionesComerciales={condicionesComerciales}
+          ocultarSuministros={ocultarSuministros}
+          empresa={empresaPDF}
+          onClose={() => setShowPDFModal(false)}
+        />
+      )}
+
+      {showEmpresaModal && (
+        <EmpresaModal
+          empresa={empresaEditing}
+          onSave={async (emp) => {
+            setShowEmpresaModal(false);
+            setEmpresaEditing(null);
+            await loadEmpresas();
+            setEmpresaSelec(emp);
+            success(emp.id ? 'Empresa actualizada' : 'Empresa creada correctamente');
+          }}
+          onClose={() => { setShowEmpresaModal(false); setEmpresaEditing(null); }}
+        />
+      )}
+
+      {/* ══ HEADER ══ */}
+      <div className="iv-page-header" style={{ marginBottom: '1.25rem', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+        <div style={{ width: '100%' }}>
+          <p className="label-muted" style={{ marginBottom: '0.25rem', letterSpacing: '0.4em', fontSize: '0.65rem' }}>
+            {cloneId ? 'Clonando' : (isEditing ? 'Editando' : 'Nueva')} cotización
+          </p>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap', justifyContent: 'space-between' }}>
+            <h1 style={{ fontFamily: 'var(--font-display)', fontWeight: 900, fontSize: 'clamp(1.6rem, 5vw, 2.4rem)', textTransform: 'uppercase', lineHeight: 1, color: '#fff', margin: 0 }}>
+              COTIZA<span style={{ color: 'var(--y)' }}>DOR</span>
+            </h1>
+            <span style={{ background: hasFolio ? 'var(--y)' : 'var(--bg3)', color: hasFolio ? '#000' : 'var(--muted)', fontFamily: 'var(--font-display)', fontWeight: 900, fontSize: '0.75rem', letterSpacing: '0.12em', padding: '0.3rem 0.75rem', borderRadius: '4px', border: hasFolio ? 'none' : '1px solid var(--border2)' }}>
+              {formatFolio(folioGenerado || proximoFolio)}
+            </span>
+          </div>
+        </div>
+
+        <div className="iv-header-actions" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(90px, 1fr))', gap: '6px', width: '100%' }}>
+          <button onClick={nuevoPresupuesto} style={{ ...btnGhost, justifyContent: 'center', margin: 0 }}><RefreshCcw size={12} /> Nuevo</button>
+          <Link href="/cotizador/historial" style={{ ...btnGhost, textDecoration: 'none', justifyContent: 'center', margin: 0 }}>
+            <History size={12} /> Historial
+          </Link>
+          <button onClick={() => fileInputRef.current?.click()} style={{ ...btnGhost, justifyContent: 'center', margin: 0 }}>
+            <FileUp size={12} /> Excel
+          </button>
+          {hasFolio && (
+            <button
+              onClick={() => {
+                if (!empresaSelec) { warning('Selecciona una empresa emisora primero'); return; }
+                setShowPDFModal(true);
+              }}
+              style={{ ...btnGhost, color: '#4ade80', borderColor: 'rgba(74,222,128,0.3)', justifyContent: 'center', margin: 0 }}
+            >
+              <Download size={12} /> PDF
+            </button>
+          )}
+          <button
+            onClick={handleGuardar} disabled={loading}
+            style={{ background: 'var(--y)', color: '#000', border: 'none', borderRadius: '4px', cursor: loading ? 'not-allowed' : 'pointer', padding: '0 0.75rem', height: 36, fontFamily: 'var(--font-display)', fontWeight: 900, fontSize: '0.68rem', letterSpacing: '0.12em', textTransform: 'uppercase', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: '0.4rem', opacity: loading ? 0.5 : 1, gridColumn: 'span 2 / auto' }}
+          >
+            {loading ? <Loader2 size={12} className="iv-spin" /> : <Save size={12} />}
+            {isEditing ? 'Actualizar' : 'Guardar Cotización'}
+          </button>
+        </div>
+      </div>
+
+      {/* ══ GRID PRINCIPAL ══ */}
+      <div className="cotizador-grid-responsive">
+
+        {/* ── SIDEBAR ── */}
+        <aside style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+
+          {/* ★ EMPRESA EMISORA ★ */}
+          <EmpresaSelector
+            empresas={empresas}
+            selected={empresaSelec}
+            onSelect={setEmpresaSelec}
+            onNew={() => { setEmpresaEditing(null); setShowEmpresaModal(true); }}
+            onEdit={(emp) => { setEmpresaEditing(emp); setShowEmpresaModal(true); }}
+          />
+
+          {/* Cliente */}
+          <div style={{ ...panelY, padding: '1rem', borderRadius: '4px' }}>
+            <p style={sectionLabel}><User size={12} /> Cliente</p>
+            <div style={{ position: 'relative' }}>
+              <input
+                className="input input-sm"
+                value={searchCliente}
+                onChange={e => { setSearchCliente(e.target.value); setShowClienteDropdown(true); if (!e.target.value) setClienteSeleccionado(null); }}
+                onFocus={() => setShowClienteDropdown(true)}
+                onBlur={() => setTimeout(() => setShowClienteDropdown(false), 200)}
+                placeholder="Buscar o seleccionar cliente..."
+                style={{ width: '100%', padding: '0.5rem' }}
+              />
+              {clienteSeleccionado && (
+                <div style={{ position: 'absolute', right: '0.5rem', top: '50%', transform: 'translateY(-50%)' }}>
+                  <Check size={13} color="#4ade80" />
+                </div>
+              )}
+              {showClienteDropdown && clientesFiltrados.length > 0 && (
+                <div className="dropdown" style={{ width: '100%', zIndex: 50 }}>
+                  {clientesFiltrados.map(c => (
+                    <div key={c.id} className="dropdown-item"
+                      onMouseDown={() => { setClienteSeleccionado(c); setSearchCliente(c.nombre_cliente); setShowClienteDropdown(false); }}
+                    >
+                      <p style={{ fontSize: '0.85rem', fontWeight: 500, margin: 0 }}>{c.nombre_cliente}</p>
+                      {c.empresa && <p style={{ fontSize: '0.7rem', color: 'var(--muted)', margin: 0 }}>{c.empresa}</p>}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+            {clienteSeleccionado && (
+              <div style={{ marginTop: '0.5rem', padding: '0.5rem', background: 'var(--bg3)', borderRadius: '3px', display: 'flex', flexDirection: 'column', gap: '0.2rem' }}>
+                <p style={{ fontFamily: 'var(--font-display)', fontWeight: 700, fontSize: '0.8rem', color: 'var(--y)', textTransform: 'uppercase', margin: 0 }}>{clienteSeleccionado.nombre_cliente}</p>
+                {clienteSeleccionado.empresa   && <p style={{ fontSize: '0.72rem', color: 'var(--muted)', margin: 0 }}>{clienteSeleccionado.empresa}</p>}
+                {clienteSeleccionado.rut       && <p style={{ fontSize: '0.7rem', color: 'var(--muted)', fontFamily: 'monospace', margin: 0 }}>RUT: {clienteSeleccionado.rut}</p>}
+              </div>
+            )}
+          </div>
+
+          {/* Descripción general */}
+          <div style={{ ...panelY, padding: '1rem', borderTopColor: 'var(--border2)', borderRadius: '4px' }}>
+            <p style={sectionLabel}><FileText size={12} /> Descripción general</p>
+            <textarea className="input" value={descripcionGeneral} onChange={e => setDescripcionGeneral(e.target.value)} rows={2} placeholder="Detalle o alcance general del servicio..." style={{ resize: 'vertical', fontSize: '0.82rem', width: '100%' }} />
+          </div>
+
+          {/* Opciones de visualización */}
+          <div style={{ background: 'var(--bg2)', border: '1px solid var(--border2)', padding: '1rem', borderRadius: '4px' }}>
+            <p style={{ ...sectionLabel, marginBottom: '0.5rem' }}><Eye size={12} /> Opciones Vista</p>
+            {[
+              { label: 'Agrupar suministros (Vista PDF)', key: 'ocultarSuministros', val: ocultarSuministros, set: setOcultarSuministros },
+              { label: 'Ocultar costos y margen interno',  key: 'ocultarCostos',      val: ocultarCostos,      set: setOcultarCostos      },
+            ].map(({ label, key, val, set }) => (
+              <div key={key} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.4rem' }}>
+                <span style={{ fontSize: '0.75rem', color: 'var(--muted)' }}>{label}</span>
+                <button onClick={() => set(!val)} style={{ width: 34, height: 18, background: val ? 'var(--y)' : 'var(--bg3)', border: '1px solid var(--border2)', cursor: 'pointer', position: 'relative', transition: 'background 0.2s', borderRadius: 9 }}>
+                  <span style={{ position: 'absolute', top: 1, left: val ? 16 : 1, width: 14, height: 14, background: val ? '#000' : 'var(--muted)', borderRadius: '50%', transition: 'all 0.2s' }} />
+                </button>
+              </div>
+            ))}
+          </div>
+
+          {/* Descuento MO */}
+          <div style={{ background: 'var(--bg2)', border: '1px solid var(--border2)', padding: '1rem', borderRadius: '4px' }}>
+            <p style={sectionLabel}><Settings2 size={12} /> Descuento Mano de Obra</p>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+              <input type="number" min="0" max="100" step="1" className="input input-sm" value={descuentoPorcentajeMO || ''} onChange={e => setDescuentoPorcentajeMO(parseFloat(e.target.value) || 0)} placeholder="0" style={{ width: '70px', padding: '0.4rem' }} />
+              <span style={{ color: 'var(--muted)', fontSize: '0.75rem' }}>% sobre MO</span>
+            </div>
+            {descuentoPorcentajeMO > 0 && (
+              <p style={{ fontSize: '0.7rem', color: '#f87171', marginTop: '0.25rem', margin: 0 }}>— {formatCLP(totals.montoDescuentoMO)} aplicado</p>
+            )}
+          </div>
+
+        </aside>
+
+        {/* ── ÁREA ÍTEMS ── */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+
+          {/* Toolbar ítems */}
+          <div style={{ background: 'var(--bg2)', border: '1px solid var(--border2)', borderTop: '2px solid var(--y)', padding: '0.75rem', display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap', borderRadius: '4px' }}>
+            <span style={{ fontFamily: 'var(--font-display)', fontWeight: 700, fontSize: '0.6rem', letterSpacing: '0.2em', textTransform: 'uppercase', color: 'var(--y)' }}>
+              ÍTEMS ({items.length})
+            </span>
+            <div style={{ display: 'flex', gap: '4px', flexWrap: 'wrap' }}>
+              {(['material', 'mano_obra', 'servicio'] as CategoriaItem[]).map(cat => {
+                const CatIcon = CAT_ICONS[cat];
+                return (
+                  <button key={cat} onClick={() => addItem(cat)} style={{ ...btnGhost, height: 28, fontSize: '0.58rem', padding: '0 0.5rem', color: CAT_COLORS[cat], borderColor: `${CAT_COLORS[cat]}33` }}>
+                    <Plus size={10} /><CatIcon size={10} /> {CATEGORIA_LABELS[cat]}
+                  </button>
+                );
+              })}
+            </div>
+            <div style={{ marginLeft: 'auto', display: 'flex', gap: '4px' }}>
+              <button onClick={() => setAllIVA(true)}  style={{ ...btnGhost, height: 26, fontSize: '0.55rem', padding: '0 0.4rem' }}>Todo +IVA</button>
+              <button onClick={() => setAllIVA(false)} style={{ ...btnGhost, height: 26, fontSize: '0.55rem', padding: '0 0.4rem' }}>Todo neto</button>
+              <button onClick={exportExcel}             style={{ ...btnGhost, height: 26, fontSize: '0.55rem', padding: '0 0.4rem' }}><Download size={10} /> XLSX</button>
+            </div>
+          </div>
+
+          {/* Header columnas desktop */}
+          {items.length > 0 && (
+            <div className="desktop-header-columns">
+              <span style={{ fontFamily: 'var(--font-display)', fontWeight: 700, fontSize: '0.55rem', letterSpacing: '0.15em', color: 'var(--muted)' }}>DESCRIPCIÓN</span>
+              <div style={{ display: 'flex', width: '100%', gap: '6px' }}>
+                <span style={{ flex: 1, minWidth: '50px', textAlign: 'center', fontFamily: 'var(--font-display)', fontWeight: 700, fontSize: '0.55rem', color: 'var(--muted)' }}>CANT.</span>
+                <span style={{ flex: 1, minWidth: '60px', textAlign: 'center', fontFamily: 'var(--font-display)', fontWeight: 700, fontSize: '0.55rem', color: 'var(--muted)' }}>UNID.</span>
+                {!ocultarCostos && <span style={{ flex: 1, textAlign: 'right', fontFamily: 'var(--font-display)', fontWeight: 700, fontSize: '0.55rem', color: 'var(--muted)' }}>COSTO UNIT</span>}
+                {!ocultarCostos && <span style={{ flex: 1, minWidth: '55px', textAlign: 'center', fontFamily: 'var(--font-display)', fontWeight: 700, fontSize: '0.55rem', color: 'var(--muted)' }}>MARGEN</span>}
+                <span style={{ flex: 1, textAlign: 'right', fontFamily: 'var(--font-display)', fontWeight: 700, fontSize: '0.55rem', color: 'var(--y)' }}>P. VENTA</span>
+                <span style={{ flex: 1, minWidth: '65px', textAlign: 'center', fontFamily: 'var(--font-display)', fontWeight: 700, fontSize: '0.55rem', color: 'var(--muted)' }}>IVA</span>
+                <span style={{ flex: 1, textAlign: 'right', fontFamily: 'var(--font-display)', fontWeight: 700, fontSize: '0.55rem', color: 'var(--muted)' }}>SUBTOTAL</span>
+              </div>
+              <span style={{ width: '68px' }}></span>
+            </div>
+          )}
+
+          {/* Lista de ítems */}
+          {items.length === 0 ? (
+            <div style={{ background: 'var(--bg2)', border: '1px solid var(--border2)', padding: '2.5rem 1rem', textAlign: 'center', borderRadius: '4px' }}>
+              <Package size={36} style={{ margin: '0 auto 0.75rem', opacity: 0.2, display: 'block' }} />
+              <p style={{ color: 'var(--muted)', marginBottom: '1.25rem', fontSize: '0.82rem' }}>Sin ítems en el presupuesto actual.</p>
+              <div style={{ display: 'flex', gap: '6px', justifyContent: 'center', flexWrap: 'wrap' }}>
+                {(['material', 'mano_obra', 'servicio'] as CategoriaItem[]).map(cat => {
+                  const CatIcon = CAT_ICONS[cat];
+                  return (
+                    <button key={cat} onClick={() => addItem(cat)} style={{ ...btnGhost, height: 36, color: CAT_COLORS[cat], borderColor: `${CAT_COLORS[cat]}33` }}>
+                      <Plus size={12} /><CatIcon size={12} /> {CATEGORIA_LABELS[cat]}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '1px' }}>
+              {items.map((item, idx) => (
+                <ItemRow
+                  key={item.id} item={item} index={idx}
+                  total={item.cantidad * item.precio}
+                  onUpdate={updateItem} onDelete={deleteItem} onDuplicate={duplicateItem}
+                  onMoveUp={i => moveItem(i, 'up')} onMoveDown={i => moveItem(i, 'down')}
+                  isFirst={idx === 0} isLast={idx === items.length - 1}
+                  ocultarCostos={ocultarCostos}
+                />
+              ))}
+            </div>
+          )}
+
+          {items.length > 0 && (
+            <button onClick={() => addItem('material')} style={{ ...btnGhost, width: '100%', justifyContent: 'center', height: 38, borderStyle: 'dashed', marginTop: '2px', borderRadius: '4px' }}>
+              <Plus size={13} /> Agregar nuevo ítem
+            </button>
+          )}
+
+          {/* Resumen financiero */}
+          {items.length > 0 && (
+            <div style={{ background: 'var(--bg2)', border: '1px solid var(--border2)', borderTop: '2px solid var(--y)', padding: '1rem', marginTop: '6px', borderRadius: '4px' }}>
+              <p style={sectionLabel}>Resumen Financiero</p>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }} className="iv-financial-layout">
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem', width: '100%' }}>
+                  {[
+                    { label: 'Neto Materiales',  val: totals.netoMateriales, color: 'var(--y)'   },
+                    { label: 'IVA Materiales',   val: totals.ivaMateriales,  color: 'var(--muted)'},
+                    { label: 'Neto Mano de Obra',val: totals.netoMO,         color: '#60a5fa'     },
+                    { label: 'IVA Mano de Obra', val: totals.ivaMO,          color: 'var(--muted)'},
+                    { label: 'Neto Servicios',   val: totals.netoServicios,  color: '#a78bfa'     },
+                    { label: 'IVA Servicios',   val: totals.ivaServicios,  color: 'var(--muted)'     },
+                    descuentoPorcentajeMO > 0 && { label: `Descuento MO (${descuentoPorcentajeMO}%)`, val: -totals.montoDescuentoMO, color: '#f87171' },
+                  ].filter(Boolean).map((row: any) => (
+                    <div key={row.label} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingBottom: '0.25rem', borderBottom: '1px solid rgba(255,255,255,0.03)' }}>
+                      <span style={{ fontSize: '0.78rem', color: 'var(--muted)' }}>{row.label}</span>
+                      <span style={{ fontFamily: 'var(--font-display)', fontWeight: 700, fontSize: '0.82rem', color: row.color }}>{formatCLP(Math.abs(row.val))}</span>
+                    </div>
+                  ))}
+                </div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.6rem', width: '100%', paddingTop: '0.5rem', borderTop: '1px dashed var(--border2)' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <span style={{ fontSize: '0.65rem', color: 'var(--muted)', fontFamily: 'var(--font-display)', letterSpacing: '0.1em', textTransform: 'uppercase' }}>Total Neto</span>
+                    <span style={{ fontFamily: 'var(--font-display)', fontWeight: 700, fontSize: '1rem', color: 'rgba(255,255,255,0.8)' }}>{formatCLP(totals.netoGeneral)}</span>
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <span style={{ fontSize: '0.65rem', color: 'var(--muted)', fontFamily: 'var(--font-display)', letterSpacing: '0.1em', textTransform: 'uppercase' }}>IVA (19%)</span>
+                    <span style={{ fontFamily: 'var(--font-display)', fontWeight: 700, fontSize: '0.95rem', color: 'rgba(255,255,255,0.6)' }}>{formatCLP(totals.ivaGeneral)}</span>
+                  </div>
+                  <div style={{ padding: '0.6rem 0.75rem', background: 'var(--bg3)', borderTop: '2px solid var(--y)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderRadius: '3px' }}>
+                    <span style={{ fontSize: '0.65rem', color: 'var(--muted)', fontFamily: 'var(--font-display)', letterSpacing: '0.15em', textTransform: 'uppercase' }}>TOTAL FINAL</span>
+                    <span style={{ fontFamily: 'var(--font-display)', fontWeight: 900, fontSize: '1.4rem', color: 'var(--y)' }}>{formatCLP(totals.total)}</span>
+                  </div>
+                  {!ocultarCostos && totals.utilidadEstimada > 0 && (
+                    <div style={{ padding: '0.4rem 0.6rem', background: 'rgba(74,222,128,0.05)', border: '1px solid rgba(74,222,128,0.12)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderRadius: '3px' }}>
+                      <span style={{ fontSize: '0.6rem', color: '#4ade80', fontFamily: 'var(--font-display)', letterSpacing: '0.1em', textTransform: 'uppercase' }}>Utilidad Estimada</span>
+                      <span style={{ fontFamily: 'var(--font-display)', fontWeight: 900, fontSize: '0.95rem', color: '#4ade80' }}>
+                        {formatCLP(totals.utilidadEstimada)} <span style={{ fontSize: '0.68rem', opacity: 0.8, fontWeight: 'normal' }}>({Math.round(totals.margenPromedio)}%)</span>
+                      </span>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── Export con Suspense ──────────────────────────────────────────────────────
+export default function CotizadorPage() {
+  return (
+    <Suspense fallback={
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '50vh' }}>
+        <Loader2 size={24} color="var(--y)" className="iv-spin" />
+      </div>
+    }>
+      <CotizadorContent />
+    </Suspense>
+  );
+}
