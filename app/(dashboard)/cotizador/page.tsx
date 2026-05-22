@@ -854,7 +854,12 @@ function CotizadorContent() {
             <p style={sectionLabel}><FileText size={12} /> Descripción general</p>
             <textarea className="input" value={descripcionGeneral} onChange={e => setDescripcionGeneral(e.target.value)} rows={2} placeholder="Detalle o alcance general del servicio..." style={{ resize: 'vertical', fontSize: '0.82rem', width: '100%' }} />
           </div>
-
+        // Ejemplo de cómo manejarlo en tu componente de formulario
+          <textarea
+            value={empresas.texto_importante || ''}
+            onChange={(e) => setEmpresas({...empresas, texto_importante: e.target.value})}
+            placeholder="Escribe aquí el texto que aparecerá en la sección Importante del PDF..."
+          />
           {/* Opciones de visualización */}
           <div style={{ background: 'var(--bg2)', border: '1px solid var(--border2)', padding: '1rem', borderRadius: '4px' }}>
             <p style={{ ...sectionLabel, marginBottom: '0.5rem' }}><Eye size={12} /> Opciones Vista</p>
