@@ -407,11 +407,10 @@ export default function PresupuestoPDF({
     servicio:  'SERVICIO',
   };
 
-// Dentro de tu componente PresupuestoPDF:
-const textoImportante =
-  empresa.texto_importante || // Toma el valor editable si existe
-  `Todos los gastos o valores extraordinarios por factores externos a ${empresa.nombre} serán de total responsabilidad de quien contrate los servicios...`; // Valor por defecto
-  
+  const textoImportante =
+    empresa.texto_importante ||
+    `Todos los gastos o valores extraordinarios por factores externos a ${empresa.nombre} serán de total responsabilidad de quien contrate los servicios, por lo cual ${empresa.nombre} generará una cotización puntual al respecto.`;
+
   const garantiasEquipos = buildGarantiasEquipos(empresa);
   const hasBanco = empresa.banco && empresa.cuenta_bancaria;
 
