@@ -575,13 +575,12 @@ export default function PresupuestoPDF({
             </View>
           </View>
         </View>
-        </View>
         <View break />
         {/* ── IMPORTANTE ── */}
         <View style={s.importanteBox}>
           <Text style={s.importanteLabel}>IMPORTANTE</Text>
           <Text style={s.importanteText}>{textoImportante}</Text>
-        
+        </View>
         {/* ── ACLARACIONES ── */}
         <View style={s.seccionBox}>
           <Text style={s.seccionTitulo}>ACLARACIONES DE SERVICIOS Y GARANTÍAS</Text>
