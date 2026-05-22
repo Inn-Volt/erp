@@ -443,7 +443,7 @@ function CotizadorContent() {
   const [showPDFModal,           setShowPDFModal]           = useState(false);
 
   // ── Estado empresa ──
-  const [empresas,          setEmpresas]          = useState<EmpresaInfo[]>([]);
+  const [empresa, setEmpresa] = useState<EmpresaInfo>({} as EmpresaInfo);
   const [empresaSelec,      setEmpresaSelec]      = useState<EmpresaInfo | null>(null);
   const [showEmpresaModal,  setShowEmpresaModal]  = useState(false);
   const [empresaEditing,    setEmpresaEditing]    = useState<EmpresaInfo | null>(null);
@@ -856,10 +856,10 @@ function CotizadorContent() {
           </div>
         // Ejemplo de cómo manejarlo en tu componente de formulario
           <textarea
-            value={empresas.texto_importante || ''}
-            onChange={(e) => setEmpresas({...empresas, texto_importante: e.target.value})}
-            placeholder="Escribe aquí el texto que aparecerá en la sección Importante del PDF..."
-          />
+  value={empresa.texto_importante || ''} // Accedes al objeto, no al array
+  onChange={(e) => setEmpresa({ ...empresa, texto_importante: e.target.value })}
+  placeholder="Escribe aquí el texto que aparecerá en la sección Importante del PDF..."
+/>
           {/* Opciones de visualización */}
           <div style={{ background: 'var(--bg2)', border: '1px solid var(--border2)', padding: '1rem', borderRadius: '4px' }}>
             <p style={{ ...sectionLabel, marginBottom: '0.5rem' }}><Eye size={12} /> Opciones Vista</p>
