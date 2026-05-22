@@ -477,7 +477,9 @@ function CotizadorContent() {
         .order('nombre');
       if (error) throw error;
       const list = (data || []) as EmpresaInfo[];
-      setEmpresas(list);
+      if (list.length > 0) {
+  setEmpresa(list[0]); // Aquí cargas el objeto único
+}
       // Auto-seleccionar la primera si no hay ninguna seleccionada
       if (list.length > 0 && !empresaSelec) {
         setEmpresaSelec(list[0]);
