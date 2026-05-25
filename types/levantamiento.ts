@@ -86,8 +86,6 @@ export interface LevantamientoData {
   med_temp: string;
   med_obs: string;
   // S10
-  fotos: Record<string, string | null>;
-  // S11
   recomendaciones: string;
   // S12
   alcance_trabajos: string;
@@ -158,7 +156,6 @@ export const emptyLevantamiento = (): LevantamientoData => ({
   checklist:{},
   med_v_r:'', med_v_s:'', med_v_t:'', med_i_r:'', med_i_s:'', med_i_t:'',
   med_balance:'', med_tierra:'', med_temp:'', med_obs:'',
-  fotos:{ tablero:null, empalme:null, dano:null, canalizacion:null, critico:null },
   recomendaciones:'',
   alcance_trabajos:'', alcance_mejoras:'', alcance_mantenciones:'', alcance_obs_comerciales:'',
 });

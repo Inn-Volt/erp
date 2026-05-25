@@ -1,8 +1,8 @@
 'use client';
 
-import React, { useState, useRef, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { Save, Printer, ArrowLeft, AlertTriangle, CheckCircle, Camera } from 'lucide-react';
+import { Save, Printer, ArrowLeft, AlertTriangle, CheckCircle } from 'lucide-react';
 import { levantamientosService } from '@/services/levantamientos';
 import { clientesService } from '@/services/clientes';
 import type { Cliente } from '@/types';
@@ -13,110 +13,82 @@ import {
 } from '@/types/levantamiento';
 import { newId } from '@/utils';
 
-// ─── Micro-components aligned to InnVolt design system ───────────────────────
+// ─── FIELD COMPONENTS ────────────────────────────────────────────────────────
 
-const FieldLabel = ({ children, required }: { children: React.ReactNode; required?: boolean }) => (
-  <p className="label-muted" style={{ marginBottom: 5, fontSize: '0.55rem', letterSpacing: '0.3em' }}>
-    {children}{required && <span style={{ color: 'var(--y)', marginLeft: 3 }}>★</span>}
+const FL = ({ children, req }: { children: React.ReactNode; req?: boolean }) => (
+  <p style={{
+    fontFamily: 'var(--font-display)', fontWeight: 700, fontSize: '0.6rem',
+    letterSpacing: '0.28em', textTransform: 'uppercase', color: 'var(--y)',
+    marginBottom: 5,
+  }}>
+    {children}{req && <span style={{ color: '#f87171', marginLeft: 3 }}>★</span>}
   </p>
 );
 
-const IVInput = ({
-  label, required, fullWidth, ...props
-}: React.InputHTMLAttributes<HTMLInputElement> & { label?: string; required?: boolean; fullWidth?: boolean }) => (
-  <div style={{ marginBottom: 14, ...(fullWidth ? { gridColumn: '1/-1' } : {}) }}>
-    {label && <FieldLabel required={required}>{label}</FieldLabel>}
-    <input
-      {...props}
-      style={{
-        width: '100%', background: 'var(--bg2)', border: '1px solid var(--border2)',
-        color: 'var(--text)', padding: '9px 12px', fontSize: '0.82rem',
-        fontFamily: 'var(--font-body)', outline: 'none',
-        transition: 'border-color .15s', ...props.style,
-      }}
+const inputBase: React.CSSProperties = {
+  width: '100%', background: 'var(--bg3)', border: '1px solid rgba(255,255,255,0.1)',
+  color: 'var(--text)', padding: '11px 14px', fontSize: '0.92rem',
+  fontFamily: 'var(--font-body)', outline: 'none', transition: 'border-color .15s',
+  boxSizing: 'border-box',
+};
+
+const F = ({
+  label, req, span, type = 'text', ...p
+}: React.InputHTMLAttributes<HTMLInputElement> & { label?: string; req?: boolean; span?: number }) => (
+  <div style={{ marginBottom: 16, ...(span ? { gridColumn: `span ${span}` } : {}) }}>
+    {label && <FL req={req}>{label}</FL>}
+    <input type={type} {...p} style={{ ...inputBase, ...p.style }}
       onFocus={e => (e.target.style.borderColor = 'var(--y)')}
-      onBlur={e => (e.target.style.borderColor = 'rgba(255,255,255,0.06)')}
-    />
+      onBlur={e => (e.target.style.borderColor = 'rgba(255,255,255,0.1)')} />
   </div>
 );
 
-const IVTextarea = ({
-  label, required, rows = 3, fullWidth, ...props
-}: React.TextareaHTMLAttributes<HTMLTextAreaElement> & { label?: string; required?: boolean; fullWidth?: boolean }) => (
-  <div style={{ marginBottom: 14, ...(fullWidth ? { gridColumn: '1/-1' } : {}) }}>
-    {label && <FieldLabel required={required}>{label}</FieldLabel>}
-    <textarea
-      rows={rows}
-      {...props}
-      style={{
-        width: '100%', background: 'var(--bg2)', border: '1px solid var(--border2)',
-        color: 'var(--text)', padding: '9px 12px', fontSize: '0.82rem',
-        fontFamily: 'var(--font-body)', outline: 'none', resize: 'vertical',
-        transition: 'border-color .15s',
-      }}
+const T = ({
+  label, req, rows = 3, span, ...p
+}: React.TextareaHTMLAttributes<HTMLTextAreaElement> & { label?: string; req?: boolean; span?: number }) => (
+  <div style={{ marginBottom: 16, ...(span ? { gridColumn: `span ${span}` } : {}) }}>
+    {label && <FL req={req}>{label}</FL>}
+    <textarea rows={rows} {...p} style={{
+      ...inputBase, resize: 'vertical', ...p.style,
+    } as React.CSSProperties}
       onFocus={e => (e.target.style.borderColor = 'var(--y)')}
-      onBlur={e => (e.target.style.borderColor = 'rgba(255,255,255,0.06)')}
-    />
+      onBlur={e => (e.target.style.borderColor = 'rgba(255,255,255,0.1)')} />
   </div>
 );
 
-const IVSelect = ({
-  label, required, options = [], fullWidth, ...props
-}: React.SelectHTMLAttributes<HTMLSelectElement> & { label?: string; required?: boolean; options?: string[]; fullWidth?: boolean }) => (
-  <div style={{ marginBottom: 14, ...(fullWidth ? { gridColumn: '1/-1' } : {}) }}>
-    {label && <FieldLabel required={required}>{label}</FieldLabel>}
+const S = ({
+  label, req, options = [], span, ...p
+}: React.SelectHTMLAttributes<HTMLSelectElement> & { label?: string; req?: boolean; options?: string[]; span?: number }) => (
+  <div style={{ marginBottom: 16, ...(span ? { gridColumn: `span ${span}` } : {}) }}>
+    {label && <FL req={req}>{label}</FL>}
     <div style={{ position: 'relative' }}>
-      <select
-        {...props}
-        style={{
-          width: '100%', background: 'var(--bg2)', border: '1px solid var(--border2)',
-          color: props.value ? 'var(--text)' : 'var(--muted)',
-          padding: '9px 32px 9px 12px', fontSize: '0.82rem',
-          fontFamily: 'var(--font-body)', outline: 'none', appearance: 'none',
-          transition: 'border-color .15s', cursor: 'pointer',
-        }}
+      <select {...p} style={{
+        ...inputBase, appearance: 'none', paddingRight: 32, cursor: 'pointer',
+        color: p.value ? 'var(--text)' : 'var(--muted)', ...p.style,
+      } as React.CSSProperties}
         onFocus={e => (e.target.style.borderColor = 'var(--y)')}
-        onBlur={e => (e.target.style.borderColor = 'rgba(255,255,255,0.06)')}
-      >
+        onBlur={e => (e.target.style.borderColor = 'rgba(255,255,255,0.1)')}>
         <option value="">— Seleccionar —</option>
         {options.map(o => <option key={o} value={o}>{o}</option>)}
       </select>
-      <span style={{ position: 'absolute', right: 10, top: '50%', transform: 'translateY(-50%)', color: 'var(--muted)', pointerEvents: 'none', fontSize: '0.6rem' }}>▼</span>
+      <span style={{ position: 'absolute', right: 12, top: '50%', transform: 'translateY(-50%)', color: 'var(--muted)', pointerEvents: 'none', fontSize: '0.65rem' }}>▼</span>
     </div>
   </div>
 );
 
-const IVToggle = ({ label, checked, onChange }: { label: string; checked: boolean; onChange: (v: boolean) => void }) => (
-  <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 14, cursor: 'pointer' }}
-    onClick={() => onChange(!checked)}>
-    <div style={{
-      width: 40, height: 22, background: checked ? 'var(--y)' : 'var(--bg3)',
-      border: `1px solid ${checked ? 'var(--y)' : 'var(--border2)'}`,
-      position: 'relative', transition: 'all .2s', flexShrink: 0, cursor: 'pointer',
-    }}>
-      <div style={{
-        position: 'absolute', top: 2, left: checked ? 20 : 2,
-        width: 16, height: 16, background: checked ? '#000' : 'var(--dim)',
-        transition: 'left .2s',
-      }} />
-    </div>
-    <span style={{ fontSize: '0.8rem', color: checked ? 'var(--y)' : 'var(--muted)', userSelect: 'none' }}>{label}</span>
-  </div>
-);
-
-const IVRadioGroup = ({ label, options, value, onChange }: {
+const Radio = ({ label, options, value, onChange }: {
   label?: string; options: string[]; value: string; onChange: (v: string) => void;
 }) => (
-  <div style={{ marginBottom: 14 }}>
-    {label && <FieldLabel>{label}</FieldLabel>}
+  <div style={{ marginBottom: 16 }}>
+    {label && <FL>{label}</FL>}
     <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
       {options.map(o => (
-        <button key={o} onClick={() => onChange(o)} style={{
-          padding: '5px 14px', fontSize: '0.72rem',
+        <button key={o} onClick={() => onChange(o)} type="button" style={{
+          padding: '8px 16px', fontSize: '0.78rem',
           fontFamily: 'var(--font-display)', fontWeight: 700,
           letterSpacing: '0.1em', textTransform: 'uppercase',
-          border: `1px solid ${value === o ? 'var(--y)' : 'var(--border2)'}`,
-          background: value === o ? 'rgba(255,198,0,0.1)' : 'transparent',
+          border: `1px solid ${value === o ? 'var(--y)' : 'rgba(255,255,255,0.1)'}`,
+          background: value === o ? 'rgba(255,198,0,0.12)' : 'transparent',
           color: value === o ? 'var(--y)' : 'var(--muted)',
           cursor: 'pointer', transition: 'all .15s',
         }}>{o}</button>
@@ -125,220 +97,127 @@ const IVRadioGroup = ({ label, options, value, onChange }: {
   </div>
 );
 
-const Grid = ({ cols = 2, children }: { cols?: number; children: React.ReactNode }) => (
-  <div style={{ display: 'grid', gridTemplateColumns: `repeat(${cols}, 1fr)`, gap: '0 16px' }}>
-    {children}
+const Toggle = ({ label, checked, onChange }: { label: string; checked: boolean; onChange: (v: boolean) => void }) => (
+  <div onClick={() => onChange(!checked)} style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 14, cursor: 'pointer', userSelect: 'none' }}>
+    <div style={{
+      width: 44, height: 24, background: checked ? 'var(--y)' : 'var(--bg3)',
+      border: `1px solid ${checked ? 'var(--y)' : 'rgba(255,255,255,0.1)'}`,
+      position: 'relative', transition: 'all .2s', flexShrink: 0,
+    }}>
+      <div style={{ position: 'absolute', top: 3, left: checked ? 22 : 3, width: 16, height: 16, background: checked ? '#000' : 'var(--muted)', transition: 'left .2s' }} />
+    </div>
+    <span style={{ fontSize: '0.88rem', color: checked ? 'var(--y)' : 'var(--muted)' }}>{label}</span>
   </div>
 );
 
-interface SectionProps { id: string; num: string; title: string; icon: React.ReactNode; children: React.ReactNode; }
-const Section = ({ id, num, title, icon, children }: SectionProps) => (
-  <div id={id} style={{ background: 'var(--bg)', border: '1px solid var(--border2)', marginBottom: 16 }}>
-    <div style={{
-      display: 'flex', alignItems: 'center', gap: 12,
-      padding: '12px 20px', borderBottom: '1px solid var(--border2)',
-      background: 'linear-gradient(90deg, var(--bg2) 0%, var(--bg) 100%)',
-    }}>
-      <div style={{
-        width: 28, height: 28, background: 'rgba(255,198,0,0.08)',
-        border: '1px solid rgba(255,198,0,0.2)', display: 'flex',
-        alignItems: 'center', justifyContent: 'center', fontSize: '0.9rem', flexShrink: 0,
-      }}>{icon}</div>
+// ─── GRID ─────────────────────────────────────────────────────────────────────
+const G = ({ cols = 2, mob = 1, children }: { cols?: number; mob?: number; children: React.ReactNode }) => (
+  <div className={`lev-grid lev-grid-${cols} lev-mob-${mob}`}>{children}</div>
+);
+
+// ─── SECTION ──────────────────────────────────────────────────────────────────
+const Sec = ({ id, num, title, icon, children }: { id: string; num: string; title: string; icon: string; children: React.ReactNode }) => (
+  <div id={id} className="lev-section">
+    <div className="lev-sec-head">
+      <div className="lev-sec-icon">{icon}</div>
       <div>
-        <p className="label" style={{ fontSize: '0.5rem', letterSpacing: '0.35em', marginBottom: 1 }}>Sección {num}</p>
-        <p style={{ fontFamily: 'var(--font-display)', fontWeight: 700, fontSize: '0.85rem', letterSpacing: '0.12em', textTransform: 'uppercase', color: '#fff' }}>{title}</p>
+        <p className="lev-sec-num">Sección {num}</p>
+        <p className="lev-sec-title">{title}</p>
       </div>
     </div>
-    <div style={{ padding: '18px 20px' }}>{children}</div>
+    <div className="lev-sec-body">{children}</div>
   </div>
 );
 
-// ─── Dynamic table ────────────────────────────────────────────────────────────
-interface ColDef { key: string; label: string; type?: 'select'; options?: string[]; placeholder?: string; w?: number; }
-
+// ─── DYNAMIC TABLE ────────────────────────────────────────────────────────────
+interface ColDef { key: string; label: string; type?: 'select'; options?: string[]; ph?: string; w?: number; }
 function DynTable<T extends { _id: string }>({
-  columns, rows, onAdd, onRemove, onUpdate, addLabel,
-}: {
-  columns: ColDef[]; rows: T[]; addLabel: string;
-  onAdd: () => void; onRemove: (i: number) => void;
-  onUpdate: (i: number, k: string, v: string) => void;
-}) {
+  cols, rows, onAdd, onRemove, onUpd, addLabel,
+}: { cols: ColDef[]; rows: T[]; addLabel: string; onAdd: () => void; onRemove: (i: number) => void; onUpd: (i: number, k: string, v: string) => void; }) {
   return (
-    <div>
-      <div style={{ overflowX: 'auto', border: '1px solid var(--border2)' }}>
-        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.75rem' }}>
+    <div className="lev-dyntable-wrap">
+      <div style={{ overflowX: 'auto' }}>
+        <table className="lev-dyntable">
           <thead>
-            <tr style={{ background: 'var(--bg2)' }}>
-              {columns.map(c => (
-                <th key={c.key} style={{
-                  padding: '7px 10px', textAlign: 'left', whiteSpace: 'nowrap',
-                  fontFamily: 'var(--font-display)', fontWeight: 700, fontSize: '0.55rem',
-                  letterSpacing: '0.2em', textTransform: 'uppercase', color: 'var(--y)',
-                  borderBottom: '1px solid var(--border2)', ...(c.w ? { width: c.w } : {}),
-                }}>{c.label}</th>
-              ))}
-              <th style={{ width: 32, borderBottom: '1px solid var(--border2)' }} />
+            <tr>
+              {cols.map(c => <th key={c.key} style={c.w ? { width: c.w } : {}}>{c.label}</th>)}
+              <th style={{ width: 32 }} />
             </tr>
           </thead>
           <tbody>
             {rows.map((row, ri) => (
-              <tr key={row._id} style={{ borderBottom: '1px solid var(--border2)', background: ri % 2 ? 'rgba(255,255,255,0.01)' : 'transparent' }}>
-                {columns.map(c => (
-                  <td key={c.key} style={{ padding: '5px 6px' }}>
+              <tr key={row._id}>
+                {cols.map(c => (
+                  <td key={c.key}>
                     {c.type === 'select' ? (
-                      <select value={(row as Record<string,string>)[c.key] || ''} onChange={e => onUpdate(ri, c.key, e.target.value)}
-                        style={{ background: 'var(--bg3)', border: '1px solid var(--border2)', color: 'var(--text)', padding: '4px 6px', fontSize: '0.72rem', width: '100%', outline: 'none', fontFamily: 'var(--font-body)' }}>
+                      <select value={(row as Record<string,string>)[c.key] || ''} onChange={e => onUpd(ri, c.key, e.target.value)}
+                        className="lev-cell-select">
                         <option value="">—</option>
                         {(c.options || []).map(o => <option key={o} value={o}>{o}</option>)}
                       </select>
                     ) : (
-                      <input value={(row as Record<string,string>)[c.key] || ''} onChange={e => onUpdate(ri, c.key, e.target.value)}
-                        placeholder={c.placeholder || ''}
-                        style={{ background: 'var(--bg3)', border: '1px solid var(--border2)', color: 'var(--text)', padding: '4px 6px', fontSize: '0.72rem', width: '100%', outline: 'none', fontFamily: 'var(--font-body)', boxSizing: 'border-box' }} />
+                      <input value={(row as Record<string,string>)[c.key] || ''} onChange={e => onUpd(ri, c.key, e.target.value)}
+                        placeholder={c.ph || ''} className="lev-cell-input" />
                     )}
                   </td>
                 ))}
-                <td style={{ padding: '4px', textAlign: 'center' }}>
-                  <button onClick={() => onRemove(ri)} style={{ background: 'none', border: 'none', color: 'var(--muted)', cursor: 'pointer', fontSize: '1rem' }}>×</button>
+                <td style={{ textAlign: 'center' }}>
+                  <button onClick={() => onRemove(ri)} className="lev-del-btn">×</button>
                 </td>
               </tr>
             ))}
+            {rows.length === 0 && (
+              <tr><td colSpan={cols.length + 1} style={{ textAlign: 'center', color: 'var(--muted)', padding: '16px', fontSize: '0.78rem' }}>Sin registros — usa el botón para agregar</td></tr>
+            )}
           </tbody>
         </table>
       </div>
-      <button onClick={onAdd} className="btn" style={{
-        marginTop: 8, padding: '6px 14px', border: '1px dashed rgba(255,198,0,0.3)',
-        background: 'transparent', color: 'var(--y)', fontSize: '0.7rem',
-        letterSpacing: '0.1em',
-      }}
-      onMouseOver={e => (e.currentTarget.style.background = 'rgba(255,198,0,0.05)')}
-      onMouseOut={e => (e.currentTarget.style.background = 'transparent')}
-      >+ {addLabel}</button>
+      <button onClick={onAdd} className="lev-add-btn">+ {addLabel}</button>
     </div>
   );
 }
 
-// ─── Photo slot ───────────────────────────────────────────────────────────────
-function PhotoSlot({ label, photo, onPhoto }: { label: string; photo: string | null; onPhoto: (d: string) => void }) {
-  const ref = useRef<HTMLInputElement>(null);
-  return (
-    <div>
-      <FieldLabel>{label}</FieldLabel>
-      <div onClick={() => ref.current?.click()} style={{
-        height: 110, border: '1px dashed var(--border)', background: 'var(--bg2)',
-        cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center',
-        overflow: 'hidden', transition: 'border-color .15s',
-      }}
-      onMouseOver={e => (e.currentTarget.style.borderColor = 'var(--y)')}
-      onMouseOut={e => (e.currentTarget.style.borderColor = 'rgba(255,198,0,0.12)')}>
-        {photo
-          ? <img src={photo} alt={label} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-          : <div style={{ textAlign: 'center', color: 'var(--muted)' }}>
-              <Camera size={20} style={{ margin: '0 auto 6px' }} />
-              <p style={{ fontSize: '0.65rem' }}>Adjuntar</p>
-            </div>
-        }
-      </div>
-      <input ref={ref} type="file" accept="image/*" capture="environment" style={{ display: 'none' }}
-        onChange={e => {
-          const f = e.target.files?.[0]; if (!f) return;
-          const r = new FileReader(); r.onload = ev => onPhoto(ev.target?.result as string); r.readAsDataURL(f);
-        }} />
-    </div>
-  );
-}
-
-// ─── Signature canvas ─────────────────────────────────────────────────────────
-function SignatureCanvas({ label }: { label: string }) {
-  const ref = useRef<HTMLCanvasElement>(null);
-  const drawing = useRef(false);
-
-  const start = (e: React.MouseEvent | React.TouchEvent) => {
-    drawing.current = true;
-    const c = ref.current!; const ctx = c.getContext('2d')!;
-    const r = c.getBoundingClientRect();
-    const x = ('touches' in e ? e.touches[0].clientX : e.clientX) - r.left;
-    const y = ('touches' in e ? e.touches[0].clientY : e.clientY) - r.top;
-    ctx.beginPath(); ctx.moveTo(x * (c.width / r.width), y * (c.height / r.height));
-  };
-  const move = (e: React.MouseEvent | React.TouchEvent) => {
-    if (!drawing.current) return; e.preventDefault();
-    const c = ref.current!; const ctx = c.getContext('2d')!;
-    const r = c.getBoundingClientRect();
-    const x = ('touches' in e ? e.touches[0].clientX : e.clientX) - r.left;
-    const y = ('touches' in e ? e.touches[0].clientY : e.clientY) - r.top;
-    ctx.lineWidth = 2; ctx.strokeStyle = 'var(--y)'; ctx.lineCap = 'round';
-    ctx.lineTo(x * (c.width / r.width), y * (c.height / r.height)); ctx.stroke();
-  };
-  const end = () => { drawing.current = false; };
-  const clear = () => { const c = ref.current!; c.getContext('2d')!.clearRect(0, 0, c.width, c.height); };
-
-  return (
-    <div style={{ marginBottom: 20 }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
-        <FieldLabel>{label}</FieldLabel>
-        <button onClick={clear} className="btn btn-ghost btn-sm" style={{ fontSize: '0.6rem' }}>Borrar</button>
-      </div>
-      <canvas ref={ref} width={600} height={110}
-        style={{ width: '100%', height: 110, background: 'var(--bg2)', border: '1px solid var(--border2)', cursor: 'crosshair', touchAction: 'none', display: 'block' }}
-        onMouseDown={start} onMouseMove={move} onMouseUp={end} onMouseLeave={end}
-        onTouchStart={start} onTouchMove={move} onTouchEnd={end} />
-    </div>
-  );
-}
-
-// ─── Main page ────────────────────────────────────────────────────────────────
+// ─── NAV ──────────────────────────────────────────────────────────────────────
 const NAV = [
-  { id: 's1',  label: '01 Info'       },
-  { id: 's2',  label: '02 Eléctrica'  },
-  { id: 's3',  label: '03 Tableros'   },
-  { id: 's4',  label: '04 Circuitos'  },
-  { id: 's5',  label: '05 Ilum.'      },
-  { id: 's6',  label: '06 Enchufes'   },
-  { id: 's7',  label: '07 Canal.'     },
-  { id: 's8',  label: '08 Crítico'    },
-  { id: 's9',  label: '09 Medic.'     },
-  { id: 's10', label: '10 Fotos'      },
-  { id: 's11', label: '11 Recom.'     },
-  { id: 's12', label: '12 Alcance'    },
-  { id: 's13', label: '13 Firma'      },
+  { id:'s1',  short:'01 Info'      }, { id:'s2',  short:'02 Eléctrica' },
+  { id:'s3',  short:'03 Tableros'  }, { id:'s4',  short:'04 Circuitos' },
+  { id:'s5',  short:'05 Ilum.'     }, { id:'s6',  short:'06 Enchufes'  },
+  { id:'s7',  short:'07 Canal.'    }, { id:'s8',  short:'08 Crítico'   },
+  { id:'s9',  short:'09 Medic.'    }, { id:'s10', short:'10 Recom.'    },
+  { id:'s11', short:'11 Alcance'   },
 ];
 
-export default function LevantamientoPage() {
-  const router = useRouter();
-  const searchParams = useSearchParams();
-  const editId = searchParams?.get('id');
+// ─── PRINT HANDLER ────────────────────────────────────────────────────────────
+function triggerPrint() { window.print(); }
 
-  const [data, setData] = useState<LevantamientoData>(emptyLevantamiento());
+// ─── MAIN ─────────────────────────────────────────────────────────────────────
+export default function LevantamientoPage() {
+  const router       = useRouter();
+  const searchParams = useSearchParams();
+  const editId       = searchParams?.get('id');
+
+  const [data,     setData]     = useState<LevantamientoData>(emptyLevantamiento());
   const [clientes, setClientes] = useState<Cliente[]>([]);
-  const [clienteId, setClienteId] = useState<string>('');
-  const [estado, setEstado] = useState<string>('Borrador');
-  const [saving, setSaving] = useState(false);
-  const [saved, setSaved] = useState(false);
-  const [activeNav, setActiveNav] = useState('s1');
+  const [clienteId,setClienteId]= useState('');
+  const [estado,   setEstado]   = useState('Borrador');
+  const [saving,   setSaving]   = useState(false);
+  const [saved,    setSaved]    = useState(false);
+  const [activeNav,setActiveNav]= useState('s1');
 
   const set = useCallback(<K extends keyof LevantamientoData>(k: K, v: LevantamientoData[K]) =>
     setData(d => ({ ...d, [k]: v })), []);
 
-  // Load clientes
-  useEffect(() => {
-    clientesService.getAll().then(setClientes).catch(console.error);
-  }, []);
+  useEffect(() => { clientesService.getAll().then(setClientes).catch(console.error); }, []);
 
-  // Load existing if editing
   useEffect(() => {
-    if (editId) {
-      levantamientosService.getById(editId).then(lev => {
-        if (lev) { setData(lev.data); setClienteId(lev.cliente_id || ''); setEstado(lev.estado); }
-      });
-    }
+    if (editId) levantamientosService.getById(editId).then(lev => {
+      if (lev) { setData(lev.data); setClienteId(lev.cliente_id || ''); setEstado(lev.estado); }
+    });
   }, [editId]);
 
-  // Scroll spy
   useEffect(() => {
-    const obs = new IntersectionObserver(entries => {
-      entries.forEach(e => { if (e.isIntersecting) setActiveNav(e.target.id); });
-    }, { threshold: 0.3 });
+    const obs = new IntersectionObserver(entries =>
+      entries.forEach(e => { if (e.isIntersecting) setActiveNav(e.target.id); }), { threshold: 0.25 });
     NAV.forEach(n => { const el = document.getElementById(n.id); if (el) obs.observe(el); });
     return () => obs.disconnect();
   }, []);
@@ -353,356 +232,594 @@ export default function LevantamientoPage() {
         router.replace(`/levantamiento?id=${created.id}`);
       }
       setSaved(true); setTimeout(() => setSaved(false), 2500);
-    } catch (e) { console.error(e); alert('Error al guardar'); }
+    } catch { alert('Error al guardar'); }
     setSaving(false);
   };
 
-  // Tableros helpers
-  const newTablero = (): TableroRow => ({ _id: newId(), nombre:'', tipo:'', ubicacion:'', marca:'', circuitos:'', proteccion:'', estado:'', espacio:'', obs:'' });
-  const newCircuito = (): CircuitoRow => ({ _id: newId(), circuito:'', proteccion:'', cableado:'', canalizacion:'', uso:'', estado:'', obs:'' });
+  // Tables helpers
+  const newTablero  = (): TableroRow  => ({ _id:newId(), nombre:'', tipo:'', ubicacion:'', marca:'', circuitos:'', proteccion:'', estado:'', espacio:'', obs:'' });
+  const newCircuito = (): CircuitoRow => ({ _id:newId(), circuito:'', proteccion:'', cableado:'', canalizacion:'', uso:'', estado:'', obs:'' });
+  const updT = (i:number,k:string,v:string) => setData(d=>{ const t=[...d.tableros]; t[i]={...t[i],[k]:v}; return{...d,tableros:t}; });
+  const updC = (i:number,k:string,v:string) => setData(d=>{ const c=[...d.circuitos]; c[i]={...c[i],[k]:v}; return{...d,circuitos:c}; });
 
-  const updTablero = (i: number, k: string, v: string) => setData(d => {
-    const t = [...d.tableros]; t[i] = { ...t[i], [k]: v }; return { ...d, tableros: t };
-  });
-  const updCircuito = (i: number, k: string, v: string) => setData(d => {
-    const c = [...d.circuitos]; c[i] = { ...c[i], [k]: v }; return { ...d, circuitos: c };
-  });
-
-  const criticalCount = Object.values(data.checklist).filter(Boolean).length;
+  const critCount = Object.values(data.checklist).filter(Boolean).length;
 
   return (
-    <div className="anim-in">
-      {/* ── Page header ── */}
-      <div className="iv-page-header">
-        <div>
-          <p className="label-muted" style={{ marginBottom: '0.35rem', letterSpacing: '0.4em' }}>Módulo técnico</p>
-          <h1 style={{ fontFamily: 'var(--font-display)', fontWeight: 900, fontSize: 'clamp(1.6rem,4vw,2.8rem)', textTransform: 'uppercase', lineHeight: 0.9, color: '#fff' }}>
-            LEVANTA<span style={{ color: 'var(--y)' }}>MIENTO</span>
-          </h1>
-        </div>
-        <div className="iv-header-actions">
-          <button onClick={() => router.push('/levantamiento/historial')} className="btn btn-ghost btn-sm">
-            <ArrowLeft size={13} /> Historial
-          </button>
-          <IVSelect
-            options={['Borrador', 'Completado', 'Enviado', 'Archivado']}
-            value={estado} onChange={e => setEstado(e.target.value)}
-            style={{ marginBottom: 0, minWidth: 130 }}
-          />
-          <button onClick={handleSave} disabled={saving} className="btn btn-primary">
-            <Save size={13} /> {saving ? 'Guardando…' : saved ? '✓ Guardado' : 'Guardar'}
-          </button>
-          <button onClick={() => window.print()} className="btn btn-ghost btn-sm">
-            <Printer size={13} /> PDF
-          </button>
-        </div>
-      </div>
+    <>
+      {/* ── Inline styles (print + responsive) ── */}
+      <style>{`
+        /* ── Responsive grid ────────────────── */
+        .lev-grid { display:grid; gap:0 16px; }
+        .lev-grid-2 { grid-template-columns:1fr 1fr; }
+        .lev-grid-3 { grid-template-columns:1fr 1fr 1fr; }
+        @media(max-width:640px){
+          .lev-grid-2,.lev-grid-3{ grid-template-columns:1fr !important; }
+        }
 
-      {/* ── Section nav ── */}
-      <div style={{ overflowX: 'auto', display: 'flex', gap: 2, marginBottom: 20, paddingBottom: 4 }}>
-        {NAV.map(n => (
-          <button key={n.id} onClick={() => { document.getElementById(n.id)?.scrollIntoView({ behavior: 'smooth', block: 'start' }); setActiveNav(n.id); }}
-            className="btn" style={{
-              padding: '4px 10px', fontSize: '0.6rem', letterSpacing: '0.1em', whiteSpace: 'nowrap',
-              border: `1px solid ${activeNav === n.id ? 'var(--y)' : 'var(--border2)'}`,
-              background: activeNav === n.id ? 'rgba(255,198,0,0.1)' : 'transparent',
-              color: activeNav === n.id ? 'var(--y)' : 'var(--muted)',
-            }}>{n.label}</button>
-        ))}
-      </div>
+        /* ── Section ─────────────────────────── */
+        .lev-section{
+          background:var(--bg);
+          border:1px solid rgba(255,255,255,0.07);
+          margin-bottom:18px;
+        }
+        .lev-sec-head{
+          display:flex; align-items:center; gap:12px;
+          padding:13px 20px; border-bottom:1px solid rgba(255,255,255,0.07);
+          background:linear-gradient(90deg,var(--bg2) 0%,var(--bg) 100%);
+        }
+        .lev-sec-icon{
+          width:30px; height:30px; background:rgba(255,198,0,0.08);
+          border:1px solid rgba(255,198,0,0.25); display:flex;
+          align-items:center; justify-content:center; font-size:.9rem; flex-shrink:0;
+        }
+        .lev-sec-num{
+          font-family:var(--font-display); font-weight:700;
+          font-size:.5rem; letter-spacing:.35em; text-transform:uppercase;
+          color:var(--y); margin-bottom:2px;
+        }
+        .lev-sec-title{
+          font-family:var(--font-display); font-weight:900;
+          font-size:.88rem; letter-spacing:.1em; text-transform:uppercase; color:#fff;
+        }
+        .lev-sec-body{ padding:20px 20px 6px; }
 
-      {/* ── Critical alert ── */}
-      {criticalCount > 0 && (
-        <div style={{ background: 'rgba(248,113,113,0.08)', border: '1px solid rgba(248,113,113,0.3)', padding: '10px 16px', marginBottom: 16, display: 'flex', alignItems: 'center', gap: 10 }}>
-          <AlertTriangle size={16} color="#f87171" />
-          <span style={{ fontSize: '0.78rem', color: '#fca5a5' }}>
-            <strong>{criticalCount}</strong> observación{criticalCount > 1 ? 'es' : ''} crítica{criticalCount > 1 ? 's' : ''} marcada{criticalCount > 1 ? 's' : ''} — revisar Sección 08
-          </span>
-        </div>
-      )}
+        /* ── Table ───────────────────────────── */
+        .lev-dyntable-wrap{ margin-bottom:4px; }
+        .lev-dyntable{ width:100%; border-collapse:collapse; font-size:.78rem; }
+        .lev-dyntable th{
+          padding:7px 9px; text-align:left; white-space:nowrap;
+          font-family:var(--font-display); font-weight:700;
+          font-size:.52rem; letter-spacing:.2em; text-transform:uppercase;
+          color:var(--y); background:var(--bg2); border-bottom:1px solid rgba(255,255,255,0.07);
+        }
+        .lev-dyntable td{ padding:5px 5px; border-bottom:1px solid rgba(255,255,255,0.04); }
+        .lev-dyntable tr:nth-child(even) td{ background:rgba(255,255,255,0.015); }
+        .lev-cell-input,.lev-cell-select{
+          width:100%; background:var(--bg3); border:1px solid rgba(255,255,255,0.07);
+          color:var(--text); padding:6px 8px; font-size:.8rem;
+          font-family:var(--font-body); outline:none; box-sizing:border-box;
+        }
+        .lev-cell-select{ appearance:none; cursor:pointer; }
+        .lev-del-btn{
+          background:none; border:none; color:var(--muted);
+          cursor:pointer; font-size:1.1rem; line-height:1; padding:2px 6px;
+        }
+        .lev-del-btn:hover{ color:#f87171; }
+        .lev-add-btn{
+          margin-top:8px; padding:7px 16px;
+          border:1px dashed rgba(255,198,0,.3); background:transparent;
+          color:var(--y); font-family:var(--font-display); font-weight:700;
+          font-size:.65rem; letter-spacing:.12em; text-transform:uppercase;
+          cursor:pointer; transition:background .15s;
+        }
+        .lev-add-btn:hover{ background:rgba(255,198,0,.05); }
 
-      {/* ══ S1: INFO GENERAL ══ */}
-      <Section id="s1" num="01" title="Información General" icon="📋">
-        <Grid cols={2}>
-          <IVInput label="Nombre cliente" required value={data.cliente_nombre}
-            onChange={e => set('cliente_nombre', e.target.value)} placeholder="Juan Pérez" />
-          <IVInput label="Empresa" value={data.empresa}
-            onChange={e => set('empresa', e.target.value)} placeholder="Empresa S.A." />
-        </Grid>
-        {/* Vincular a cliente DB */}
-        <div style={{ marginBottom: 14 }}>
-          <FieldLabel>Vincular a cliente CRM (opcional)</FieldLabel>
-          <div style={{ position: 'relative' }}>
-            <select value={clienteId} onChange={e => {
-              setClienteId(e.target.value);
-              const c = clientes.find(cl => cl.id === e.target.value);
-              if (c) { set('cliente_nombre', c.nombre_cliente); set('empresa', c.empresa || ''); set('telefono', c.telefono || ''); set('correo', c.email || ''); set('direccion', c.direccion || ''); }
-            }} style={{ width: '100%', background: 'var(--bg2)', border: '1px solid var(--border2)', color: clienteId ? 'var(--text)' : 'var(--muted)', padding: '9px 32px 9px 12px', fontSize: '0.82rem', fontFamily: 'var(--font-body)', outline: 'none', appearance: 'none' }}>
-              <option value="">— Sin vincular —</option>
-              {clientes.map(c => <option key={c.id} value={c.id}>{c.nombre_cliente}{c.empresa ? ` — ${c.empresa}` : ''}</option>)}
-            </select>
-            <span style={{ position: 'absolute', right: 10, top: '50%', transform: 'translateY(-50%)', color: 'var(--muted)', pointerEvents: 'none', fontSize: '0.6rem' }}>▼</span>
+        /* ── Nav pills ───────────────────────── */
+        .lev-nav{
+          display:flex; gap:3px; overflow-x:auto; margin-bottom:18px;
+          padding-bottom:4px; -webkit-overflow-scrolling:touch;
+        }
+        .lev-nav::-webkit-scrollbar{ height:2px; }
+        .lev-nav button{
+          flex-shrink:0; padding:6px 12px; font-family:var(--font-display);
+          font-weight:700; font-size:.6rem; letter-spacing:.1em; text-transform:uppercase;
+          border:1px solid rgba(255,255,255,0.08); background:transparent;
+          color:var(--muted); cursor:pointer; transition:all .15s; white-space:nowrap;
+        }
+        .lev-nav button.active{
+          border-color:var(--y); background:rgba(255,198,0,.1); color:var(--y);
+        }
+
+        /* ── Checklist ───────────────────────── */
+        .lev-checklist{
+          display:grid;
+          grid-template-columns:repeat(auto-fill,minmax(220px,1fr));
+          gap:8px;
+        }
+        @media(max-width:480px){ .lev-checklist{ grid-template-columns:1fr; } }
+        .lev-check-item{
+          display:flex; align-items:center; gap:10px; cursor:pointer;
+          padding:10px 12px;
+          border:1px solid rgba(255,255,255,0.07);
+          background:transparent; transition:all .15s;
+        }
+        .lev-check-item.on{
+          border-color:rgba(248,113,113,.4);
+          background:rgba(248,113,113,.07);
+        }
+        .lev-check-box{
+          width:20px; height:20px; flex-shrink:0;
+          display:flex; align-items:center; justify-content:center;
+          background:var(--bg3); border:1px solid rgba(255,255,255,.1);
+          font-size:.7rem; color:#fff; transition:all .15s;
+        }
+        .lev-check-box.on{ background:#ef4444; border-color:#ef4444; }
+        .lev-check-label{ font-size:.82rem; color:var(--muted); transition:color .15s; }
+        .lev-check-label.on{ color:#fca5a5; }
+
+        /* ── Saved toast ─────────────────────── */
+        .lev-toast{
+          position:fixed; bottom:24px; right:24px; z-index:999;
+          background:var(--bg2); border:1px solid rgba(74,222,128,.4);
+          padding:10px 20px; display:flex; align-items:center; gap:8px;
+          animation:fadeInUp .3s ease;
+        }
+        @keyframes fadeInUp{
+          from{ opacity:0; transform:translateY(8px); }
+          to{ opacity:1; transform:translateY(0); }
+        }
+
+        /* ════════════════════════════════════════
+           PRINT STYLES — PDF multi-página profesional
+        ════════════════════════════════════════ */
+        @media print {
+          /* Reset layout — ocultar todo excepto el contenido */
+          body, html { background:#fff !important; color:#000 !important; }
+          body * { -webkit-print-color-adjust:exact !important; print-color-adjust:exact !important; }
+
+          /* Ocultar UI que no va en el PDF */
+          .lev-nav,
+          .lev-add-btn,
+          .lev-del-btn,
+          .iv-header-actions,
+          .iv-page-header button,
+          aside,
+          header,
+          .lev-toast,
+          [data-no-print]
+          { display:none !important; }
+
+          /* Contenedor principal sin overflow */
+          body { overflow:visible !important; }
+          #__next { overflow:visible !important; }
+          main { padding:0 !important; overflow:visible !important; }
+
+          /* Forzar fondo blanco y texto negro */
+          .lev-section,
+          .lev-sec-head,
+          .lev-sec-body {
+            background:#fff !important;
+            border:1px solid #ddd !important;
+          }
+          .lev-sec-head {
+            background:#f5f5f5 !important;
+            border-bottom:1px solid #ddd !important;
+            padding:10px 16px !important;
+          }
+          .lev-sec-num   { color:#c9a800 !important; font-size:.55rem !important; }
+          .lev-sec-title { color:#000 !important; font-size:1rem !important; }
+          .lev-sec-icon  { background:#fff3cc !important; border:1px solid #e6c200 !important; }
+
+          /* Inputs y selects en modo lectura */
+          input, textarea, select {
+            background:#fafafa !important;
+            border:1px solid #ccc !important;
+            color:#000 !important;
+            font-size:10pt !important;
+            -webkit-appearance:none !important;
+          }
+          /* Selects: mostrar como texto simple */
+          select { padding-right:8px !important; }
+
+          /* Grids en print */
+          .lev-grid-2 { grid-template-columns:1fr 1fr !important; }
+          .lev-grid-3 { grid-template-columns:1fr 1fr 1fr !important; }
+
+          /* Labels */
+          .lev-sec-num, p[style*="letter-spacing"] {
+            color:#666 !important;
+          }
+
+          /* Tabla en print */
+          .lev-dyntable th {
+            background:#f0f0f0 !important;
+            color:#555 !important;
+            border-bottom:1px solid #bbb !important;
+            font-size:7pt !important;
+          }
+          .lev-dyntable td { border-bottom:1px solid #e8e8e8 !important; }
+          .lev-dyntable tr:nth-child(even) td { background:#f9f9f9 !important; }
+          .lev-cell-input, .lev-cell-select {
+            background:#fafafa !important;
+            border:1px solid #ddd !important;
+            color:#000 !important;
+            font-size:8.5pt !important;
+          }
+
+          /* Checklist en print */
+          .lev-check-item {
+            border:1px solid #ddd !important;
+            background:#fff !important;
+          }
+          .lev-check-item.on {
+            background:#fff4f4 !important;
+            border-color:#f87171 !important;
+          }
+          .lev-check-box { background:#f0f0f0 !important; border:1px solid #ccc !important; color:#000 !important; }
+          .lev-check-box.on { background:#ef4444 !important; color:#fff !important; border-color:#ef4444 !important; }
+          .lev-check-label { color:#333 !important; }
+          .lev-check-label.on { color:#c0392b !important; }
+
+          /* Radio buttons en print */
+          button { display:none !important; }
+          /* Mostrar valor seleccionado de radios */
+          .lev-radio-print { display:block !important; font-size:10pt !important; color:#000 !important; padding:8px 0 !important; }
+
+          /* Alerta crítica */
+          .lev-crit-alert {
+            background:#fff4f4 !important;
+            border:1px solid #f87171 !important;
+            color:#c0392b !important;
+          }
+
+          /* Saltos de página */
+          .lev-section { page-break-inside:avoid; break-inside:avoid; margin-bottom:12px !important; }
+          /* Forzar salto antes de secciones pesadas */
+          #s3, #s4, #s8, #s11 { page-break-before:auto; }
+
+          /* Header del PDF */
+          .lev-print-header { display:flex !important; }
+
+          /* Márgenes de página */
+          @page {
+            size:A4;
+            margin:15mm 12mm 15mm 12mm;
+          }
+
+          /* Tipografía base en print */
+          body { font-size:10pt !important; line-height:1.4 !important; }
+        }
+
+        /* Hide print-only elements on screen */
+        .lev-print-header { display:none; }
+        .lev-radio-print  { display:none; }
+      `}</style>
+
+      <div className="anim-in">
+
+        {/* ── Print-only header ── */}
+        <div className="lev-print-header" style={{
+          alignItems:'center', justifyContent:'space-between',
+          paddingBottom:12, borderBottom:'2px solid #c9a800', marginBottom:16,
+        }}>
+          <div>
+            <p style={{ fontFamily:'var(--font-display)', fontWeight:900, fontSize:'1.4rem', letterSpacing:'-0.02em', textTransform:'uppercase', color:'#000' }}>
+              Inn<span style={{ color:'#c9a800' }}>Volt</span> SpA
+            </p>
+            <p style={{ fontSize:'8pt', color:'#666', letterSpacing:'0.15em', textTransform:'uppercase' }}>Levantamiento Técnico Eléctrico</p>
+          </div>
+          <div style={{ textAlign:'right', fontSize:'8pt', color:'#555', lineHeight:1.6 }}>
+            <p>Folio: LV-{data.cliente_nombre ? '—' : '—'}</p>
+            <p>Fecha: {data.fecha}</p>
+            <p>Técnico: {data.tecnico || '—'}</p>
+            <p>Estado: {estado}</p>
           </div>
         </div>
-        <IVInput label="Dirección" required fullWidth value={data.direccion}
-          onChange={e => set('direccion', e.target.value)} placeholder="Av. Providencia 123, Santiago" />
-        <Grid cols={2}>
-          <IVInput label="Fecha" required type="date" value={data.fecha} onChange={e => set('fecha', e.target.value)} />
-          <IVInput label="Hora" type="time" value={data.hora} onChange={e => set('hora', e.target.value)} />
-        </Grid>
-        <Grid cols={2}>
-          <IVInput label="Contacto" value={data.contacto} onChange={e => set('contacto', e.target.value)} placeholder="Nombre de contacto" />
-          <IVInput label="Teléfono" type="tel" value={data.telefono} onChange={e => set('telefono', e.target.value)} placeholder="+56 9 XXXX XXXX" />
-        </Grid>
-        <Grid cols={2}>
-          <IVInput label="Correo" type="email" value={data.correo} onChange={e => set('correo', e.target.value)} placeholder="contacto@empresa.cl" />
-          <IVInput label="Técnico responsable" required value={data.tecnico} onChange={e => set('tecnico', e.target.value)} placeholder="Nombre técnico InnVolt" />
-        </Grid>
-        <IVSelect label="Tipo de proyecto" required options={TIPOS_PROYECTO}
-          value={data.tipo_proyecto} onChange={e => set('tipo_proyecto', e.target.value)} />
-        <IVTextarea label="Observaciones generales" value={data.obs_generales}
-          onChange={e => set('obs_generales', e.target.value)}
-          placeholder="Descripción del proyecto y condiciones encontradas en terreno…" />
-      </Section>
 
-      {/* ══ S2: ELÉCTRICA GENERAL ══ */}
-      <Section id="s2" num="02" title="Información Eléctrica General" icon="⚡">
-        <IVRadioGroup label="Sistema eléctrico" options={SISTEMAS_ELEC} value={data.sistema} onChange={v => set('sistema', v)} />
-        <Grid cols={2}>
-          <IVSelect label="Voltaje nominal" required options={['220V','380V','220/380V','110V','Otro']}
-            value={data.voltaje} onChange={e => set('voltaje', e.target.value)} />
-          <IVSelect label="Tipo empalme" options={TIPOS_EMPALME}
-            value={data.tipo_empalme} onChange={e => set('tipo_empalme', e.target.value)} />
-        </Grid>
-        <Grid cols={2}>
-          <IVInput label="Capacidad empalme (A)" type="number" value={data.capacidad_empalme}
-            onChange={e => set('capacidad_empalme', e.target.value)} placeholder="63" />
-          <IVSelect label="Estado empalme" options={ESTADOS_GEN}
-            value={data.estado_empalme} onChange={e => set('estado_empalme', e.target.value)} />
-        </Grid>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: '0 16px' }}>
-          <IVToggle label="Tierra física" checked={data.tierra} onChange={v => set('tierra', v)} />
-          <IVToggle label="Grupo electrógeno" checked={data.grupo_electrogeno} onChange={v => set('grupo_electrogeno', v)} />
-          <IVToggle label="UPS" checked={data.ups} onChange={v => set('ups', v)} />
-        </div>
-        <IVTextarea label="Observaciones" value={data.obs_electrica} onChange={e => set('obs_electrica', e.target.value)} rows={2} />
-      </Section>
-
-      {/* ══ S3: TABLEROS ══ */}
-      <Section id="s3" num="03" title="Tableros Eléctricos" icon="🗃️">
-        <DynTable
-          columns={[
-            { key:'nombre', label:'Nombre', placeholder:'TG-01' },
-            { key:'tipo', label:'Tipo', type:'select', options:TIPOS_TABLERO, w:90 },
-            { key:'ubicacion', label:'Ubicación', placeholder:'Bodega' },
-            { key:'marca', label:'Marca', placeholder:'ABB' },
-            { key:'circuitos', label:'N°Circ', placeholder:'12', w:60 },
-            { key:'proteccion', label:'Prot.Gral', placeholder:'63A' },
-            { key:'estado', label:'Estado', type:'select', options:ESTADOS_GEN, w:100 },
-            { key:'espacio', label:'Espacio', type:'select', options:['Sí','No','Parcial'], w:80 },
-            { key:'obs', label:'Obs.', placeholder:'…' },
-          ]}
-          rows={data.tableros}
-          onAdd={() => setData(d => ({ ...d, tableros: [...d.tableros, newTablero()] }))}
-          onRemove={i => setData(d => ({ ...d, tableros: d.tableros.filter((_,ri) => ri !== i) }))}
-          onUpdate={updTablero}
-          addLabel="Agregar tablero"
-        />
-      </Section>
-
-      {/* ══ S4: CIRCUITOS ══ */}
-      <Section id="s4" num="04" title="Circuitos" icon="🔌">
-        <DynTable
-          columns={[
-            { key:'circuito', label:'Circuito', placeholder:'C1' },
-            { key:'proteccion', label:'Protección', placeholder:'16A' },
-            { key:'cableado', label:'Cableado', type:'select', options:TIPOS_CABLE },
-            { key:'canalizacion', label:'Canalización', type:'select', options:TIPOS_CANAL },
-            { key:'uso', label:'Uso', placeholder:'Iluminación' },
-            { key:'estado', label:'Estado', type:'select', options:ESTADOS_GEN, w:100 },
-            { key:'obs', label:'Obs.', placeholder:'…' },
-          ]}
-          rows={data.circuitos}
-          onAdd={() => setData(d => ({ ...d, circuitos: [...d.circuitos, newCircuito()] }))}
-          onRemove={i => setData(d => ({ ...d, circuitos: d.circuitos.filter((_,ri) => ri !== i) }))}
-          onUpdate={updCircuito}
-          addLabel="Agregar circuito"
-        />
-      </Section>
-
-      {/* ══ S5: ILUMINACIÓN ══ */}
-      <Section id="s5" num="05" title="Iluminación" icon="💡">
-        <Grid cols={2}>
-          <IVSelect label="Tipo luminarias" options={TIPOS_LUM} value={data.ilum_tipo} onChange={e => set('ilum_tipo', e.target.value)} />
-          <IVInput label="Cantidad" type="number" value={data.ilum_cantidad} onChange={e => set('ilum_cantidad', e.target.value)} placeholder="24" />
-        </Grid>
-        <Grid cols={2}>
-          <IVSelect label="Estado" options={ESTADOS_GEN} value={data.ilum_estado} onChange={e => set('ilum_estado', e.target.value)} />
-          <div style={{ paddingTop: 22 }}>
-            <IVToggle label="Iluminación de emergencia" checked={data.ilum_emergencia} onChange={v => set('ilum_emergencia', v)} />
+        {/* ── Page header (screen) ── */}
+        <div className="iv-page-header" data-no-print>
+          <div>
+            <p className="label-muted" style={{ marginBottom:'0.35rem', letterSpacing:'0.4em' }}>Módulo técnico</p>
+            <h1 style={{ fontFamily:'var(--font-display)', fontWeight:900, fontSize:'clamp(1.6rem,4vw,2.8rem)', textTransform:'uppercase', lineHeight:0.9, color:'#fff' }}>
+              LEVANTA<span style={{ color:'var(--y)' }}>MIENTO</span>
+            </h1>
           </div>
-        </Grid>
-        <IVTextarea label="Observaciones" value={data.ilum_obs} onChange={e => set('ilum_obs', e.target.value)} rows={2} />
-      </Section>
-
-      {/* ══ S6: ENCHUFES ══ */}
-      <Section id="s6" num="06" title="Enchufes y Fuerza" icon="🔋">
-        <Grid cols={2}>
-          <IVInput label="Cantidad enchufes" type="number" value={data.enchufes_cantidad} onChange={e => set('enchufes_cantidad', e.target.value)} placeholder="30" />
-          <IVSelect label="Tipo" options={['Schuko 220V','2P+T','Industrial CEE','Bipolar','Mixto']}
-            value={data.enchufes_tipo} onChange={e => set('enchufes_tipo', e.target.value)} />
-        </Grid>
-        <Grid cols={2}>
-          <IVSelect label="Estado" options={ESTADOS_GEN} value={data.enchufes_estado} onChange={e => set('enchufes_estado', e.target.value)} />
-          <div style={{ paddingTop: 22 }}>
-            <IVToggle label="Circuitos de fuerza" checked={data.enchufes_fuerza} onChange={v => set('enchufes_fuerza', v)} />
-          </div>
-        </Grid>
-        <IVTextarea label="Equipos conectados relevantes" value={data.enchufes_equipos}
-          onChange={e => set('enchufes_equipos', e.target.value)} placeholder="Compresor 5HP, UPS 3kVA…" rows={2} />
-        <IVTextarea label="Observaciones" value={data.enchufes_obs} onChange={e => set('enchufes_obs', e.target.value)} rows={2} />
-      </Section>
-
-      {/* ══ S7: CANALIZACIONES ══ */}
-      <Section id="s7" num="07" title="Canalizaciones" icon="📦">
-        <div style={{ marginBottom: 14 }}>
-          <FieldLabel>Tipos presentes</FieldLabel>
-          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-            {(['canal_emt','canal_pvc','canal_bandeja','canal_escalerilla'] as const).map(k => {
-              const lbl = k.replace('canal_','').toUpperCase();
-              return (
-                <button key={k} onClick={() => set(k, !data[k])} className="btn" style={{
-                  padding: '5px 14px', border: `1px solid ${data[k] ? 'var(--y)' : 'var(--border2)'}`,
-                  background: data[k] ? 'rgba(255,198,0,0.08)' : 'transparent',
-                  color: data[k] ? 'var(--y)' : 'var(--muted)', fontSize: '0.7rem',
-                }}>{lbl}</button>
-              );
-            })}
+          <div className="iv-header-actions">
+            <button onClick={() => router.push('/levantamiento/historial')} className="btn btn-ghost btn-sm">
+              <ArrowLeft size={13} /> Historial
+            </button>
+            <div style={{ position:'relative' }}>
+              <select value={estado} onChange={e => setEstado(e.target.value)} style={{
+                background:'var(--bg2)', border:'1px solid rgba(255,255,255,0.1)',
+                color:'var(--text)', padding:'8px 28px 8px 12px', fontSize:'0.8rem',
+                fontFamily:'var(--font-display)', fontWeight:700, letterSpacing:'0.1em',
+                textTransform:'uppercase', outline:'none', appearance:'none', cursor:'pointer',
+              }}>
+                {['Borrador','Completado','Enviado','Archivado'].map(e => <option key={e} value={e}>{e}</option>)}
+              </select>
+              <span style={{ position:'absolute', right:10, top:'50%', transform:'translateY(-50%)', color:'var(--muted)', pointerEvents:'none', fontSize:'.6rem' }}>▼</span>
+            </div>
+            <button onClick={handleSave} disabled={saving} className="btn btn-primary">
+              <Save size={13} /> {saving ? 'Guardando…' : 'Guardar'}
+            </button>
+            <button onClick={triggerPrint} className="btn btn-ghost btn-sm">
+              <Printer size={13} /> PDF
+            </button>
           </div>
         </div>
-        <Grid cols={2}>
-          <IVSelect label="Estado general" options={ESTADOS_GEN} value={data.canal_estado} onChange={e => set('canal_estado', e.target.value)} />
-          <IVSelect label="Saturación" options={['<50%','50–75%','75–90%','>90% (crítico)']}
-            value={data.canal_saturacion} onChange={e => set('canal_saturacion', e.target.value)} />
-        </Grid>
-        <IVTextarea label="Observaciones" value={data.canal_obs} onChange={e => set('canal_obs', e.target.value)} rows={2} />
-      </Section>
 
-      {/* ══ S8: CRÍTICO ══ */}
-      <Section id="s8" num="08" title="Observaciones Técnicas Críticas" icon="⚠️">
-        <div style={{ background: 'rgba(248,113,113,0.05)', border: '1px solid rgba(248,113,113,0.2)', padding: 16 }}>
-          <p style={{ fontFamily: 'var(--font-display)', fontWeight: 700, fontSize: '0.6rem', letterSpacing: '0.2em', color: '#f87171', textTransform: 'uppercase', marginBottom: 14 }}>
-            ⚠ Marcar todo lo detectado en terreno
-          </p>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(230px, 1fr))', gap: 8 }}>
-            {CHECKLIST_CRITICO.map(item => {
-              const checked = !!data.checklist[item.id];
-              return (
-                <div key={item.id} onClick={() => setData(d => ({ ...d, checklist: { ...d.checklist, [item.id]: !d.checklist[item.id] } }))}
-                  style={{
-                    display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer',
-                    padding: '8px 12px', border: `1px solid ${checked ? 'rgba(248,113,113,0.4)' : 'var(--border2)'}`,
-                    background: checked ? 'rgba(248,113,113,0.08)' : 'transparent', transition: 'all .15s',
-                  }}>
-                  <div style={{
-                    width: 18, height: 18, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center',
-                    background: checked ? '#ef4444' : 'var(--bg3)', border: `1px solid ${checked ? '#ef4444' : 'var(--border2)'}`,
-                    fontSize: '0.65rem', color: '#fff',
-                  }}>{checked && '✓'}</div>
-                  <span style={{ fontSize: '0.77rem', color: checked ? '#fca5a5' : 'var(--muted)' }}>{item.label}</span>
-                </div>
-              );
-            })}
-          </div>
-        </div>
-      </Section>
-
-      {/* ══ S9: MEDICIONES ══ */}
-      <Section id="s9" num="09" title="Mediciones" icon="📊">
-        <div style={{ marginBottom: 4 }}><FieldLabel>Voltaje por fase (V)</FieldLabel></div>
-        <Grid cols={3}>
-          <IVInput placeholder="Fase R" type="number" value={data.med_v_r} onChange={e => set('med_v_r', e.target.value)} />
-          <IVInput placeholder="Fase S" type="number" value={data.med_v_s} onChange={e => set('med_v_s', e.target.value)} />
-          <IVInput placeholder="Fase T" type="number" value={data.med_v_t} onChange={e => set('med_v_t', e.target.value)} />
-        </Grid>
-        <div style={{ marginBottom: 4 }}><FieldLabel>Corriente por fase (A)</FieldLabel></div>
-        <Grid cols={3}>
-          <IVInput placeholder="Fase R" type="number" value={data.med_i_r} onChange={e => set('med_i_r', e.target.value)} />
-          <IVInput placeholder="Fase S" type="number" value={data.med_i_s} onChange={e => set('med_i_s', e.target.value)} />
-          <IVInput placeholder="Fase T" type="number" value={data.med_i_t} onChange={e => set('med_i_t', e.target.value)} />
-        </Grid>
-        <Grid cols={3}>
-          <IVSelect label="Balance fases" options={['Balanceado','Desbalanceado leve','Desbalanceado crítico']}
-            value={data.med_balance} onChange={e => set('med_balance', e.target.value)} />
-          <IVSelect label="Continuidad tierra" options={['OK','Deficiente','Sin tierra']}
-            value={data.med_tierra} onChange={e => set('med_tierra', e.target.value)} />
-          <IVInput label="Temp. máx (°C)" type="number" value={data.med_temp} onChange={e => set('med_temp', e.target.value)} placeholder="45" />
-        </Grid>
-        <IVTextarea label="Observaciones" value={data.med_obs} onChange={e => set('med_obs', e.target.value)} rows={2} />
-      </Section>
-
-      {/* ══ S10: FOTOS ══ */}
-      <Section id="s10" num="10" title="Material Fotográfico" icon="📷">
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(130px,1fr))', gap: 12 }}>
-          {[
-            { key: 'tablero',     label: 'Tablero eléctrico' },
-            { key: 'empalme',     label: 'Empalme'           },
-            { key: 'dano',        label: 'Daños detectados'  },
-            { key: 'canalizacion',label: 'Canalizaciones'    },
-            { key: 'critico',     label: 'Punto crítico'     },
-          ].map(f => (
-            <PhotoSlot key={f.key} label={f.label}
-              photo={(data.fotos[f.key] as string | null) || null}
-              onPhoto={p => setData(d => ({ ...d, fotos: { ...d.fotos, [f.key]: p } }))} />
+        {/* ── Section nav ── */}
+        <div className="lev-nav" data-no-print>
+          {NAV.map(n => (
+            <button key={n.id}
+              className={activeNav === n.id ? 'active' : ''}
+              onClick={() => { document.getElementById(n.id)?.scrollIntoView({ behavior:'smooth', block:'start' }); setActiveNav(n.id); }}>
+              {n.short}
+            </button>
           ))}
         </div>
-      </Section>
 
-      {/* ══ S11: RECOMENDACIONES ══ */}
-      <Section id="s11" num="11" title="Recomendaciones Técnicas" icon="📝">
-        <IVTextarea label="Recomendaciones del técnico" required rows={6}
-          value={data.recomendaciones} onChange={e => set('recomendaciones', e.target.value)}
-          placeholder={'1. Reemplazar diferencial circuito C3.\n2. Instalar SPD en tablero general.\n3. Rotular todos los circuitos.\n…'} />
-      </Section>
+        {/* ── Critical alert (screen) ── */}
+        {critCount > 0 && (
+          <div data-no-print style={{ background:'rgba(248,113,113,0.08)', border:'1px solid rgba(248,113,113,0.3)', padding:'10px 16px', marginBottom:16, display:'flex', alignItems:'center', gap:10 }}>
+            <AlertTriangle size={16} color="#f87171" />
+            <span style={{ fontSize:'0.82rem', color:'#fca5a5' }}>
+              <strong>{critCount}</strong> observación{critCount>1?'es':''} crítica{critCount>1?'s':''} detectada{critCount>1?'s':''} — ver Sección 08
+            </span>
+          </div>
+        )}
 
-      {/* ══ S12: ALCANCE ══ */}
-      <Section id="s12" num="12" title="Alcance Preliminar" icon="🏗️">
-        <div style={{ background: 'var(--bg2)', border: '1px solid var(--border2)', padding: '10px 14px', marginBottom: 14, fontSize: '0.75rem', color: 'var(--muted)' }}>
-          Esta sección se convierte en la base para la cotización formal en el módulo Cotizador.
+        {/* ════ S1: INFO GENERAL ════ */}
+        <Sec id="s1" num="01" title="Información General" icon="📋">
+          <G cols={2}>
+            <F label="Nombre cliente" req value={data.cliente_nombre} onChange={e=>set('cliente_nombre',e.target.value)} placeholder="Juan Pérez" />
+            <F label="Empresa" value={data.empresa} onChange={e=>set('empresa',e.target.value)} placeholder="Empresa S.A." />
+          </G>
+
+          {/* Vincular CRM */}
+          <div style={{ marginBottom:16 }}>
+            <FL>Vincular a cliente CRM (opcional)</FL>
+            <div style={{ position:'relative' }}>
+              <select value={clienteId} onChange={e=>{
+                setClienteId(e.target.value);
+                const c=clientes.find(cl=>cl.id===e.target.value);
+                if(c){ set('cliente_nombre',c.nombre_cliente); set('empresa',c.empresa||''); set('telefono',c.telefono||''); set('correo',c.email||''); set('direccion',c.direccion||''); }
+              }} style={{ ...inputBase, appearance:'none', paddingRight:32, color:clienteId?'var(--text)':'var(--muted)', cursor:'pointer' } as React.CSSProperties}>
+                <option value="">— Sin vincular —</option>
+                {clientes.map(c=><option key={c.id} value={c.id}>{c.nombre_cliente}{c.empresa?` — ${c.empresa}`:''}</option>)}
+              </select>
+              <span style={{ position:'absolute', right:12, top:'50%', transform:'translateY(-50%)', color:'var(--muted)', pointerEvents:'none', fontSize:'.65rem' }}>▼</span>
+            </div>
+          </div>
+
+          <F label="Dirección" req span={2} value={data.direccion} onChange={e=>set('direccion',e.target.value)} placeholder="Av. Providencia 123, Santiago" />
+          <G cols={2}>
+            <F label="Fecha" req type="date" value={data.fecha} onChange={e=>set('fecha',e.target.value)} />
+            <F label="Hora" type="time" value={data.hora} onChange={e=>set('hora',e.target.value)} />
+          </G>
+          <G cols={2}>
+            <F label="Contacto" value={data.contacto} onChange={e=>set('contacto',e.target.value)} placeholder="Nombre de contacto" />
+            <F label="Teléfono" type="tel" value={data.telefono} onChange={e=>set('telefono',e.target.value)} placeholder="+56 9 XXXX XXXX" />
+          </G>
+          <G cols={2}>
+            <F label="Correo" type="email" value={data.correo} onChange={e=>set('correo',e.target.value)} placeholder="contacto@empresa.cl" />
+            <F label="Técnico responsable" req value={data.tecnico} onChange={e=>set('tecnico',e.target.value)} placeholder="Nombre técnico InnVolt" />
+          </G>
+          <S label="Tipo de proyecto" req options={TIPOS_PROYECTO} value={data.tipo_proyecto} onChange={e=>set('tipo_proyecto',e.target.value)} />
+          <T label="Observaciones generales" rows={3} value={data.obs_generales} onChange={e=>set('obs_generales',e.target.value)} placeholder="Descripción del proyecto y condiciones generales encontradas en terreno…" />
+        </Sec>
+
+        {/* ════ S2: ELÉCTRICA ════ */}
+        <Sec id="s2" num="02" title="Información Eléctrica General" icon="⚡">
+          <Radio label="Sistema eléctrico" options={SISTEMAS_ELEC} value={data.sistema} onChange={v=>set('sistema',v)} />
+          {/* Print fallback for radio */}
+          <p className="lev-radio-print">Sistema eléctrico: <strong>{data.sistema||'—'}</strong></p>
+
+          <G cols={2}>
+            <S label="Voltaje nominal" req options={['220V','380V','220/380V','110V','Otro']} value={data.voltaje} onChange={e=>set('voltaje',e.target.value)} />
+            <S label="Tipo empalme" options={TIPOS_EMPALME} value={data.tipo_empalme} onChange={e=>set('tipo_empalme',e.target.value)} />
+          </G>
+          <G cols={2}>
+            <F label="Capacidad empalme (A)" type="number" value={data.capacidad_empalme} onChange={e=>set('capacidad_empalme',e.target.value)} placeholder="63" />
+            <S label="Estado empalme" options={ESTADOS_GEN} value={data.estado_empalme} onChange={e=>set('estado_empalme',e.target.value)} />
+          </G>
+          <G cols={3} mob={1}>
+            <Toggle label="Tierra física" checked={data.tierra} onChange={v=>set('tierra',v)} />
+            <Toggle label="Grupo electrógeno" checked={data.grupo_electrogeno} onChange={v=>set('grupo_electrogeno',v)} />
+            <Toggle label="UPS" checked={data.ups} onChange={v=>set('ups',v)} />
+          </G>
+          {/* Print: toggles */}
+          <p className="lev-radio-print">
+            Tierra física: <strong>{data.tierra?'Sí':'No'}</strong> &nbsp;|&nbsp;
+            Grupo electrógeno: <strong>{data.grupo_electrogeno?'Sí':'No'}</strong> &nbsp;|&nbsp;
+            UPS: <strong>{data.ups?'Sí':'No'}</strong>
+          </p>
+          <T label="Observaciones" rows={2} value={data.obs_electrica} onChange={e=>set('obs_electrica',e.target.value)} />
+        </Sec>
+
+        {/* ════ S3: TABLEROS ════ */}
+        <Sec id="s3" num="03" title="Tableros Eléctricos" icon="🗃️">
+          <DynTable
+            cols={[
+              {key:'nombre',label:'Nombre',ph:'TG-01'},
+              {key:'tipo',label:'Tipo',type:'select',options:TIPOS_TABLERO,w:90},
+              {key:'ubicacion',label:'Ubicación',ph:'Bodega'},
+              {key:'marca',label:'Marca',ph:'ABB'},
+              {key:'circuitos',label:'N°Circ',ph:'12',w:65},
+              {key:'proteccion',label:'Prot.Gral',ph:'63A'},
+              {key:'estado',label:'Estado',type:'select',options:ESTADOS_GEN,w:100},
+              {key:'espacio',label:'Espacio',type:'select',options:['Sí','No','Parcial'],w:80},
+              {key:'obs',label:'Obs.'},
+            ]}
+            rows={data.tableros}
+            onAdd={()=>setData(d=>({...d,tableros:[...d.tableros,newTablero()]}))}
+            onRemove={i=>setData(d=>({...d,tableros:d.tableros.filter((_,ri)=>ri!==i)}))}
+            onUpd={updT}
+            addLabel="Agregar tablero"
+          />
+        </Sec>
+
+        {/* ════ S4: CIRCUITOS ════ */}
+        <Sec id="s4" num="04" title="Circuitos" icon="🔌">
+          <DynTable
+            cols={[
+              {key:'circuito',label:'Circuito',ph:'C1',w:70},
+              {key:'proteccion',label:'Protección',ph:'16A'},
+              {key:'cableado',label:'Cableado',type:'select',options:TIPOS_CABLE},
+              {key:'canalizacion',label:'Canalización',type:'select',options:TIPOS_CANAL},
+              {key:'uso',label:'Uso',ph:'Iluminación'},
+              {key:'estado',label:'Estado',type:'select',options:ESTADOS_GEN,w:100},
+              {key:'obs',label:'Obs.'},
+            ]}
+            rows={data.circuitos}
+            onAdd={()=>setData(d=>({...d,circuitos:[...d.circuitos,newCircuito()]}))}
+            onRemove={i=>setData(d=>({...d,circuitos:d.circuitos.filter((_,ri)=>ri!==i)}))}
+            onUpd={updC}
+            addLabel="Agregar circuito"
+          />
+        </Sec>
+
+        {/* ════ S5: ILUMINACIÓN ════ */}
+        <Sec id="s5" num="05" title="Iluminación" icon="💡">
+          <G cols={2}>
+            <S label="Tipo luminarias" options={TIPOS_LUM} value={data.ilum_tipo} onChange={e=>set('ilum_tipo',e.target.value)} />
+            <F label="Cantidad" type="number" value={data.ilum_cantidad} onChange={e=>set('ilum_cantidad',e.target.value)} placeholder="24" />
+          </G>
+          <G cols={2}>
+            <S label="Estado general" options={ESTADOS_GEN} value={data.ilum_estado} onChange={e=>set('ilum_estado',e.target.value)} />
+            <div style={{ paddingTop:22 }}>
+              <Toggle label="Iluminación de emergencia" checked={data.ilum_emergencia} onChange={v=>set('ilum_emergencia',v)} />
+              <p className="lev-radio-print">Emergencia: <strong>{data.ilum_emergencia?'Sí':'No'}</strong></p>
+            </div>
+          </G>
+          <T label="Observaciones" rows={2} value={data.ilum_obs} onChange={e=>set('ilum_obs',e.target.value)} />
+        </Sec>
+
+        {/* ════ S6: ENCHUFES ════ */}
+        <Sec id="s6" num="06" title="Enchufes y Fuerza" icon="🔋">
+          <G cols={2}>
+            <F label="Cantidad enchufes" type="number" value={data.enchufes_cantidad} onChange={e=>set('enchufes_cantidad',e.target.value)} placeholder="30" />
+            <S label="Tipo" options={['Schuko 220V','2P+T','Industrial CEE','Bipolar','Mixto']} value={data.enchufes_tipo} onChange={e=>set('enchufes_tipo',e.target.value)} />
+          </G>
+          <G cols={2}>
+            <S label="Estado" options={ESTADOS_GEN} value={data.enchufes_estado} onChange={e=>set('enchufes_estado',e.target.value)} />
+            <div style={{ paddingTop:22 }}>
+              <Toggle label="Circuitos de fuerza presentes" checked={data.enchufes_fuerza} onChange={v=>set('enchufes_fuerza',v)} />
+              <p className="lev-radio-print">Circuitos de fuerza: <strong>{data.enchufes_fuerza?'Sí':'No'}</strong></p>
+            </div>
+          </G>
+          <T label="Equipos conectados relevantes" rows={2} value={data.enchufes_equipos} onChange={e=>set('enchufes_equipos',e.target.value)} placeholder="Compresor 5HP, UPS 3kVA, Horno industrial…" />
+          <T label="Observaciones" rows={2} value={data.enchufes_obs} onChange={e=>set('enchufes_obs',e.target.value)} />
+        </Sec>
+
+        {/* ════ S7: CANALIZACIONES ════ */}
+        <Sec id="s7" num="07" title="Canalizaciones" icon="📦">
+          <div style={{ marginBottom:16 }}>
+            <FL>Tipos presentes</FL>
+            <div style={{ display:'flex', gap:6, flexWrap:'wrap' }} data-no-print>
+              {(['canal_emt','canal_pvc','canal_bandeja','canal_escalerilla'] as const).map(k=>{
+                const lbl = k.replace('canal_','').toUpperCase();
+                return (
+                  <button key={k} type="button" onClick={()=>set(k,!data[k])} style={{
+                    padding:'8px 18px', fontSize:'.78rem',
+                    fontFamily:'var(--font-display)', fontWeight:700, letterSpacing:'.1em', textTransform:'uppercase',
+                    border:`1px solid ${data[k]?'var(--y)':'rgba(255,255,255,.1)'}`,
+                    background:data[k]?'rgba(255,198,0,.1)':'transparent',
+                    color:data[k]?'var(--y)':'var(--muted)', cursor:'pointer', transition:'all .15s',
+                  }}>{lbl}</button>
+                );
+              })}
+            </div>
+            <p className="lev-radio-print">
+              Tipos: {[data.canal_emt&&'EMT',data.canal_pvc&&'PVC',data.canal_bandeja&&'Bandeja',data.canal_escalerilla&&'Escalerilla'].filter(Boolean).join(', ')||'—'}
+            </p>
+          </div>
+          <G cols={2}>
+            <S label="Estado general" options={ESTADOS_GEN} value={data.canal_estado} onChange={e=>set('canal_estado',e.target.value)} />
+            <S label="Nivel de saturación" options={['<50%','50–75%','75–90%','>90% (crítico)']} value={data.canal_saturacion} onChange={e=>set('canal_saturacion',e.target.value)} />
+          </G>
+          <T label="Observaciones" rows={2} value={data.canal_obs} onChange={e=>set('canal_obs',e.target.value)} />
+        </Sec>
+
+        {/* ════ S8: CRÍTICO ════ */}
+        <Sec id="s8" num="08" title="Observaciones Técnicas Críticas" icon="⚠️">
+          <div style={{ background:'rgba(248,113,113,0.05)', border:'1px solid rgba(248,113,113,0.18)', padding:16, marginBottom:4 }} className="lev-crit-alert">
+            <p style={{ fontFamily:'var(--font-display)', fontWeight:700, fontSize:'.58rem', letterSpacing:'.2em', color:'#f87171', textTransform:'uppercase', marginBottom:12 }}>
+              ⚠ Marcar todo lo detectado en terreno
+            </p>
+            <div className="lev-checklist">
+              {CHECKLIST_CRITICO.map(item=>{
+                const on = !!data.checklist[item.id];
+                return (
+                  <div key={item.id} className={`lev-check-item${on?' on':''}`}
+                    onClick={()=>setData(d=>({...d,checklist:{...d.checklist,[item.id]:!d.checklist[item.id]}}))}>
+                    <div className={`lev-check-box${on?' on':''}`}>{on&&'✓'}</div>
+                    <span className={`lev-check-label${on?' on':''}`}>{item.label}</span>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        </Sec>
+
+        {/* ════ S9: MEDICIONES ════ */}
+        <Sec id="s9" num="09" title="Mediciones" icon="📊">
+          <FL>Voltaje por fase (V)</FL>
+          <G cols={3} mob={3}>
+            <F placeholder="Fase R" type="number" value={data.med_v_r} onChange={e=>set('med_v_r',e.target.value)} />
+            <F placeholder="Fase S" type="number" value={data.med_v_s} onChange={e=>set('med_v_s',e.target.value)} />
+            <F placeholder="Fase T" type="number" value={data.med_v_t} onChange={e=>set('med_v_t',e.target.value)} />
+          </G>
+          <FL>Corriente por fase (A)</FL>
+          <G cols={3} mob={3}>
+            <F placeholder="Fase R" type="number" value={data.med_i_r} onChange={e=>set('med_i_r',e.target.value)} />
+            <F placeholder="Fase S" type="number" value={data.med_i_s} onChange={e=>set('med_i_s',e.target.value)} />
+            <F placeholder="Fase T" type="number" value={data.med_i_t} onChange={e=>set('med_i_t',e.target.value)} />
+          </G>
+          <G cols={3}>
+            <S label="Balance fases" options={['Balanceado','Desbalanceado leve','Desbalanceado crítico']} value={data.med_balance} onChange={e=>set('med_balance',e.target.value)} />
+            <S label="Continuidad tierra" options={['OK','Deficiente','Sin tierra']} value={data.med_tierra} onChange={e=>set('med_tierra',e.target.value)} />
+            <F label="Temp. máx (°C)" type="number" value={data.med_temp} onChange={e=>set('med_temp',e.target.value)} placeholder="45" />
+          </G>
+          <T label="Observaciones de mediciones" rows={2} value={data.med_obs} onChange={e=>set('med_obs',e.target.value)} />
+        </Sec>
+
+        {/* ════ S10: RECOMENDACIONES ════ */}
+        <Sec id="s10" num="10" title="Recomendaciones Técnicas" icon="📝">
+          <T label="Recomendaciones del técnico" req rows={6}
+            value={data.recomendaciones} onChange={e=>set('recomendaciones',e.target.value)}
+            placeholder={'1. Reemplazar diferencial circuito C3 (sin disparo).\n2. Instalar SPD en tablero general.\n3. Rotular todos los circuitos.\n4. Revisar empalme — cable deteriorado en tramo exterior.\n…'} />
+        </Sec>
+
+        {/* ════ S11: ALCANCE ════ */}
+        <Sec id="s11" num="11" title="Alcance Preliminar" icon="🏗️">
+          <div style={{ background:'var(--bg2)', border:'1px solid rgba(255,255,255,0.07)', padding:'10px 14px', marginBottom:16, fontSize:'.78rem', color:'var(--muted)' }}>
+            Esta sección se convierte en la base para la cotización formal.
+          </div>
+          <T label="Posibles trabajos a ejecutar" rows={3} value={data.alcance_trabajos} onChange={e=>set('alcance_trabajos',e.target.value)} placeholder="Renovación tablero general, instalación de 8 circuitos nuevos…" />
+          <T label="Mejoras recomendadas" rows={2} value={data.alcance_mejoras} onChange={e=>set('alcance_mejoras',e.target.value)} placeholder="Automatización, domótica, medición inteligente…" />
+          <T label="Mantenciones sugeridas" rows={2} value={data.alcance_mantenciones} onChange={e=>set('alcance_mantenciones',e.target.value)} placeholder="Mantención preventiva semestral, ajuste de bornes…" />
+          <T label="Observaciones comerciales" rows={2} value={data.alcance_obs_comerciales} onChange={e=>set('alcance_obs_comerciales',e.target.value)} placeholder="Cliente interesado en contrato de mantención…" />
+        </Sec>
+
+        {/* ── Footer actions ── */}
+        <div data-no-print style={{ display:'flex', gap:10, paddingTop:8, flexWrap:'wrap' }}>
+          <button onClick={handleSave} disabled={saving} className="btn btn-primary" style={{ flex:1, minWidth:160, justifyContent:'center' }}>
+            <Save size={14} /> {saving?'Guardando…':'Guardar levantamiento'}
+          </button>
+          <button onClick={triggerPrint} className="btn btn-ghost btn-sm">
+            <Printer size={14} /> Exportar PDF
+          </button>
         </div>
-        <IVTextarea label="Posibles trabajos a ejecutar" rows={3} value={data.alcance_trabajos}
-          onChange={e => set('alcance_trabajos', e.target.value)} placeholder="Renovación tablero general, 8 circuitos nuevos…" />
-        <IVTextarea label="Mejoras recomendadas" rows={2} value={data.alcance_mejoras}
-          onChange={e => set('alcance_mejoras', e.target.value)} placeholder="Automatización, domótica, medición inteligente…" />
-        <IVTextarea label="Mantenciones sugeridas" rows={2} value={data.alcance_mantenciones}
-          onChange={e => set('alcance_mantenciones', e.target.value)} placeholder="Mantención preventiva semestral…" />
-        <IVTextarea label="Observaciones comerciales" rows={2} value={data.alcance_obs_comerciales}
-          onChange={e => set('alcance_obs_comerciales', e.target.value)} placeholder="Cliente interesado en contrato de mantención…" />
-      </Section>
 
-      {/* ══ S13: FIRMA ══ */}
-      <Section id="s13" num="13" title="Firmas" icon="✍️">
-        <SignatureCanvas label="Técnico InnVolt" />
-        <SignatureCanvas label="Conforme cliente" />
-      </Section>
-
-      {/* ── Footer actions ── */}
-      <div style={{ display: 'flex', gap: 10, paddingTop: 8 }}>
-        <button onClick={handleSave} disabled={saving} className="btn btn-primary" style={{ flex: 1, justifyContent: 'center' }}>
-          <Save size={14} /> {saving ? 'Guardando…' : 'Guardar levantamiento'}
-        </button>
-        <button onClick={() => window.print()} className="btn btn-ghost btn-sm">
-          <Printer size={14} /> Imprimir
-        </button>
+        {/* Saved toast */}
+        {saved && (
+          <div className="lev-toast">
+            <CheckCircle size={16} color="#4ade80" />
+            <span style={{ fontSize:'.82rem', color:'#4ade80' }}>Levantamiento guardado correctamente</span>
+          </div>
+        )}
       </div>
-
-      {/* Saved toast */}
-      {saved && (
-        <div style={{ position: 'fixed', bottom: 24, right: 24, background: 'var(--bg2)', border: '1px solid rgba(74,222,128,0.4)', padding: '10px 20px', display: 'flex', alignItems: 'center', gap: 8, zIndex: 999 }}>
-          <CheckCircle size={16} color="#4ade80" />
-          <span style={{ fontSize: '0.8rem', color: '#4ade80' }}>Levantamiento guardado</span>
-        </div>
-      )}
-    </div>
+    </>
   );
 }
