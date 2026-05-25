@@ -165,9 +165,10 @@ export default function DashboardPage() {
             <p className="section-label" style={{ marginBottom: '1rem' }}><Plus size={12} /> Acciones rápidas</p>
             <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
               {[
-                { label: 'Nueva cotización', path: '/cotizador', icon: FileText },
-                { label: 'Ver historial', path: '/cotizador/historial', icon: Clock },
-                { label: 'Agregar cliente', path: '/clientes', icon: Users },
+                { label: 'Nueva cotización',    path: '/cotizador',                icon: FileText      },
+                { label: 'Nuevo levantamiento', path: '/levantamiento',            icon: FileText      },
+                { label: 'Ver historial',        path: '/cotizador/historial',      icon: Clock         },
+                { label: 'Agregar cliente',      path: '/clientes',                 icon: Users         },
               ].map(({ label, path, icon: Icon }) => (
                 <button key={path} onClick={() => router.push(path)} className="btn btn-ghost btn-sm" style={{ justifyContent: 'flex-start', width: '100%' }}>
                   <Icon size={13} /> {label}

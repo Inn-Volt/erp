@@ -3,7 +3,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import {
   Zap, LayoutDashboard, FileText, Users, LogOut, Menu, X,
-  Settings, Bell, History,
+  Settings, Bell, History, ClipboardList,
 } from 'lucide-react';
 import { useRouter, usePathname } from 'next/navigation';
 import { useAuth } from '@/hooks/useAuth';
@@ -24,11 +24,13 @@ function Logo() {
 }
 
 const menuItems = [
-  { name: 'Dashboard',   icon: LayoutDashboard, path: '/dashboard',          num: '01' },
-  { name: 'Clientes',    icon: Users,           path: '/clientes',           num: '02' },
-  { name: 'Cotizador',   icon: FileText,        path: '/cotizador',          num: '03' },
-  { name: 'Historial',   icon: History,         path: '/cotizador/historial',num: '04' },
-  { name: 'Config',      icon: Settings,        path: '/configuracion',      num: '05' },
+  { name: 'Dashboard',      icon: LayoutDashboard, path: '/dashboard',                num: '01' },
+  { name: 'Clientes',       icon: Users,           path: '/clientes',                 num: '02' },
+  { name: 'Cotizador',      icon: FileText,        path: '/cotizador',                num: '03' },
+  { name: 'Historial',      icon: History,         path: '/cotizador/historial',      num: '04' },
+  { name: 'Levantamiento',  icon: ClipboardList,   path: '/levantamiento',            num: '05' },
+  { name: 'Lev. Historial', icon: History,         path: '/levantamiento/historial',  num: '06' },
+  { name: 'Config',         icon: Settings,        path: '/configuracion',            num: '07' },
 ];
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
@@ -62,7 +64,10 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   };
 
   const NavItem = ({ name, icon: Icon, path, num }: typeof menuItems[0]) => {
-    const active = pathname === path || (path !== '/cotizador' && pathname.startsWith(path + '/')) || (path === '/cotizador' && pathname === '/cotizador');
+    const exactPaths = ['/cotizador', '/levantamiento'];
+    const active = pathname === path ||
+      (!exactPaths.includes(path) && pathname.startsWith(path + '/')) ||
+      (exactPaths.includes(path) && pathname === path);
     return (
       <button
         onClick={() => router.push(path)}
