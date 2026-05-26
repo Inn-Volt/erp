@@ -28,6 +28,7 @@ export default function HistorialPage() {
   const { success, error: toastError } = useToast();
 
   const [cotizaciones, setCotizaciones] = useState<Cotizacion[]>([]);
+  const [empresa, setEmpresa] = useState<EmpresaInfo | null>(null);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [filterEstado, setFilterEstado] = useState<EstadoCotizacion | 'Todos'>('Todos');
@@ -36,31 +37,46 @@ export default function HistorialPage() {
   const [genPDF, setGenPDF] = useState<string | null>(null);
   const [showFilters, setShowFilters] = useState(false);
 
- const load = useCallback(async () => {
-  setLoading(true);
-  const data = await cotizacionesService.getAll();
-  setCotizaciones(data);
-  setLoading(false);
-}, []);
-
-useEffect(() => {
-  load();
-}, [load]);
-
-useEffect(() => {
-  const loadEmpresa = async () => {
-    const { data, error } = await supabase
-      .from('empresas')
-      .select('*')
-      .single();
-
-    if (!error && data) {
-      setEmpresa(data);
+  const load = useCallback(async () => {
+    setLoading(true);
+    try {
+      const data = await cotizacionesService.getAll();
+      setCotizaciones(data);
+    } catch (e) {
+      console.error(e);
+      toastError('Error al cargar cotizaciones');
+    } finally {
+      setLoading(false);
     }
-  };
+  }, [toastError]);
 
-  loadEmpresa();
-}, []);
+  useEffect(() => {
+    load();
+  }, [load]);
+
+  useEffect(() => {
+    const loadEmpresa = async () => {
+      try {
+        const { data, error } = await supabase
+          .from('empresas')
+          .select('*')
+          .single();
+
+        if (error) {
+          console.error('Error fetching empresa:', error);
+          return;
+        }
+
+        if (data) {
+          setEmpresa(data);
+        }
+      } catch (e) {
+        console.error('Unexpected error loading empresa:', e);
+      }
+    };
+
+    loadEmpresa();
+  }, []);
 
   const handleDelete = async (id: string, folio: number) => {
     if (!confirm(`¿Eliminar cotización ${formatFolio(folio)}? Esta acción no se puede deshacer.`)) return;
@@ -82,14 +98,17 @@ useEffect(() => {
       toastError('Error al actualizar estado');
     }
   };
-const [empresa, setEmpresa] = useState<EmpresaInfo | null>(null);
 
   const handleDownloadPDF = async (cot: Cotizacion) => {
     if (!empresa) {
-  toastError('No existe empresa configurada');
-  return;
-}
-    if (!cot.clientes) { toastError('Cliente no cargado'); return; }
+      toastError('No existe empresa configurada o no tienes permisos para leerla.');
+      return;
+    }
+    if (!cot.clientes) { 
+      toastError('Cliente no cargado'); 
+      return; 
+    }
+    
     setGenPDF(cot.id);
     try {
       const totals = calcularTotals(cot.items || [], cot.descuento_global || 0);
@@ -147,7 +166,6 @@ const [empresa, setEmpresa] = useState<EmpresaInfo | null>(null);
     return list;
   }, [cotizaciones, filterEstado, search, sortKey, sortDir]);
 
-  // Resumen rápido
   const resumen = useMemo(() => ({
     total: filtered.length,
     montoTotal: filtered.reduce((a, c) => a + (c.total || 0), 0),
@@ -381,5 +399,4 @@ const [empresa, setEmpresa] = useState<EmpresaInfo | null>(null);
       )}
     </div>
   );
-  
 }
