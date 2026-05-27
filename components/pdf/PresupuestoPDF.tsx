@@ -23,8 +23,8 @@ const s = StyleSheet.create({
     color: BLACK,
     fontFamily: 'Helvetica',
     fontSize: 8,
-    paddingTop: 20,
-    paddingBottom: 80,
+    paddingTop: 40,
+    paddingBottom: 60,
   },
 
   // ── Header ──
@@ -501,7 +501,7 @@ export default function PresupuestoPDF({
 
         {/* ── TABLA DE ÍTEMS ── */}
         <View style={s.content}>
-          <View style={s.tableHeader}>
+          <View style={s.tableHeader} fixed>
             <Text style={[s.tableHeaderText, s.colNum]}>#</Text>
             <Text style={[s.tableHeaderText, s.colServicio]}>Servicio / Producto</Text>
             <Text style={[s.tableHeaderText, s.colDesc]}>Descripción</Text>
