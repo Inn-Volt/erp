@@ -39,11 +39,19 @@ const s = StyleSheet.create({
   td: { fontSize: 7.5, color: '#dddddd' },
   tdMuted: { fontSize: 7, color: MUTED },
   colN:     { width: 20 },
-  colDesc:  { flex: 1 },
-  colQty:   { width: 35, textAlign: 'right' },
-  colUnit:  { width: 32, textAlign: 'right' },
-  colCosto: { width: 65, textAlign: 'right' },
-  colTotal: { width: 70, textAlign: 'right' },
+  colDesc: {
+  flex: 1,
+},
+
+colQty: {
+  width: 60,
+  textAlign: 'center',
+},
+
+colUnit: {
+  width: 70,
+  textAlign: 'center',
+},
   footer: {
     backgroundColor: DARK, padding: '8 28',
     borderTopWidth: 1, borderTopColor: GRAY2,
@@ -95,87 +103,143 @@ export default function ListadoInternoPDF({ items, folio, clienteNombre, descrip
 
         {/* Header */}
         <View style={s.header}>
-          <View>
-            <View style={{ flexDirection: 'row' }}>
-              <Text style={s.title}>LISTADO</Text>
-              <Text style={s.titleY}> INTERNO</Text>
-            </View>
-            <Text style={s.sub}>MATERIALES Y SUMINISTROS — INNVOLT SpA</Text>
-          </View>
-          <View style={s.right}>
-            <Text style={s.folioLabel}>FOLIO</Text>
-            <Text style={s.folioVal}>{folio}</Text>
-            <Text style={s.fecha}>{today()}</Text>
-          </View>
-        </View>
+  <View>
+    <Text style={s.title}>SOLICITUD DE</Text>
+    <Text style={s.titleY}> COTIZACIÓN</Text>
 
+    <Text style={s.sub}>
+      INNVOLT SpA
+    </Text>
+
+    <Text style={s.sub}>
+      RUT: 78.299.986-9
+    </Text>
+
+    <Text style={s.sub}>
+      Correo: innvolt.cl@gmail.com
+    </Text>
+
+    <Text style={s.sub}>
+      Contacto: 
+    </Text>
+
+  </View>
+
+  <View style={s.right}>
+    <Text style={s.folioLabel}>SOLICITUD N°</Text>
+    <Text style={s.folioVal}>{folio}</Text>
+    <Text style={s.fecha}>{today()}</Text>
+  </View>
+</View>
         {/* Content */}
         <View style={s.content}>
 
           {/* Info */}
           <View style={s.infoRow}>
-            <View style={s.infoBox}>
-              <Text style={s.infoLabel}>CLIENTE / PROYECTO</Text>
-              <Text style={s.infoVal}>{clienteNombre}</Text>
-              {descripcion && <Text style={s.infoSub}>{descripcion}</Text>}
-            </View>
-            <View style={s.infoBox}>
-              <Text style={s.infoLabel}>RESUMEN</Text>
-              <Text style={s.infoVal}>{items.length} ítems de materiales</Text>
-              <Text style={s.infoSub}>Costo total: {fmtCLP(totalCosto)}</Text>
-            </View>
-          </View>
 
-          {/* Aviso confidencialidad */}
-          <View style={s.warningBox}>
-            <Text style={s.warningText}>
-              ⚠ DOCUMENTO INTERNO — CONFIDENCIAL. Contiene costos internos y márgenes. No entregar al cliente.
-            </Text>
-          </View>
+  <View style={s.infoBox}>
+    <Text style={s.infoLabel}>PROYECTO</Text>
+    <Text style={s.infoVal}>{clienteNombre}</Text>
 
-          {/* Tabla */}
-          <View style={s.tableHeader}>
-            <Text style={[s.th, s.colN]}>#</Text>
-            <Text style={[s.th, s.colDesc]}>DESCRIPCIÓN</Text>
-            <Text style={[s.th, s.colQty]}>CANT</Text>
-            <Text style={[s.th, s.colUnit]}>UNID</Text>
-            <Text style={[s.th, s.colCosto]}>COSTO U.</Text>
-            <Text style={[s.th, s.colTotal]}>TOTAL COSTO</Text>
-          </View>
+    {descripcion && (
+      <Text style={s.infoSub}>
+        {descripcion}
+      </Text>
+    )}
+  </View>
+
+  <View style={s.infoBox}>
+    <Text style={s.infoLabel}>RESUMEN</Text>
+    <Text style={s.infoVal}>
+      {items.length} materiales
+    </Text>
+
+    <Text style={s.infoSub}>
+      Solicitud para cotización comercial
+    </Text>
+  </View>
+
+</View>
+
+<View style={s.tableHeader}>
+  <Text style={[s.th, s.colN]}>#</Text>
+  <Text style={[s.th, s.colDesc]}>DESCRIPCIÓN</Text>
+  <Text style={[s.th, s.colQty]}>CANTIDAD</Text>
+  <Text style={[s.th, s.colUnit]}>UNIDAD</Text>
+</View>
 
           {items.map((item, idx) => (
-            <View key={item.id} style={[s.row, idx % 2 === 1 ? s.rowAlt : {}]}>
-              <Text style={[s.tdMuted, s.colN]}>{idx + 1}</Text>
-              <Text style={[s.td, s.colDesc]}>{item.descripcion}</Text>
-              <Text style={[s.td, s.colQty]}>{item.cantidad}</Text>
-              <Text style={[s.tdMuted, s.colUnit]}>{item.unidad}</Text>
-              <Text style={[s.td, s.colCosto]}>{fmtCLP(item.costo)}</Text>
-              <Text style={[s.td, s.colTotal]}>{fmtCLP(item.costo * item.cantidad)}</Text>
-            </View>
-          ))}
 
-          {/* Totales */}
-          <View style={s.totBox}>
-            <View style={s.totInner}>
-              <View style={s.totRow}>
-                <Text style={s.totLabel}>Total costo</Text>
-                <Text style={s.totVal}>{fmtCLP(totalCosto)}</Text>
-              </View>
-              <View style={s.totRow}>
-                <Text style={s.totLabel}>Total venta</Text>
-                <Text style={s.totVal}>{fmtCLP(totalVenta)}</Text>
-              </View>
-              <View style={s.totalRow}>
-                <Text style={s.totalLabel}>UTILIDAD</Text>
-                <Text style={s.totalVal}>{fmtCLP(utilidad)}</Text>
-              </View>
-            </View>
-          </View>
-        </View>
+  <View
+    key={item.id}
+    wrap={false}
+    style={[
+      s.row,
+      idx % 2 === 1 ? s.rowAlt : {}
+    ]}
+  >
+    <Text style={[s.tdMuted, s.colN]}>
+      {idx + 1}
+    </Text>
+
+    <Text style={[s.td, s.colDesc]}>
+      {item.descripcion}
+    </Text>
+
+    <Text style={[s.td, s.colQty]}>
+      {item.cantidad}
+    </Text>
+
+    <Text style={[s.tdMuted, s.colUnit]}>
+      {item.unidad}
+    </Text>
+
+  </View>
+
+))}
+
+<View
+  style={{
+    marginTop: 20,
+    padding: 10,
+    borderWidth: 1,
+    borderColor: '#444',
+  }}
+>
+  <Text
+    style={{
+      fontSize: 8,
+      fontFamily: 'Helvetica-Bold',
+      marginBottom: 6,
+    }}
+  >
+    FAVOR INDICAR EN SU RESPUESTA:
+  </Text>
+
+  <Text style={{ fontSize: 7 }}>
+    • Precio unitario
+  </Text>
+
+  <Text style={{ fontSize: 7 }}>
+    • Precio total
+  </Text>
+
+  <Text style={{ fontSize: 7 }}>
+    • Disponibilidad de stock
+  </Text>
+
+  <Text style={{ fontSize: 7 }}>
+    • Tiempo de entrega
+  </Text>
+
+  <Text style={{ fontSize: 7 }}>
+    • Condiciones comerciales
+  </Text>
+</View>
 
         {/* Footer */}
         <View style={s.footer} fixed>
-          <Text style={s.footerText}>InnVolt SpA — Uso interno — Confidencial</Text>
+          <Text style={s.footerText}>InnVolt SpA</Text>
           <Text style={s.footerText}>{folio} · {today()}</Text>
         </View>
       </Page>
