@@ -23,6 +23,7 @@ const s = StyleSheet.create({
     color: BLACK,
     fontFamily: 'Helvetica',
     fontSize: 8,
+    paddingTop: 40,
     paddingBottom: 60,
   },
 
@@ -30,7 +31,6 @@ const s = StyleSheet.create({
   header: {
     flexDirection: 'row',
     alignItems: 'flex-start', // Alinea el logo y el texto arriba
-    padding: '28 32 20 32',
     borderBottomWidth: 2,
     borderBottomColor: Y,
   },
