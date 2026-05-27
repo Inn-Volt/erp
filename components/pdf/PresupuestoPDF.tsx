@@ -229,8 +229,11 @@ clienteValue: {
   firmaNombre: { fontSize: 9, fontFamily: 'Helvetica-Bold', color: BLACK, marginTop: 8, textAlign: 'center' },
   firmaArea:   { fontSize: 7, color: MUTED, textAlign: 'center' },
   firmaAceptacion: {
-  marginTop: 40,
-},
+    position: 'absolute',
+    left: 32,
+    right: 32,
+    bottom: 70, // ajusta según tu footer
+  },
 
   // ── Footer ──
   footer: {
@@ -298,7 +301,7 @@ const buildGarantiasEquipos = (empresa: EmpresaInfo) => [
   },
   {
     l: 'c.',
-    t: 'La garantía cubre exclusivamente trabajos realizados por INNVOLT SpA.'
+    t: 'La garantía cubre exclusivamente defectos atribuibles a errores de instalación, montaje o configuración realizados por personal de la empresa.'
   },
   {
     l: 'd.',
@@ -334,11 +337,11 @@ const GARANTIAS_SERVICIOS = [
   },
   {
     l: 'e.',
-    t: 'Los servicios de soporte técnico se prestan en horario hábil de lunes a jueves entre las 09:00 y las 18:00 horas, día viernes entre las 09:00 14:00 salvo contratación de cobertura especial.'
+    t: 'Los servicios de soporte técnico se prestan en horario hábil de lunes a viernes entre las 09:00 y las 18:00 horas, salvo contratación de cobertura especial.'
   },
   {
     l: 'f.',
-    t: 'Los trabajos ejecutados fuera de la Región Metropolitana se considerarán con costos adicionales por conceptos de traslado, alojamiento, alimentación y logística.'
+    t: 'Los trabajos ejecutados fuera de la Región Metropolitana podrán considerar costos adicionales por traslado, alojamiento, alimentación y logística.'
   },
 ];
 
@@ -509,7 +512,7 @@ export default function PresupuestoPDF({
           {itemsDisplay.map((item, idx) => {
             const subtotal = item.cantidad * item.precio;
             return (
-              <View key={item.id} wrap={false} style={[s.tableRow, idx % 2 === 1 ? s.tableRowAlt : {}]}>
+              <View key={item.id} style={[s.tableRow, idx % 2 === 1 ? s.tableRowAlt : {}]}>
                 <Text style={[s.tableCell, s.colNum]}>{idx + 1}</Text>
                 <View style={s.colServicio}>
                   <Text style={s.tableCell}>{item.descripcion}</Text>
@@ -572,11 +575,14 @@ export default function PresupuestoPDF({
             </View>
           </View>
         </View>
+
         {/* ── IMPORTANTE ── */}
         <View style={s.importanteBox}>
           <Text style={s.importanteLabel}>IMPORTANTE</Text>
           <Text style={s.importanteText}>{textoImportante}</Text>
         </View>
+        <View break />
+        
         {/* ── ACLARACIONES ── */}
         <View style={s.seccionBox}>
           <Text style={s.seccionTitulo}>ACLARACIONES DE SERVICIOS Y GARANTÍAS</Text>
@@ -626,10 +632,7 @@ export default function PresupuestoPDF({
         </View>
 
         {/* ── FIRMA ── */}
-        <View
-  style={s.firmaAceptacion}
-  wrap={false}
->
+        <View style={s.firmaAceptacion}>
   <View
     style={{
       flexDirection: 'row',
