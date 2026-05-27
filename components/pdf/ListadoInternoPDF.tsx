@@ -163,7 +163,7 @@ export default function ListadoInternoPDF({ items, folio, clienteNombre, descrip
 
 </View>
 
-<View style={s.tableHeader} fixed>
+<View style={s.tableHeader} >
   <Text style={[s.th, s.colN]}>#</Text>
   <Text style={[s.th, s.colDesc]}>DESCRIPCIÓN</Text>
   <Text style={[s.th, s.colQty]}>CANTIDAD</Text>
@@ -242,7 +242,7 @@ export default function ListadoInternoPDF({ items, folio, clienteNombre, descrip
 </View>
 
         {/* Footer */}
-        <View style={s.footer}>
+        <View style={s.footer} fixed>
           <Text style={s.footerText}>InnVolt SpA</Text>
           <Text style={s.footerText}>{folio} · {today()}</Text>
         </View>
