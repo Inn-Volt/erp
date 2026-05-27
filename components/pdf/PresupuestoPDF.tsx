@@ -500,7 +500,6 @@ export default function PresupuestoPDF({
         )}
 
         {/* ── TABLA DE ÍTEMS ── */}
-        <View wrap={true}>
         <View style={s.content}>
           <View style={s.tableHeader} fixed>
             <Text style={[s.tableHeaderText, s.colNum]}>#</Text>
@@ -510,12 +509,12 @@ export default function PresupuestoPDF({
             <Text style={[s.tableHeaderText, s.colValor]}>Valor</Text>
             <Text style={[s.tableHeaderText, s.colTotal]}>Total</Text>
           </View>
-          </View>
 
           {itemsDisplay.map((item, idx) => {
   const subtotal = item.cantidad * item.precio;
   return (
     <View key={item.id} style={[s.tableRow, idx % 2 === 1 ? s.tableRowAlt : {}]} wrap={false}> 
+      {/* <-- AÑADE WRAP={FALSE} AQUÍ */}
       <Text style={[s.tableCell, s.colNum]}>{idx + 1}</Text>
       <View style={s.colServicio}>
         <Text style={s.tableCell}>{item.descripcion}</Text>
@@ -577,8 +576,8 @@ export default function PresupuestoPDF({
                 <Text style={s.totalFinalValue}>{fmtCLP(totals.total)}</Text>
               </View>
             </View>
-            </View>
           </View>
+        </View>
         </View>
         <View break />
 
