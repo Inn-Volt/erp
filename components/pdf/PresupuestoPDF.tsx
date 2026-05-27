@@ -576,21 +576,17 @@ export default function PresupuestoPDF({
                 <Text style={s.totalFinalLabel}>TOTAL</Text>
                 <Text style={s.totalFinalValue}>{fmtCLP(totals.total)}</Text>
               </View>
-              <View style={s.importanteBox}>
-          <Text style={s.importanteLabel}>IMPORTANTE</Text>
-          <Text style={s.importanteText}>{textoImportante}</Text>
-        </View>
             </View>
             </View>
           </View>
         </View>
         <View break />
+
         {/* ── IMPORTANTE ── */}
         <View style={s.importanteBox}>
           <Text style={s.importanteLabel}>IMPORTANTE</Text>
           <Text style={s.importanteText}>{textoImportante}</Text>
         </View>
-        <View break />
         
         {/* ── ACLARACIONES ── */}
         <View style={s.seccionBox}>
