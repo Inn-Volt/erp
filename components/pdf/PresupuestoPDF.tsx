@@ -229,11 +229,8 @@ clienteValue: {
   firmaNombre: { fontSize: 9, fontFamily: 'Helvetica-Bold', color: BLACK, marginTop: 8, textAlign: 'center' },
   firmaArea:   { fontSize: 7, color: MUTED, textAlign: 'center' },
   firmaAceptacion: {
-    position: 'absolute',
-    left: 32,
-    right: 32,
-    bottom: 70, // ajusta según tu footer
-  },
+  marginTop: 40,
+},
 
   // ── Footer ──
   footer: {
@@ -512,7 +509,7 @@ export default function PresupuestoPDF({
           {itemsDisplay.map((item, idx) => {
             const subtotal = item.cantidad * item.precio;
             return (
-              <View key={item.id} style={[s.tableRow, idx % 2 === 1 ? s.tableRowAlt : {}]}>
+              <View key={item.id} wrap={false} style={[s.tableRow, idx % 2 === 1 ? s.tableRowAlt : {}]}>
                 <Text style={[s.tableCell, s.colNum]}>{idx + 1}</Text>
                 <View style={s.colServicio}>
                   <Text style={s.tableCell}>{item.descripcion}</Text>
@@ -575,7 +572,6 @@ export default function PresupuestoPDF({
             </View>
           </View>
         </View>
-        <View break />
         {/* ── IMPORTANTE ── */}
         <View style={s.importanteBox}>
           <Text style={s.importanteLabel}>IMPORTANTE</Text>
@@ -630,7 +626,10 @@ export default function PresupuestoPDF({
         </View>
 
         {/* ── FIRMA ── */}
-        <View style={s.firmaAceptacion}>
+        <View
+  style={s.firmaAceptacion}
+  wrap={false}
+>
   <View
     style={{
       flexDirection: 'row',
