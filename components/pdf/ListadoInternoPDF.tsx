@@ -104,8 +104,10 @@ export default function ListadoInternoPDF({ items, folio, clienteNombre, descrip
         {/* Header */}
         <View style={s.header}>
   <View>
-    <Text style={s.title}>SOLICITUD DE</Text>
-    <Text style={s.titleY}> COTIZACIÓN</Text>
+    <View style={{ flexDirection: 'row' }}>
+  <Text style={s.title}>SOLICITUD DE</Text>
+  <Text style={s.titleY}> COTIZACIÓN</Text>
+</View>
 
     <Text style={s.sub}>
       INNVOLT SpA
@@ -235,6 +237,7 @@ export default function ListadoInternoPDF({ items, folio, clienteNombre, descrip
   <Text style={{ fontSize: 7 }}>
     • Condiciones comerciales
   </Text>
+</View>
 </View>
 
         {/* Footer */}
