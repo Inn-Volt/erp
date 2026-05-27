@@ -23,7 +23,8 @@ const s = StyleSheet.create({
     color: BLACK,
     fontFamily: 'Helvetica',
     fontSize: 8,
-    paddingBottom: 60,
+    paddingTop: 20,
+    paddingBottom: 80,
   },
 
   // ── Header ──
@@ -510,21 +511,22 @@ export default function PresupuestoPDF({
           </View>
 
           {itemsDisplay.map((item, idx) => {
-            const subtotal = item.cantidad * item.precio;
-            return (
-              <View key={item.id}  style={[s.tableRow, idx % 2 === 1 ? s.tableRowAlt : {}]}>
-                <Text style={[s.tableCell, s.colNum]}>{idx + 1}</Text>
-                <View style={s.colServicio}>
-                  <Text style={s.tableCell}>{item.descripcion}</Text>
-                  <Text style={s.catBadge}>{catLabel[item.categoria] || item.categoria}</Text>
-                </View>
-                <Text style={[s.tableCellMuted, s.colDesc]}>{item.unidad}</Text>
-                <Text style={[s.tableCell, s.colQty]}>{item.cantidad}</Text>
-                <Text style={[s.tableCell, s.colValor]}>{fmtCLP(item.precio)}</Text>
-                <Text style={[s.tableCell, s.colTotal]}>{fmtCLP(subtotal)}</Text>
-              </View>
-            );
-          })}
+  const subtotal = item.cantidad * item.precio;
+  return (
+    <View key={item.id} style={[s.tableRow, idx % 2 === 1 ? s.tableRowAlt : {}]} wrap={false}> 
+      {/* <-- AÑADE WRAP={FALSE} AQUÍ */}
+      <Text style={[s.tableCell, s.colNum]}>{idx + 1}</Text>
+      <View style={s.colServicio}>
+        <Text style={s.tableCell}>{item.descripcion}</Text>
+        <Text style={s.catBadge}>{catLabel[item.categoria] || item.categoria}</Text>
+      </View>
+      <Text style={[s.tableCellMuted, s.colDesc]}>{item.unidad}</Text>
+      <Text style={[s.tableCell, s.colQty]}>{item.cantidad}</Text>
+      <Text style={[s.tableCell, s.colValor]}>{fmtCLP(item.precio)}</Text>
+      <Text style={[s.tableCell, s.colTotal]}>{fmtCLP(subtotal)}</Text>
+    </View>
+  );
+})}
 
           {/* ── TOTALES ── */}
           <View style={s.totalesBox}>
