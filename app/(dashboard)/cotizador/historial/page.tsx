@@ -55,7 +55,7 @@ useEffect(() => {
       const { data, error } = await supabase
         .from('empresas')
         .select('*')
-        .single(); // Esto fallará si la tabla está vacía o tiene más de una fila
+        .limit(1);
 
       if (data && !error) {
         setEmpresa(data);
