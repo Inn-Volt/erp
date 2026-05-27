@@ -51,27 +51,28 @@ useEffect(() => {
 useEffect(() => {
   const loadEmpresa = async () => {
     try {
-      setLoadingEmpresa(true); // Comenzamos la carga
+      setLoadingEmpresa(true);
+
       const { data, error } = await supabase
         .from('empresas')
         .select('*')
-        .limit(1);
+        .order('nombre')
+        .limit(1)
+        .single();
 
-      if (data && !error) {
-        setEmpresa(data);
-      } else {
-        console.error("Error al cargar datos:", error);
-      }
+      if (error) throw error;
+
+      setEmpresa(data);
+
     } catch (err) {
-      console.error("Error inesperado:", err);
+      console.error(err);
     } finally {
-      setLoadingEmpresa(false); // La carga terminó (con éxito o error)
+      setLoadingEmpresa(false);
     }
   };
 
   loadEmpresa();
 }, []);
-
   const handleDelete = async (id: string, folio: number) => {
     if (!confirm(`¿Eliminar cotización ${formatFolio(folio)}? Esta acción no se puede deshacer.`)) return;
     try {
@@ -95,6 +96,10 @@ useEffect(() => {
 const [empresa, setEmpresa] = useState<EmpresaInfo | null>(null);
 
   const handleDownloadPDF = async (cot: Cotizacion) => {
+    if (loadingEmpresa) {
+  toastError('Cargando configuración de empresa...');
+  return;
+}
     if (!empresa) {
   toastError('No existe empresa configurada');
   return;
