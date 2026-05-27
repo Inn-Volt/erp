@@ -85,7 +85,7 @@ useEffect(() => {
 const [empresa, setEmpresa] = useState<EmpresaInfo | null>(null);
 
   const handleDownloadPDF = async (cot: Cotizacion) => {
-    if (!empresa) {
+    if (!empresas) {
   toastError('No existe empresa configurada');
   return;
 }
