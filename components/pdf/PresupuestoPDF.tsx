@@ -148,7 +148,7 @@ clienteValue: {
   },
   tableRow: {
     flexDirection: 'row', padding: '6 8',
-    borderBottomWidth: 1, borderBottomColor: GRAY2,
+    borderBottomWidth: 1, borderBottomColor: GRAY2, wrap: false,
   },
   tableRowAlt: { backgroundColor: '#dddddd' },
   tableCell:      { fontSize: 7.5, color: '#000000' },
@@ -512,7 +512,7 @@ export default function PresupuestoPDF({
           {itemsDisplay.map((item, idx) => {
             const subtotal = item.cantidad * item.precio;
             return (
-              <View key={item.id} style={[s.tableRow, idx % 2 === 1 ? s.tableRowAlt : {}]}>
+              <View key={item.id}  style={[s.tableRow, idx % 2 === 1 ? s.tableRowAlt : {}]}>
                 <Text style={[s.tableCell, s.colNum]}>{idx + 1}</Text>
                 <View style={s.colServicio}>
                   <Text style={s.tableCell}>{item.descripcion}</Text>
