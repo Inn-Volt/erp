@@ -23,7 +23,6 @@ const s = StyleSheet.create({
     color: BLACK,
     fontFamily: 'Helvetica',
     fontSize: 8,
-    paddingTop: 40,
     paddingBottom: 60,
   },
 
