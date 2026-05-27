@@ -35,6 +35,7 @@ export default function HistorialPage() {
   const [sortDir, setSortDir] = useState<SortDir>('desc');
   const [genPDF, setGenPDF] = useState<string | null>(null);
   const [showFilters, setShowFilters] = useState(false);
+  const [loadingEmpresa, setLoadingEmpresa] = useState(true);
 
  const load = useCallback(async () => {
   setLoading(true);
@@ -49,13 +50,22 @@ useEffect(() => {
 
 useEffect(() => {
   const loadEmpresa = async () => {
-    const { data, error } = await supabase
-      .from('empresas')
-      .select('*')
-      .single();
+    try {
+      setLoadingEmpresa(true); // Comenzamos la carga
+      const { data, error } = await supabase
+        .from('empresas')
+        .select('*')
+        .single(); // Esto fallará si la tabla está vacía o tiene más de una fila
 
-    if (!error && data) {
-      setEmpresa(data);
+      if (data && !error) {
+        setEmpresa(data);
+      } else {
+        console.error("Error al cargar datos:", error);
+      }
+    } catch (err) {
+      console.error("Error inesperado:", err);
+    } finally {
+      setLoadingEmpresa(false); // La carga terminó (con éxito o error)
     }
   };
 
@@ -85,7 +95,7 @@ useEffect(() => {
 const [empresa, setEmpresa] = useState<EmpresaInfo | null>(null);
 
   const handleDownloadPDF = async (cot: Cotizacion) => {
-    if (!empresas) {
+    if (!empresa) {
   toastError('No existe empresa configurada');
   return;
 }
