@@ -163,7 +163,7 @@ export default function ListadoInternoPDF({ items, folio, clienteNombre, descrip
 
 </View>
 
-<View style={s.tableHeader}>
+<View style={s.tableHeader} fixed>
   <Text style={[s.th, s.colN]}>#</Text>
   <Text style={[s.th, s.colDesc]}>DESCRIPCIÓN</Text>
   <Text style={[s.th, s.colQty]}>CANTIDAD</Text>
