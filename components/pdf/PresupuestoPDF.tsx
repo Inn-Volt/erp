@@ -31,6 +31,7 @@ const s = StyleSheet.create({
   header: {
     flexDirection: 'row',
     alignItems: 'flex-start', // Alinea el logo y el texto arriba
+    padding: '0 32 20 32',
     borderBottomWidth: 2,
     borderBottomColor: Y,
   },
