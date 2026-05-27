@@ -201,6 +201,7 @@ export default function ListadoInternoPDF({ items, folio, clienteNombre, descrip
 ))}
 
 <View
+  wrap={false}
   style={{
     marginTop: 20,
     padding: 10,
@@ -241,7 +242,7 @@ export default function ListadoInternoPDF({ items, folio, clienteNombre, descrip
 </View>
 
         {/* Footer */}
-        <View style={s.footer} fixed>
+        <View style={s.footer}>
           <Text style={s.footerText}>InnVolt SpA</Text>
           <Text style={s.footerText}>{folio} · {today()}</Text>
         </View>
