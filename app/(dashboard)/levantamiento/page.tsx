@@ -15,7 +15,7 @@ import { newId } from '@/utils';
 
 // Importación del componente de renderizado de PDF estructurado analizado previamente
 import { PDFDownloadLink } from '@react-pdf/renderer';
-import LevantamientoPDF from '@/components/LevantamientoPDF';
+import LevantamientoPDF from '@/components/pdf/LevantamientoPDF';
 
 // ─── FIELD COMPONENTS ────────────────────────────────────────────────────────
 
