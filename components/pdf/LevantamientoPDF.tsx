@@ -12,19 +12,47 @@ const COLORS = {
 
 const styles = StyleSheet.create({
   page: { padding: 30, fontSize: 9, fontFamily: 'Helvetica' },
-  header: { marginBottom: 20, borderBottom: `2 solid ${COLORS.primary}`, paddingBottom: 10 },
+  header: { 
+    marginBottom: 20, 
+    borderBottomWidth: 2,
+    borderBottomStyle: 'solid',
+    borderBottomColor: COLORS.primary, 
+    paddingBottom: 10 
+  },
   logo: { fontSize: 22, fontWeight: 'bold' },
   title: { fontSize: 16, marginTop: 6, fontWeight: 'bold' },
+  subtitle: { fontSize: 10, marginTop: 4, color: '#555555', fontWeight: 'bold' },
   section: { marginBottom: 15 },
   sectionTitle: { backgroundColor: COLORS.primary, padding: 6, fontSize: 11, fontWeight: 'bold', marginBottom: 6 },
   row: { flexDirection: 'row', marginBottom: 4 },
   col: { flex: 1 },
   label: { fontWeight: 'bold', marginRight: 4 },
-  table: { border: `1 solid ${COLORS.border}`, marginBottom: 10 },
+  table: { 
+    borderWidth: 1,
+    borderStyle: 'solid',
+    borderColor: COLORS.border, 
+    marginBottom: 10 
+  },
   tableHeader: { flexDirection: 'row', backgroundColor: COLORS.bgLight },
-  th: { flex: 1, padding: 4, borderRight: `1 solid ${COLORS.border}`, fontWeight: 'bold' },
+  th: { 
+    flex: 1, 
+    padding: 4, 
+    borderRightWidth: 1,
+    borderRightStyle: 'solid',
+    borderRightColor: COLORS.border, 
+    fontWeight: 'bold' 
+  },
   tr: { flexDirection: 'row' },
-  td: { flex: 1, padding: 4, borderTop: `1 solid #ddd`, borderRight: `1 solid #ddd` },
+  td: { 
+    flex: 1, 
+    padding: 4, 
+    borderTopWidth: 1,
+    borderTopStyle: 'solid',
+    borderTopColor: '#dddddd', 
+    borderRightWidth: 1,
+    borderRightStyle: 'solid',
+    borderRightColor: '#dddddd' 
+  },
   footer: { position: 'absolute', bottom: 20, left: 30, right: 30, textAlign: 'center', color: '#666', fontSize: 8 },
   critical: { color: COLORS.danger, fontWeight: 'bold', marginBottom: 2 }
 });
@@ -41,13 +69,28 @@ export default function LevantamientoPDF({ data, estado }: Props) {
         <View style={styles.header}>
           <Text style={styles.logo}>INNVOLT SPA</Text>
           <Text style={styles.title}>LEVANTAMIENTO TÉCNICO ELÉCTRICO</Text>
+          <Text style={styles.subtitle}>ESTADO DEL INFORME: {estado.toUpperCase()}</Text>
         </View>
 
         {/* 01. INFO GENERAL */}
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>01. INFORMACIÓN GENERAL</Text>
-          <View style={styles.row}><Text style={styles.col}><Text style={styles.label}>Cliente:</Text>{data.cliente_nombre}</Text><Text style={styles.col}><Text style={styles.label}>Empresa:</Text>{data.empresa}</Text></View>
-          <View style={styles.row}><Text style={styles.col}><Text style={styles.label}>Dirección:</Text>{data.direccion}</Text><Text style={styles.col}><Text style={styles.label}>Técnico:</Text>{data.tecnico}</Text></View>
+          <View style={styles.row}>
+            <View style={styles.col}>
+              <Text><Text style={styles.label}>Cliente:</Text>{data.cliente_nombre}</Text>
+            </View>
+            <View style={styles.col}>
+              <Text><Text style={styles.label}>Empresa:</Text>{data.empresa}</Text>
+            </View>
+          </View>
+          <View style={styles.row}>
+            <View style={styles.col}>
+              <Text><Text style={styles.label}>Dirección:</Text>{data.direccion}</Text>
+            </View>
+            <View style={styles.col}>
+              <Text><Text style={styles.label}>Técnico:</Text>{data.tecnico}</Text>
+            </View>
+          </View>
         </View>
 
         {/* 02. INFO ELÉCTRICA */}
@@ -60,9 +103,19 @@ export default function LevantamientoPDF({ data, estado }: Props) {
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>03. TABLEROS ELÉCTRICOS</Text>
           <View style={styles.table}>
-            <View style={styles.tableHeader}><Text style={styles.th}>Nombre</Text><Text style={styles.th}>Tipo</Text><Text style={styles.th}>Ubicación</Text><Text style={styles.th}>Estado</Text></View>
-            {data.tableros.map(t => (
-              <View key={t._id} style={styles.tr}><Text style={styles.td}>{t.nombre}</Text><Text style={styles.td}>{t.tipo}</Text><Text style={styles.td}>{t.ubicacion}</Text><Text style={styles.td}>{t.estado}</Text></View>
+            <View style={styles.tableHeader}>
+              <Text style={styles.th}>Nombre</Text>
+              <Text style={styles.th}>Tipo</Text>
+              <Text style={styles.th}>Ubicación</Text>
+              <Text style={styles.th}>Estado</Text>
+            </View>
+            {data.tableros && data.tableros.map(t => (
+              <View key={t._id} style={styles.tr}>
+                <Text style={styles.td}>{t.nombre}</Text>
+                <Text style={styles.td}>{t.tipo}</Text>
+                <Text style={styles.td}>{t.ubicacion}</Text>
+                <Text style={styles.td}>{t.estado}</Text>
+              </View>
             ))}
           </View>
         </View>
