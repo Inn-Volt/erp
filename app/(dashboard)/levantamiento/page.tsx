@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { Save, Printer, ArrowLeft, AlertTriangle, CheckCircle } from 'lucide-react';
+import { Save, Printer, ArrowLeft, AlertTriangle, CheckCircle, FileDown } from 'lucide-react';
 import { levantamientosService } from '@/services/levantamientos';
 import { clientesService } from '@/services/clientes';
 import type { Cliente } from '@/types';
@@ -12,6 +12,10 @@ import {
   ESTADOS_GEN, TIPOS_TABLERO, TIPOS_CABLE, TIPOS_CANAL, TIPOS_LUM, SISTEMAS_ELEC,
 } from '@/types/levantamiento';
 import { newId } from '@/utils';
+
+// Importación del componente de renderizado de PDF estructurado analizado previamente
+import { PDFDownloadLink } from '@react-pdf/renderer';
+import LevantamientoPDF from '@/components/LevantamientoPDF';
 
 // ─── FIELD COMPONENTS ────────────────────────────────────────────────────────
 
@@ -131,6 +135,7 @@ const Sec = ({ id, num, title, icon, children }: { id: string; num: string; titl
 
 // ─── DYNAMIC TABLE ────────────────────────────────────────────────────────────
 interface ColDef { key: string; label: string; type?: 'select'; options?: string[]; ph?: string; w?: number; }
+
 function DynTable<T extends { _id: string }>({
   cols, rows, onAdd, onRemove, onUpd, addLabel,
 }: { cols: ColDef[]; rows: T[]; addLabel: string; onAdd: () => void; onRemove: (i: number) => void; onUpd: (i: number, k: string, v: string) => void; }) {
@@ -150,14 +155,12 @@ function DynTable<T extends { _id: string }>({
                 {cols.map(c => (
                   <td key={c.key}>
                     {c.type === 'select' ? (
-                      <select value={(row as Record<string,string>)[c.key] || ''} onChange={e => onUpd(ri, c.key, e.target.value)}
-                        className="lev-cell-select">
+                      <select value={(row as Record<string,string>)[c.key] || ''} onChange={e => onUpd(ri, c.key, e.target.value)} className="lev-cell-select">
                         <option value="">—</option>
                         {(c.options || []).map(o => <option key={o} value={o}>{o}</option>)}
                       </select>
                     ) : (
-                      <input value={(row as Record<string,string>)[c.key] || ''} onChange={e => onUpd(ri, c.key, e.target.value)}
-                        placeholder={c.ph || ''} className="lev-cell-input" />
+                      <input value={(row as Record<string,string>)[c.key] || ''} onChange={e => onUpd(ri, c.key, e.target.value)} placeholder={c.ph || ''} className="lev-cell-input" />
                     )}
                   </td>
                 ))}
@@ -195,7 +198,6 @@ export default function LevantamientoPage() {
   const router       = useRouter();
   const searchParams = useSearchParams();
   const editId       = searchParams?.get('id');
-
   const [data,     setData]     = useState<LevantamientoData>(emptyLevantamiento());
   const [clientes, setClientes] = useState<Cliente[]>([]);
   const [clienteId,setClienteId]= useState('');
@@ -232,7 +234,8 @@ export default function LevantamientoPage() {
         router.replace(`/levantamiento?id=${created.id}`);
       }
       setSaved(true); setTimeout(() => setSaved(false), 2500);
-    } catch { alert('Error al guardar'); }
+    } catch { alert('Error al guardar');
+    }
     setSaving(false);
   };
 
@@ -269,16 +272,18 @@ export default function LevantamientoPage() {
         }
         .lev-sec-icon{
           width:30px; height:30px; background:rgba(255,198,0,0.08);
-          border:1px solid rgba(255,198,0,0.25); display:flex;
-          align-items:center; justify-content:center; font-size:.9rem; flex-shrink:0;
+          border:1px solid rgba(255,198,0,0.25);
+          display:flex; align-items:center; justify-content:center; font-size:.9rem; flex-shrink:0;
         }
         .lev-sec-num{
-          font-family:var(--font-display); font-weight:700;
+          font-family:var(--font-display);
+          font-weight:700;
           font-size:.5rem; letter-spacing:.35em; text-transform:uppercase;
           color:var(--y); margin-bottom:2px;
         }
         .lev-sec-title{
-          font-family:var(--font-display); font-weight:900;
+          font-family:var(--font-display);
+          font-weight:900;
           font-size:.88rem; letter-spacing:.1em; text-transform:uppercase; color:#fff;
         }
         .lev-sec-body{ padding:20px 20px 6px; }
@@ -287,7 +292,8 @@ export default function LevantamientoPage() {
         .lev-dyntable-wrap{ margin-bottom:4px; }
         .lev-dyntable{ width:100%; border-collapse:collapse; font-size:.78rem; }
         .lev-dyntable th{
-          padding:7px 9px; text-align:left; white-space:nowrap;
+          padding:7px 9px;
+          text-align:left; white-space:nowrap;
           font-family:var(--font-display); font-weight:700;
           font-size:.52rem; letter-spacing:.2em; text-transform:uppercase;
           color:var(--y); background:var(--bg2); border-bottom:1px solid rgba(255,255,255,0.07);
@@ -295,18 +301,21 @@ export default function LevantamientoPage() {
         .lev-dyntable td{ padding:5px 5px; border-bottom:1px solid rgba(255,255,255,0.04); }
         .lev-dyntable tr:nth-child(even) td{ background:rgba(255,255,255,0.015); }
         .lev-cell-input,.lev-cell-select{
-          width:100%; background:var(--bg3); border:1px solid rgba(255,255,255,0.07);
+          width:100%; background:var(--bg3);
+          border:1px solid rgba(255,255,255,0.07);
           color:var(--text); padding:6px 8px; font-size:.8rem;
           font-family:var(--font-body); outline:none; box-sizing:border-box;
         }
         .lev-cell-select{ appearance:none; cursor:pointer; }
         .lev-del-btn{
-          background:none; border:none; color:var(--muted);
+          background:none;
+          border:none; color:var(--muted);
           cursor:pointer; font-size:1.1rem; line-height:1; padding:2px 6px;
         }
         .lev-del-btn:hover{ color:#f87171; }
         .lev-add-btn{
-          margin-top:8px; padding:7px 16px;
+          margin-top:8px;
+          padding:7px 16px;
           border:1px dashed rgba(255,198,0,.3); background:transparent;
           color:var(--y); font-family:var(--font-display); font-weight:700;
           font-size:.65rem; letter-spacing:.12em; text-transform:uppercase;
@@ -316,18 +325,21 @@ export default function LevantamientoPage() {
 
         /* ── Nav pills ───────────────────────── */
         .lev-nav{
-          display:flex; gap:3px; overflow-x:auto; margin-bottom:18px;
+          display:flex;
+          gap:3px; overflow-x:auto; margin-bottom:18px;
           padding-bottom:4px; -webkit-overflow-scrolling:touch;
         }
         .lev-nav::-webkit-scrollbar{ height:2px; }
         .lev-nav button{
-          flex-shrink:0; padding:6px 12px; font-family:var(--font-display);
+          flex-shrink:0;
+          padding:6px 12px; font-family:var(--font-display);
           font-weight:700; font-size:.6rem; letter-spacing:.1em; text-transform:uppercase;
           border:1px solid rgba(255,255,255,0.08); background:transparent;
           color:var(--muted); cursor:pointer; transition:all .15s; white-space:nowrap;
         }
         .lev-nav button.active{
-          border-color:var(--y); background:rgba(255,198,0,.1); color:var(--y);
+          border-color:var(--y);
+          background:rgba(255,198,0,.1); color:var(--y);
         }
 
         /* ── Checklist ───────────────────────── */
@@ -338,7 +350,8 @@ export default function LevantamientoPage() {
         }
         @media(max-width:480px){ .lev-checklist{ grid-template-columns:1fr; } }
         .lev-check-item{
-          display:flex; align-items:center; gap:10px; cursor:pointer;
+          display:flex;
+          align-items:center; gap:10px; cursor:pointer;
           padding:10px 12px;
           border:1px solid rgba(255,255,255,0.07);
           background:transparent; transition:all .15s;
@@ -348,7 +361,8 @@ export default function LevantamientoPage() {
           background:rgba(248,113,113,.07);
         }
         .lev-check-box{
-          width:20px; height:20px; flex-shrink:0;
+          width:20px; height:20px;
+          flex-shrink:0;
           display:flex; align-items:center; justify-content:center;
           background:var(--bg3); border:1px solid rgba(255,255,255,.1);
           font-size:.7rem; color:#fff; transition:all .15s;
@@ -359,7 +373,8 @@ export default function LevantamientoPage() {
 
         /* ── Saved toast ─────────────────────── */
         .lev-toast{
-          position:fixed; bottom:24px; right:24px; z-index:999;
+          position:fixed;
+          bottom:24px; right:24px; z-index:999;
           background:var(--bg2); border:1px solid rgba(74,222,128,.4);
           padding:10px 20px; display:flex; align-items:center; gap:8px;
           animation:fadeInUp .3s ease;
@@ -369,128 +384,43 @@ export default function LevantamientoPage() {
           to{ opacity:1; transform:translateY(0); }
         }
 
-        /* ════════════════════════════════════════
-           PRINT STYLES — PDF multi-página profesional
-        ════════════════════════════════════════ */
+        /* ── Print styles fallback ── */
         @media print {
-          /* Reset layout — ocultar todo excepto el contenido */
           body, html { background:#fff !important; color:#000 !important; }
           body * { -webkit-print-color-adjust:exact !important; print-color-adjust:exact !important; }
-
-          /* Ocultar UI que no va en el PDF */
-          .lev-nav,
-          .lev-add-btn,
-          .lev-del-btn,
-          .iv-header-actions,
-          .iv-page-header button,
-          aside,
-          header,
-          .lev-toast,
-          [data-no-print]
-          { display:none !important; }
-
-          /* Contenedor principal sin overflow */
+          .lev-nav, .lev-add-btn, .lev-del-btn, .iv-header-actions, .iv-page-header button, aside, header, .lev-toast, [data-no-print] { display:none !important; }
           body { overflow:visible !important; }
           #__next { overflow:visible !important; }
           main { padding:0 !important; overflow:visible !important; }
-
-          /* Forzar fondo blanco y texto negro */
-          .lev-section,
-          .lev-sec-head,
-          .lev-sec-body {
-            background:#fff !important;
-            border:1px solid #ddd !important;
-          }
-          .lev-sec-head {
-            background:#f5f5f5 !important;
-            border-bottom:1px solid #ddd !important;
-            padding:10px 16px !important;
-          }
-          .lev-sec-num   { color:#c9a800 !important; font-size:.55rem !important; }
+          .lev-section, .lev-sec-head, .lev-sec-body { background:#fff !important; border:1px solid #ddd !important; }
+          .lev-sec-head { background:#f5f5f5 !important; border-bottom:1px solid #ddd !important; padding:10px 16px !important; }
+          .lev-sec-num { color:#c9a800 !important; font-size:.55rem !important; }
           .lev-sec-title { color:#000 !important; font-size:1rem !important; }
-          .lev-sec-icon  { background:#fff3cc !important; border:1px solid #e6c200 !important; }
-
-          /* Inputs y selects en modo lectura */
-          input, textarea, select {
-            background:#fafafa !important;
-            border:1px solid #ccc !important;
-            color:#000 !important;
-            font-size:10pt !important;
-            -webkit-appearance:none !important;
-          }
-          /* Selects: mostrar como texto simple */
+          .lev-sec-icon { background:#fff3cc !important; border:1px solid #e6c200 !important; }
+          input, textarea, select { background:#fafafa !important; border:1px solid #ccc !important; color:#000 !important; font-size:10pt !important; -webkit-appearance:none !important; }
           select { padding-right:8px !important; }
-
-          /* Grids en print */
           .lev-grid-2 { grid-template-columns:1fr 1fr !important; }
           .lev-grid-3 { grid-template-columns:1fr 1fr 1fr !important; }
-
-          /* Labels */
-          .lev-sec-num, p[style*="letter-spacing"] {
-            color:#666 !important;
-          }
-
-          /* Tabla en print */
-          .lev-dyntable th {
-            background:#f0f0f0 !important;
-            color:#555 !important;
-            border-bottom:1px solid #bbb !important;
-            font-size:7pt !important;
-          }
+          .lev-sec-num, p[style*="letter-spacing"] { color:#666 !important; }
+          .lev-dyntable th { background:#f0f0f0 !important; color:#555 !important; border-bottom:1px solid #bbb !important; font-size:7pt !important; }
           .lev-dyntable td { border-bottom:1px solid #e8e8e8 !important; }
           .lev-dyntable tr:nth-child(even) td { background:#f9f9f9 !important; }
-          .lev-cell-input, .lev-cell-select {
-            background:#fafafa !important;
-            border:1px solid #ddd !important;
-            color:#000 !important;
-            font-size:8.5pt !important;
-          }
-
-          /* Checklist en print */
-          .lev-check-item {
-            border:1px solid #ddd !important;
-            background:#fff !important;
-          }
-          .lev-check-item.on {
-            background:#fff4f4 !important;
-            border-color:#f87171 !important;
-          }
+          .lev-cell-input, .lev-cell-select { background:#fafafa !important; border:1px solid #ddd !important; color:#000 !important; font-size:8.5pt !important; }
+          .lev-check-item { border:1px solid #ddd !important; background:#fff !important; }
+          .lev-check-item.on { background:#fff4f4 !important; border-color:#f87171 !important; }
           .lev-check-box { background:#f0f0f0 !important; border:1px solid #ccc !important; color:#000 !important; }
           .lev-check-box.on { background:#ef4444 !important; color:#fff !important; border-color:#ef4444 !important; }
           .lev-check-label { color:#333 !important; }
           .lev-check-label.on { color:#c0392b !important; }
-
-          /* Radio buttons en print */
           button { display:none !important; }
-          /* Mostrar valor seleccionado de radios */
           .lev-radio-print { display:block !important; font-size:10pt !important; color:#000 !important; padding:8px 0 !important; }
-
-          /* Alerta crítica */
-          .lev-crit-alert {
-            background:#fff4f4 !important;
-            border:1px solid #f87171 !important;
-            color:#c0392b !important;
-          }
-
-          /* Saltos de página */
+          .lev-crit-alert { background:#fff4f4 !important; border:1px solid #f87171 !important; color:#c0392b !important; }
           .lev-section { page-break-inside:avoid; break-inside:avoid; margin-bottom:12px !important; }
-          /* Forzar salto antes de secciones pesadas */
           #s3, #s4, #s8, #s11 { page-break-before:auto; }
-
-          /* Header del PDF */
           .lev-print-header { display:flex !important; }
-
-          /* Márgenes de página */
-          @page {
-            size:A4;
-            margin:15mm 12mm 15mm 12mm;
-          }
-
-          /* Tipografía base en print */
+          @page { size:A4; margin:15mm 12mm 15mm 12mm; }
           body { font-size:10pt !important; line-height:1.4 !important; }
         }
-
-        /* Hide print-only elements on screen */
         .lev-print-header { display:none; }
         .lev-radio-print  { display:none; }
       `}</style>
@@ -539,12 +469,28 @@ export default function LevantamientoPage() {
               </select>
               <span style={{ position:'absolute', right:10, top:'50%', transform:'translateY(-50%)', color:'var(--muted)', pointerEvents:'none', fontSize:'.6rem' }}>▼</span>
             </div>
+      
             <button onClick={handleSave} disabled={saving} className="btn btn-primary">
               <Save size={13} /> {saving ? 'Guardando…' : 'Guardar'}
             </button>
             <button onClick={triggerPrint} className="btn btn-ghost btn-sm">
-              <Printer size={13} /> PDF
+              <Printer size={13} /> Imprimir
             </button>
+            
+            {/* Componente Asíncrono para descarga directa estructurada de PDF */}
+            <PDFDownloadLink 
+              document={<LevantamientoPDF data={data} estado={estado} />} 
+              fileName={`Levantamiento_${data.cliente_nombre || 'Sin_Nombre'}.pdf`}
+              className="btn btn-secondary btn-sm"
+              style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}
+            >
+              {({ loading }) => (
+                <>
+                  <FileDown size={13} />
+                  {loading ? 'Generando...' : 'Descargar PDF'}
+                </>
+              )}
+            </PDFDownloadLink>
           </div>
         </div>
 
@@ -612,7 +558,6 @@ export default function LevantamientoPage() {
         {/* ════ S2: ELÉCTRICA ════ */}
         <Sec id="s2" num="02" title="Información Eléctrica General" icon="⚡">
           <Radio label="Sistema eléctrico" options={SISTEMAS_ELEC} value={data.sistema} onChange={v=>set('sistema',v)} />
-          {/* Print fallback for radio */}
           <p className="lev-radio-print">Sistema eléctrico: <strong>{data.sistema||'—'}</strong></p>
 
           <G cols={2}>
@@ -628,7 +573,6 @@ export default function LevantamientoPage() {
             <Toggle label="Grupo electrógeno" checked={data.grupo_electrogeno} onChange={v=>set('grupo_electrogeno',v)} />
             <Toggle label="UPS" checked={data.ups} onChange={v=>set('ups',v)} />
           </G>
-          {/* Print: toggles */}
           <p className="lev-radio-print">
             Tierra física: <strong>{data.tierra?'Sí':'No'}</strong> &nbsp;|&nbsp;
             Grupo electrógeno: <strong>{data.grupo_electrogeno?'Sí':'No'}</strong> &nbsp;|&nbsp;
@@ -808,8 +752,23 @@ export default function LevantamientoPage() {
             <Save size={14} /> {saving?'Guardando…':'Guardar levantamiento'}
           </button>
           <button onClick={triggerPrint} className="btn btn-ghost btn-sm">
-            <Printer size={14} /> Exportar PDF
+            <Printer size={14} /> Vista de Impresión (CSS)
           </button>
+          
+          {/* Duplicado del componente de descarga en la botonera inferior */}
+          <PDFDownloadLink 
+            document={<LevantamientoPDF data={data} estado={estado} />} 
+            fileName={`Levantamiento_${data.cliente_nombre || 'Sin_Nombre'}.pdf`}
+            className="btn btn-ghost btn-sm"
+            style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}
+          >
+            {({ loading }) => (
+              <>
+                <FileDown size={14} />
+                {loading ? 'Generando...' : 'Exportar PDF Estructurado'}
+              </>
+            )}
+          </PDFDownloadLink>
         </div>
 
         {/* Saved toast */}
