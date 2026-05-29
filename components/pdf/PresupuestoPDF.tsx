@@ -95,6 +95,7 @@ const s = StyleSheet.create({
     backgroundColor: GRIS,
     borderLeftWidth: 2,
     borderLeftColor: Y,
+    // Sin minHeight fijo — crece con el contenido
   },
   descLabel: { fontSize: 6, color: MUTED, letterSpacing: 2, marginBottom: 4 },
   descText: { fontSize: 7.5, color: BLACK, lineHeight: 1.5 },
@@ -445,14 +446,38 @@ export default function PresupuestoPDF({
         </View>
 
         {/* ── DESCRIPCIÓN GENERAL ──
-            wrap={true} para que si es muy larga pueda paginar.
-            minPresenceAhead={60} para que no quede solo el título al fondo. */}
-        {descripcionGeneral && (
-          <View style={s.descBox} minPresenceAhead={60}>
-            <Text style={s.descLabel}>DESCRIPCIÓN DEL TRABAJO</Text>
-            <Text style={s.descText}>{descripcionGeneral}</Text>
-          </View>
-        )}
+            Se divide en párrafos individuales con wrap={false} por párrafo.
+            Así ningún párrafo se corta a mitad, y el bloque puede paginar limpiamente.
+            El título + primer párrafo van juntos (minPresenceAhead) para no quedar solos. */}
+        {descripcionGeneral && (() => {
+          // Dividir por saltos de línea reales o doble salto
+          const parrafos = descripcionGeneral
+            .split(/\n/)
+            .map(p => p.trim())
+            .filter(p => p.length > 0);
+
+          return (
+            <View style={s.descBox}>
+              {/* Título + primer párrafo siempre juntos */}
+              <View wrap={false}>
+                <Text style={s.descLabel}>DESCRIPCIÓN DEL TRABAJO</Text>
+                {parrafos.length > 0 && (
+                  <Text style={[s.descText, { marginBottom: 4 }]}>{parrafos[0]}</Text>
+                )}
+              </View>
+              {/* Resto de párrafos — cada uno atómico */}
+              {parrafos.slice(1).map((parrafo, i) => (
+                <Text
+                  key={i}
+                  style={[s.descText, { marginBottom: 4 }]}
+                  wrap={false}
+                >
+                  {parrafo}
+                </Text>
+              ))}
+            </View>
+          );
+        })()}
 
         {/* ── TABLA DE ÍTEMS ──
             El truco clave: envolver header + primera fila en wrap={false}
