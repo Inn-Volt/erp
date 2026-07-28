@@ -153,22 +153,122 @@ ALTER TABLE public.cotizaciones          ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.configuracion_empresa ENABLE ROW LEVEL SECURITY;
 
 -- Profiles: solo ver/editar el propio
+DROP POLICY IF EXISTS "profiles_select" ON public.profiles;
 CREATE POLICY "profiles_select" ON public.profiles FOR SELECT USING (auth.uid() = id);
+DROP POLICY IF EXISTS "profiles_update" ON public.profiles;
 CREATE POLICY "profiles_update" ON public.profiles FOR UPDATE USING (auth.uid() = id);
 
 -- Clientes: usuarios autenticados ven/editan todos
+DROP POLICY IF EXISTS "clientes_all" ON public.clientes;
 CREATE POLICY "clientes_all" ON public.clientes
   FOR ALL USING (auth.role() = 'authenticated');
 
 -- Cotizaciones: usuarios autenticados ven/editan todos
+DROP POLICY IF EXISTS "cotizaciones_all" ON public.cotizaciones;
 CREATE POLICY "cotizaciones_all" ON public.cotizaciones
   FOR ALL USING (auth.role() = 'authenticated');
 
 -- Configuración: usuarios autenticados
+DROP POLICY IF EXISTS "config_all" ON public.configuracion_empresa;
 CREATE POLICY "config_all" ON public.configuracion_empresa
   FOR ALL USING (auth.role() = 'authenticated');
 
--- ─── 8. DATOS DE PRUEBA (opcional) ───────────────────────────────────────────
+-- ─── 8. EMPRESAS EMISORAS ────────────────────────────────────────────────────
+-- Empresas que emiten cotizaciones (multi-empresa). Usada por el Cotizador,
+-- el Historial y el EmpresaModal. Antes faltaba en el schema.
+CREATE TABLE IF NOT EXISTS public.empresas (
+  id                UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  nombre            TEXT NOT NULL,
+  slogan            TEXT,
+  rut               TEXT DEFAULT '',
+  giro              TEXT,
+  email             TEXT,
+  telefono          TEXT,
+  direccion         TEXT,
+  website           TEXT,
+  logo_url          TEXT,
+  banco             TEXT,
+  tipo_cuenta       TEXT,
+  cuenta_bancaria   TEXT,
+  texto_importante  TEXT,
+  created_at        TIMESTAMPTZ DEFAULT NOW(),
+  updated_at        TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_empresas_nombre ON public.empresas(nombre);
+
+DROP TRIGGER IF EXISTS trg_empresas_updated ON public.empresas;
+CREATE TRIGGER trg_empresas_updated
+  BEFORE UPDATE ON public.empresas
+  FOR EACH ROW EXECUTE FUNCTION public.set_updated_at();
+
+-- Seed: empresa InnVolt por defecto (solo si la tabla está vacía)
+INSERT INTO public.empresas (nombre, slogan, rut, giro, email, telefono, direccion, website)
+SELECT 'InnVolt SpA', 'Servicios Eléctricos y Tecnológicos', '78.299.986-9',
+       'Ingeniería Eléctrica', 'inn-volt@outlook.cl', '+56 9 8920 3902',
+       'Santiago, Chile', 'www.innvolt.cl'
+WHERE NOT EXISTS (SELECT 1 FROM public.empresas);
+
+-- ─── 9. LEVANTAMIENTOS TÉCNICOS ──────────────────────────────────────────────
+-- Levantamiento técnico eléctrico en terreno. Todo el detalle va en JSONB `data`.
+CREATE TABLE IF NOT EXISTS public.levantamientos (
+  id          UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  folio       SERIAL UNIQUE NOT NULL,
+  cliente_id  UUID REFERENCES public.clientes(id) ON DELETE SET NULL,
+  data        JSONB DEFAULT '{}'::JSONB,
+  estado      TEXT DEFAULT 'Borrador'
+              CHECK (estado IN ('Borrador','Completado','Enviado','Archivado')),
+  created_at  TIMESTAMPTZ DEFAULT NOW(),
+  updated_at  TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_levantamientos_folio   ON public.levantamientos(folio DESC);
+CREATE INDEX IF NOT EXISTS idx_levantamientos_cliente ON public.levantamientos(cliente_id);
+CREATE INDEX IF NOT EXISTS idx_levantamientos_estado  ON public.levantamientos(estado);
+CREATE INDEX IF NOT EXISTS idx_levantamientos_created ON public.levantamientos(created_at DESC);
+
+DROP TRIGGER IF EXISTS trg_levantamientos_updated ON public.levantamientos;
+CREATE TRIGGER trg_levantamientos_updated
+  BEFORE UPDATE ON public.levantamientos
+  FOR EACH ROW EXECUTE FUNCTION public.set_updated_at();
+
+-- ─── 10. RLS de las tablas nuevas ────────────────────────────────────────────
+ALTER TABLE public.empresas       ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.levantamientos ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS "empresas_all" ON public.empresas;
+CREATE POLICY "empresas_all" ON public.empresas
+  FOR ALL USING (auth.role() = 'authenticated');
+
+DROP POLICY IF EXISTS "levantamientos_all" ON public.levantamientos;
+CREATE POLICY "levantamientos_all" ON public.levantamientos
+  FOR ALL USING (auth.role() = 'authenticated');
+
+-- ─── 11. STORAGE: bucket "logos" (público) ───────────────────────────────────
+-- Usado por EmpresaModal para subir el logo de cada empresa emisora.
+INSERT INTO storage.buckets (id, name, public)
+VALUES ('logos', 'logos', TRUE)
+ON CONFLICT (id) DO NOTHING;
+
+-- Lectura pública de logos
+DROP POLICY IF EXISTS "logos_public_read" ON storage.objects;
+CREATE POLICY "logos_public_read" ON storage.objects
+  FOR SELECT USING (bucket_id = 'logos');
+
+-- Subir / actualizar / borrar logos: solo autenticados
+DROP POLICY IF EXISTS "logos_auth_insert" ON storage.objects;
+CREATE POLICY "logos_auth_insert" ON storage.objects
+  FOR INSERT WITH CHECK (bucket_id = 'logos' AND auth.role() = 'authenticated');
+
+DROP POLICY IF EXISTS "logos_auth_update" ON storage.objects;
+CREATE POLICY "logos_auth_update" ON storage.objects
+  FOR UPDATE USING (bucket_id = 'logos' AND auth.role() = 'authenticated');
+
+DROP POLICY IF EXISTS "logos_auth_delete" ON storage.objects;
+CREATE POLICY "logos_auth_delete" ON storage.objects
+  FOR DELETE USING (bucket_id = 'logos' AND auth.role() = 'authenticated');
+
+-- ─── 12. DATOS DE PRUEBA (opcional) ──────────────────────────────────────────
 -- Descomenta para insertar datos de demo
 /*
 INSERT INTO public.clientes (nombre_cliente, empresa, rut, email, telefono, direccion) VALUES
