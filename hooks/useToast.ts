@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useCallback, useRef } from 'react';
+import { useState, useCallback, useRef, useMemo } from 'react';
 import type { ToastMessage } from '@/types';
 
 let globalToast: ((msg: Omit<ToastMessage, 'id'>) => void) | null = null;
@@ -30,10 +30,14 @@ export function useToast() {
     globalToast?.(msg);
   }, []);
 
-  return {
+  // IMPORTANTE: el objeto se memoiza para que success/error/warning/info
+  // conserven su identidad entre renders. Si no, cualquier useCallback/useEffect
+  // que dependa de ellos se recrea en cada render → bucle de recarga (la
+  // pestaña parpadea y los datos nunca terminan de cargar).
+  return useMemo(() => ({
     success: (message: string) => show({ type: 'success', message }),
-    error: (message: string) => show({ type: 'error', message }),
+    error:   (message: string) => show({ type: 'error', message }),
     warning: (message: string) => show({ type: 'warning', message }),
-    info: (message: string) => show({ type: 'info', message }),
-  };
+    info:    (message: string) => show({ type: 'info', message }),
+  }), [show]);
 }

@@ -13,12 +13,15 @@ function KpiCard({ label, value, sub, icon: Icon, accent }: {
   label: string; value: string; sub?: string;
   icon: React.ElementType; accent?: string;
 }) {
+  // El acento viaja como variable CSS: así la franja superior y el fondo del
+  // icono se derivan del mismo color sin concatenar hex (que rompía con tokens).
+  const estilo = { '--kpi-accent': accent || 'var(--y-brand)' } as React.CSSProperties;
   return (
-    <div className="kpi-card" style={{ borderTopColor: accent || 'var(--y)' }}>
+    <div className="kpi-card" style={estilo}>
       <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between' }}>
         <p className="label-muted" style={{ letterSpacing: '0.3em' }}>{label}</p>
-        <div style={{ width: 32, height: 32, display: 'flex', alignItems: 'center', justifyContent: 'center', background: accent ? `${accent}14` : 'rgba(255,198,0,0.08)' }}>
-          <Icon size={15} color={accent || 'var(--y)'} />
+        <div className="kpi-icon">
+          <Icon size={15} color="var(--kpi-accent)" />
         </div>
       </div>
       <p className="kpi-value">{value}</p>
@@ -47,6 +50,10 @@ export default function DashboardPage() {
       setKpis(k);
       setRecientes(r);
       setTotalClientes(c.length);
+    }).catch(err => {
+      // Sin este catch, un error de red dejaba el dashboard cargando para siempre
+      console.error('Error al cargar el dashboard:', err);
+    }).finally(() => {
       setLoading(false);
     });
   }, []);
@@ -57,7 +64,7 @@ export default function DashboardPage() {
       <div className="iv-page-header">
         <div>
           <p className="label-muted" style={{ marginBottom: '0.35rem', letterSpacing: '0.4em' }}>Resumen del sistema</p>
-          <h1 style={{ fontFamily: 'var(--font-display)', fontWeight: 900, fontSize: 'clamp(2rem,5vw,3.2rem)', textTransform: 'uppercase', lineHeight: 0.9, color: '#fff' }}>
+          <h1 style={{ fontFamily: 'var(--font-display)', fontWeight: 900, fontSize: 'clamp(2rem,5vw,3.2rem)', textTransform: 'uppercase', lineHeight: 0.9, color: 'var(--text)' }}>
             DASH<span style={{ color: 'var(--y)' }}>BOARD</span>
           </h1>
         </div>
@@ -75,9 +82,9 @@ export default function DashboardPage() {
         ) : (
           <>
             <KpiCard label="Total cotizaciones" value={String(kpis?.total_cotizaciones || 0)} icon={FileText} />
-            <KpiCard label="Venta acumulada" value={formatCLP(kpis?.venta_acumulada || 0)} sub="Excl. rechazadas" icon={TrendingUp} accent="#4ade80" />
-            <KpiCard label="Pipeline pendiente" value={formatCLP(kpis?.pendiente_pipeline || 0)} sub="En espera de respuesta" icon={Clock} accent="#fbbf24" />
-            <KpiCard label="Trabajos aceptados" value={String(kpis?.aceptadas || 0)} sub="Aceptado + Realizado + Entregado" icon={Zap} accent="#60a5fa" />
+            <KpiCard label="Venta acumulada" value={formatCLP(kpis?.venta_acumulada || 0)} sub="Excl. rechazadas" icon={TrendingUp} accent="var(--success)" />
+            <KpiCard label="Pipeline pendiente" value={formatCLP(kpis?.pendiente_pipeline || 0)} sub="En espera de respuesta" icon={Clock} accent="var(--orange)" />
+            <KpiCard label="Trabajos aceptados" value={String(kpis?.aceptadas || 0)} sub="Aceptado + Realizado + Entregado" icon={Zap} accent="var(--info)" />
           </>
         )}
       </div>
@@ -115,7 +122,7 @@ export default function DashboardPage() {
                       padding: '0.75rem', background: 'var(--bg3)',
                       cursor: 'pointer', transition: 'background 0.1s',
                     }}
-                    onMouseEnter={e => (e.currentTarget.style.background = 'rgba(255,198,0,0.04)')}
+                    onMouseEnter={e => (e.currentTarget.style.background = 'var(--y-soft)')}
                     onMouseLeave={e => (e.currentTarget.style.background = 'var(--bg3)')}
                   >
                     <span style={{ fontFamily: 'var(--font-display)', fontWeight: 900, fontSize: '0.85rem', color: 'var(--y)', minWidth: 72 }}>
@@ -128,7 +135,7 @@ export default function DashboardPage() {
                       <p style={{ fontSize: '0.75rem', color: 'var(--muted)' }}>{formatDate(c.created_at)}</p>
                     </div>
                     <span style={{ color: ec.color, background: ec.bg, ...badgeStyle }}>{c.estado}</span>
-                    <span style={{ fontFamily: 'var(--font-display)', fontWeight: 700, fontSize: '0.85rem', color: '#fff', minWidth: 90, textAlign: 'right' }}>
+                    <span style={{ fontFamily: 'var(--font-display)', fontWeight: 700, fontSize: '0.85rem', color: 'var(--text)', minWidth: 90, textAlign: 'right' }}>
                       {formatCLP(c.total)}
                     </span>
                     <ChevronRight size={13} color="var(--muted)" />
@@ -154,7 +161,7 @@ export default function DashboardPage() {
               ].map(([k, v]) => (
                 <div key={k} style={{ display: 'flex', flexDirection: 'column', gap: '0.15rem', paddingBottom: '0.5rem', borderBottom: '1px solid var(--border2)' }}>
                   <span style={{ fontSize: '0.65rem', color: 'var(--muted)', fontFamily: 'var(--font-display)', letterSpacing: '0.2em', textTransform: 'uppercase' }}>{k}</span>
-                  <span style={{ fontSize: '0.82rem', color: '#fff' }}>{v}</span>
+                  <span style={{ fontSize: '0.82rem', color: 'var(--text)' }}>{v}</span>
                 </div>
               ))}
             </div>
@@ -187,7 +194,7 @@ export default function DashboardPage() {
               </div>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '0.5rem 0' }}>
                 <span style={{ fontSize: '0.82rem', color: 'var(--muted)' }}>Tasa de cierre</span>
-                <span style={{ fontFamily: 'var(--font-display)', fontWeight: 900, color: '#4ade80' }}>
+                <span style={{ fontFamily: 'var(--font-display)', fontWeight: 900, color: 'var(--success)' }}>
                   {kpis && kpis.total_cotizaciones > 0
                     ? `${Math.round((kpis.aceptadas / kpis.total_cotizaciones) * 100)}%`
                     : '—'}

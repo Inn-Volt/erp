@@ -80,9 +80,6 @@ colUnit: {
   warningText: { fontSize: 7, color: '#ccaa00' },
 });
 
-const fmtCLP = (n: number) =>
-  new Intl.NumberFormat('es-CL', { style: 'currency', currency: 'CLP', minimumFractionDigits: 0 }).format(n || 0);
-
 const today = () => new Date().toLocaleDateString('es-CL', { day: '2-digit', month: 'long', year: 'numeric' });
 
 interface Props {
@@ -90,12 +87,17 @@ interface Props {
   folio: string;
   clienteNombre: string;
   descripcion?: string;
+  /** Empresa que emite la solicitud (antes iba fija a InnVolt). */
+  empresa?: { nombre: string; rut?: string; email?: string; telefono?: string };
 }
 
-export default function ListadoInternoPDF({ items, folio, clienteNombre, descripcion }: Props) {
-  const totalCosto = items.reduce((a, i) => a + (i.costo * i.cantidad), 0);
-  const totalVenta = items.reduce((a, i) => a + (i.precio * i.cantidad), 0);
-  const utilidad   = totalVenta - totalCosto;
+export default function ListadoInternoPDF({ items, folio, clienteNombre, descripcion, empresa }: Props) {
+  const emisor = {
+    nombre:   empresa?.nombre   || 'INNVOLT SpA',
+    rut:      empresa?.rut      || '78.299.986-9',
+    email:    empresa?.email    || 'innvolt.cl@gmail.com',
+    telefono: empresa?.telefono || '',
+  };
 
   return (
     <Document>
@@ -109,21 +111,13 @@ export default function ListadoInternoPDF({ items, folio, clienteNombre, descrip
   <Text style={s.titleY}> COTIZACIÓN</Text>
 </View>
 
-    <Text style={s.sub}>
-      INNVOLT SpA
-    </Text>
+    <Text style={s.sub}>{emisor.nombre}</Text>
 
-    <Text style={s.sub}>
-      RUT: 78.299.986-9
-    </Text>
+    {emisor.rut ? <Text style={s.sub}>RUT: {emisor.rut}</Text> : null}
 
-    <Text style={s.sub}>
-      Correo: innvolt.cl@gmail.com
-    </Text>
+    {emisor.email ? <Text style={s.sub}>Correo: {emisor.email}</Text> : null}
 
-    <Text style={s.sub}>
-      Contacto: 
-    </Text>
+    {emisor.telefono ? <Text style={s.sub}>Contacto: {emisor.telefono}</Text> : null}
 
   </View>
 

@@ -11,9 +11,9 @@ import { saveAs } from 'file-saver';
 
 import { cotizacionesService } from '@/services/cotizaciones';
 import { useToast } from '@/hooks/useToast';
-import { formatCLP, formatFolio, formatDate, calcularTotals } from '@/utils';
+import { formatCLP, formatFolio, formatDate, calcularTotals, normalizarItem } from '@/utils';
 import type { Cotizacion, EstadoCotizacion } from '@/types';
-import { ESTADO_COLORS, ESTADOS_TODOS } from '@/types';
+import { ESTADO_COLORS, ESTADOS_TODOS, SUPUESTOS_DEFAULT } from '@/types';
 import PresupuestoPDF from '@/components/pdf/PresupuestoPDF';
 import { supabase } from '@/lib/supabase';
 import type { EmpresaInfo } from '@/components/pdf/PresupuestoPDF';
@@ -39,30 +39,37 @@ export default function HistorialPage() {
 
  const load = useCallback(async () => {
   setLoading(true);
-  const data = await cotizacionesService.getAll();
-  setCotizaciones(data);
-  setLoading(false);
-}, []);
+  try {
+    const data = await cotizacionesService.getAll();
+    setCotizaciones(data);
+  } catch (e) {
+    console.error('Error al cargar el historial:', e);
+    toastError('No se pudo cargar el historial de cotizaciones');
+  } finally {
+    setLoading(false);
+  }
+}, [toastError]);
 
 useEffect(() => {
   load();
 }, [load]);
 
 useEffect(() => {
-  const loadEmpresa = async () => {
+  // Se cargan TODAS las empresas: cada cotización se genera con la suya.
+  const loadEmpresas = async () => {
     try {
       setLoadingEmpresa(true);
 
       const { data, error } = await supabase
         .from('empresas')
         .select('*')
-        .order('nombre')
-        .limit(1)
-        .single();
+        .order('nombre');
 
       if (error) throw error;
 
-      setEmpresa(data);
+      const lista = (data || []) as EmpresaInfo[];
+      setEmpresas(lista);
+      setEmpresa(lista[0] || null);
 
     } catch (err) {
       console.error(err);
@@ -71,7 +78,7 @@ useEffect(() => {
     }
   };
 
-  loadEmpresa();
+  loadEmpresas();
 }, []);
   const handleDelete = async (id: string, folio: number) => {
     if (!confirm(`¿Eliminar cotización ${formatFolio(folio)}? Esta acción no se puede deshacer.`)) return;
@@ -93,25 +100,33 @@ useEffect(() => {
       toastError('Error al actualizar estado');
     }
   };
-const [empresa, setEmpresa] = useState<EmpresaInfo | null>(null);
+const [empresa, setEmpresa]   = useState<EmpresaInfo | null>(null);
+const [empresas, setEmpresas] = useState<EmpresaInfo[]>([]);
 
   const handleDownloadPDF = async (cot: Cotizacion) => {
     if (loadingEmpresa) {
-  toastError('Cargando configuración de empresa...');
-  return;
-}
-    if (!empresa) {
-  toastError('No existe empresa configurada');
-  return;
-}
+      toastError('Cargando configuración de empresa...');
+      return;
+    }
+    // Cada cotización se emite con SU empresa; si no la guardó (cotizaciones
+    // antiguas), se usa la primera como respaldo.
+    const empresaCot = empresas.find(e => e.id === cot.empresa_id) || empresa;
+    if (!empresaCot) {
+      toastError('No existe empresa configurada');
+      return;
+    }
     if (!cot.clientes) { toastError('Cliente no cargado'); return; }
     setGenPDF(cot.id);
     try {
-      const totals = calcularTotals(cot.items || [], cot.descuento_global || 0);
+      // Los ítems guardados pueden venir en formato antiguo (sin imprevistos
+      // ni IVA). Sin normalizar, el IVA del PDF saldría en cero.
+      const sup = { ...SUPUESTOS_DEFAULT, ...(cot.supuestos || {}) };
+      const itemsNorm = (cot.items || []).map(i => normalizarItem(i, sup));
+      const totals = calcularTotals(itemsNorm, cot.descuento_global || 0);
       const blob = await pdf(
         <PresupuestoPDF
           cliente={cot.clientes}
-          items={cot.items || []}
+          items={itemsNorm}
           totals={totals}
           descuentoPorcentajeMO={cot.descuento_global || 0}
           folio={formatFolio(cot.folio)}
@@ -119,7 +134,7 @@ const [empresa, setEmpresa] = useState<EmpresaInfo | null>(null);
           garantia={cot.condiciones_servicio || ''}
           condicionesComerciales={cot.condiciones_comerciales || ''}
           ocultarSuministros={cot.ocultar_suministros || false}
-          empresa={empresa}
+          empresa={empresaCot}
         />
       ).toBlob();
       saveAs(blob, `Cotizacion_${formatFolio(cot.folio)}_${cot.clientes.nombre_cliente}.pdf`);
@@ -187,12 +202,12 @@ const [empresa, setEmpresa] = useState<EmpresaInfo | null>(null);
       <div className="iv-page-header">
         <div>
           <p className="label-muted" style={{ marginBottom: '0.35rem', letterSpacing: '0.4em' }}>Registro completo</p>
-          <h1 style={{ fontFamily: 'var(--font-display)', fontWeight: 900, fontSize: 'clamp(2rem,5vw,3.2rem)', textTransform: 'uppercase', lineHeight: 0.9, color: '#fff' }}>
+          <h1 style={{ fontFamily: 'var(--font-display)', fontWeight: 900, fontSize: 'clamp(2rem,5vw,3.2rem)', textTransform: 'uppercase', lineHeight: 0.9, color: 'var(--text)' }}>
             HISTO<span style={{ color: 'var(--y)' }}>RIAL</span>
           </h1>
         </div>
         <div className="iv-header-actions">
-          <button onClick={() => router.push('/cotizador')} style={{ background: 'var(--y)', color: '#000', border: 'none', cursor: 'pointer', padding: '0 1.25rem', height: 36, fontFamily: 'var(--font-display)', fontWeight: 900, fontSize: '0.72rem', letterSpacing: '0.12em', textTransform: 'uppercase', display: 'inline-flex', alignItems: 'center', gap: '0.4rem' }}>
+          <button onClick={() => router.push('/cotizador')} style={{ background: 'var(--y-brand)', color: 'var(--on-accent)', border: 'none', cursor: 'pointer', padding: '0 1.25rem', height: 36, fontFamily: 'var(--font-display)', fontWeight: 900, fontSize: '0.72rem', letterSpacing: '0.12em', textTransform: 'uppercase', display: 'inline-flex', alignItems: 'center', gap: '0.4rem' }}>
             <FileText size={13} /> Nueva cotización
           </button>
         </div>
@@ -202,8 +217,8 @@ const [empresa, setEmpresa] = useState<EmpresaInfo | null>(null);
       <div className="historial-kpis" style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '2px', marginBottom: '2px' }}>
         {[
           { label: 'Cotizaciones', value: resumen.total, color: 'var(--y)' },
-          { label: 'Monto filtrado', value: formatCLP(resumen.montoTotal), color: '#4ade80' },
-          { label: 'Aceptadas', value: resumen.aceptadas, color: '#60a5fa' },
+          { label: 'Monto filtrado', value: formatCLP(resumen.montoTotal), color: 'var(--success)' },
+          { label: 'Aceptadas', value: resumen.aceptadas, color: 'var(--info)' },
         ].map(k => (
           <div key={k.label} style={{ background: 'var(--bg2)', border: '1px solid var(--border2)', padding: '0.875rem 1rem', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
             <span className="label-muted" style={{ fontSize: '0.55rem' }}>{k.label}</span>
@@ -213,7 +228,7 @@ const [empresa, setEmpresa] = useState<EmpresaInfo | null>(null);
       </div>
 
       {/* Search & filter */}
-      <div style={{ background: 'var(--bg2)', border: '1px solid var(--border2)', borderTop: '2px solid var(--y)', padding: '0.875rem 1rem', display: 'flex', gap: '0.5rem', flexWrap: 'wrap', alignItems: 'center', marginBottom: '2px' }}>
+      <div style={{ background: 'var(--bg2)', border: '1px solid var(--border2)', borderTop: '2px solid var(--y-brand)', padding: '0.875rem 1rem', display: 'flex', gap: '0.5rem', flexWrap: 'wrap', alignItems: 'center', marginBottom: '2px' }}>
         <div style={{ position: 'relative', flex: 1, minWidth: 200 }}>
           <Search size={13} style={{ position: 'absolute', left: '0.75rem', top: '50%', transform: 'translateY(-50%)', color: 'var(--muted)' }} />
           <input
@@ -230,12 +245,12 @@ const [empresa, setEmpresa] = useState<EmpresaInfo | null>(null);
           )}
         </div>
 
-        <button onClick={() => setShowFilters(f => !f)} style={{ background: showFilters ? 'rgba(255,198,0,0.1)' : 'var(--bg3)', border: `1px solid ${showFilters ? 'rgba(255,198,0,0.3)' : 'var(--border2)'}`, cursor: 'pointer', padding: '0 0.75rem', height: 32, display: 'inline-flex', alignItems: 'center', gap: '0.4rem', fontFamily: 'var(--font-display)', fontWeight: 700, fontSize: '0.62rem', letterSpacing: '0.15em', textTransform: 'uppercase', color: showFilters ? 'var(--y)' : 'var(--muted)' }}>
+        <button onClick={() => setShowFilters(f => !f)} style={{ background: showFilters ? 'var(--y-soft)' : 'var(--bg3)', border: `1px solid ${showFilters ? 'var(--border)' : 'var(--border2)'}`, cursor: 'pointer', padding: '0 0.75rem', height: 32, display: 'inline-flex', alignItems: 'center', gap: '0.4rem', fontFamily: 'var(--font-display)', fontWeight: 700, fontSize: '0.62rem', letterSpacing: '0.15em', textTransform: 'uppercase', color: showFilters ? 'var(--y)' : 'var(--muted)' }}>
           <Filter size={12} /> Filtros
         </button>
 
         {filterEstado !== 'Todos' && (
-          <button onClick={() => setFilterEstado('Todos')} style={{ background: 'rgba(248,113,113,0.1)', border: '1px solid rgba(248,113,113,0.2)', cursor: 'pointer', padding: '0 0.75rem', height: 32, display: 'inline-flex', alignItems: 'center', gap: '0.4rem', fontFamily: 'var(--font-display)', fontWeight: 700, fontSize: '0.6rem', letterSpacing: '0.15em', textTransform: 'uppercase', color: '#f87171' }}>
+          <button onClick={() => setFilterEstado('Todos')} style={{ background: 'rgba(248,113,113,0.1)', border: '1px solid rgba(248,113,113,0.2)', cursor: 'pointer', padding: '0 0.75rem', height: 32, display: 'inline-flex', alignItems: 'center', gap: '0.4rem', fontFamily: 'var(--font-display)', fontWeight: 700, fontSize: '0.6rem', letterSpacing: '0.15em', textTransform: 'uppercase', color: 'var(--danger)' }}>
             <X size={11} /> {filterEstado}
           </button>
         )}
@@ -252,7 +267,7 @@ const [empresa, setEmpresa] = useState<EmpresaInfo | null>(null);
                 key={est}
                 onClick={() => setFilterEstado(est as EstadoCotizacion | 'Todos')}
                 style={{
-                  background: active ? (ec ? ec.bg : 'rgba(255,198,0,0.1)') : 'transparent',
+                  background: active ? (ec ? ec.bg : 'var(--y-soft)') : 'transparent',
                   border: `1px solid ${active ? (ec ? ec.color : 'var(--y)') : 'var(--border2)'}`,
                   color: active ? (ec ? ec.color : 'var(--y)') : 'var(--muted)',
                   cursor: 'pointer', padding: '0.2rem 0.75rem',
@@ -367,14 +382,14 @@ const [empresa, setEmpresa] = useState<EmpresaInfo | null>(null);
                           onClick={() => handleDownloadPDF(cot)}
                           title="Descargar PDF"
                           disabled={genPDF === cot.id}
-                          style={{ background: 'none', border: '1px solid rgba(74,222,128,0.2)', cursor: 'pointer', padding: '0.25rem 0.4rem', color: '#4ade80' }}
+                          style={{ background: 'none', border: '1px solid rgba(74,222,128,0.2)', cursor: 'pointer', padding: '0.25rem 0.4rem', color: 'var(--success)' }}
                         >
                           {genPDF === cot.id ? <Loader2 size={12} className="iv-spin" /> : <Download size={12} />}
                         </button>
                         <button
                           onClick={() => handleDelete(cot.id, cot.folio)}
                           title="Eliminar"
-                          style={{ background: 'none', border: '1px solid rgba(248,113,113,0.2)', cursor: 'pointer', padding: '0.25rem 0.4rem', color: '#f87171' }}
+                          style={{ background: 'none', border: '1px solid rgba(248,113,113,0.2)', cursor: 'pointer', padding: '0.25rem 0.4rem', color: 'var(--danger)' }}
                         >
                           <Trash2 size={12} />
                         </button>

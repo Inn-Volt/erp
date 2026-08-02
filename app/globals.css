@@ -1,166 +1,310 @@
 /* ─────────────────────────────────────────────────────────
-   INNVOLT ERP — Design System v4.0
-   Barlow Condensed + Negro + Amarillo #ffc600
-───────────────────────────────────────────────────────── */
-@import url('https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700;900&family=Barlow:wght@300;400;500;600&display=swap');
-@import "tailwindcss";
+   INNVOLT ERP — Design System v5.0
+   Barlow Condensed + Amarillo #ffc600 · Tema claro y oscuro
+─────────────────────────────────────────────────────────
 
+   Los colores viven en tokens con formato "R G B" (sin comas),
+   para poder aplicarles opacidad con rgb(var(--token) / alpha).
+   El tema se cambia agregando/quitando la clase .dark en <html>.
+───────────────────────────────────────────────────────── */
+@import "tailwindcss";
+@config "../tailwind.config.ts";
+
+/* ══ INNVOLT ERP — Design System v6.0 ══════════════════
+   Base neutra + acento índigo. El amarillo (--spark) es solo
+   remate (logo, hilo de KPI). Tema claro y oscuro (negro real).
+   Colores en "R G B" para opacidad con rgb(var(--token)/alpha). */
+
+/* ══ TEMA CLARO (por defecto) ══════════════════════════ */
 :root {
-  --y:        #ffc600;
-  --y2:       #e6b200;
-  --black:    #000000;
-  --bg:       #080808;
-  --bg2:      #0e0e0e;
-  --bg3:      #141414;
-  --border:   rgba(255,198,0,0.12);
-  --border2:  rgba(255,255,255,0.06);
-  --text:     #ffffff;
-  --muted:    rgba(255,255,255,0.40);
-  --dim:      rgba(255,255,255,0.15);
-  --danger:   #f87171;
-  --success:  #4ade80;
-  --info:     #60a5fa;
-  --font-display: 'Barlow Condensed', 'Arial Narrow', sans-serif;
-  --font-body:    'Barlow', sans-serif;
-  --page-px:  1.75rem;
-  --page-pb:  3rem;
-  --topbar-h: 56px;
-  --sidebar-w: 220px;
-  --radius:   0px;
+  --surface:       255 255 255;   /* tarjetas: blanco puro   */
+  --surface-2:     231 233 239;   /* fondo de página (gris)  */
+  --surface-3:     238 240 245;   /* hover, zebra, wells     */
+  --content:        20  24  36;   /* texto principal         */
+  --content-muted:  88  96 116;   /* texto secundario        */
+  --content-faint: 130 138 158;   /* texto terciario         */
+  --line:          216 220 230;   /* bordes visibles         */
+  --line-soft:     230 233 240;   /* separadores suaves      */
+  --hover:         238 240 245;   /* fondo al pasar mouse    */
+
+  --fg: 20 24 36;
+
+  /* Acento índigo (interactivo) */
+  --y:        #4a56d2;            /* acento: texto/enlaces/activo */
+  --y2:       #3e49bd;            /* hover                        */
+  --y-brand:  #4a56d2;            /* rellenos sólidos (botones)   */
+  --y-soft:   #ecedfb;            /* realce de fondo suave        */
+  --on-accent:#ffffff;           /* texto sobre relleno de acento */
+  --border:   rgba(74,86,210,0.28);
+
+  /* Remate amarillo de marca (SOLO detalles, nunca texto) */
+  --spark:    #ffc600;
+
+  --input-bg:       #ffffff;
+  --input-bg-focus: #ffffff;
+  --input-border:   rgb(200 204 216);
+
+  --shadow-card: 0 1px 2px rgba(18,22,38,0.07), 0 2px 8px rgba(18,22,38,0.07);
+  --shadow-pop:  0 20px 50px rgba(18,22,38,0.22);
+}
+
+/* ══ TEMA OSCURO (negro real) ══════════════════════════ */
+.dark {
+  --surface:        18  18  18;   /* tarjetas                */
+  --surface-2:       0   0   0;   /* fondo de página: negro  */
+  --surface-3:      32  32  32;   /* hover, wells            */
+  --content:       241 241 242;
+  --content-muted: 161 161 166;
+  --content-faint: 106 106 112;
+  --line:           42  42  42;   /* gris neutro (sin azul)  */
+  --line-soft:      28  28  28;
+  --hover:          28  28  28;
+
+  --fg: 255 255 255;
+
+  --y:        #8b93ff;
+  --y2:       #a2a9ff;
+  --y-brand:  #8b93ff;
+  --y-soft:   #1b1b24;
+  --on-accent:#111318;
+  --border:   rgba(139,147,255,0.26);
+
+  --spark:    #ffc600;
+
+  --input-bg:       rgba(255,255,255,0.04);
+  --input-bg-focus: rgba(255,255,255,0.07);
+  --input-border:   rgb(58 58 58);
+
+  --shadow-card: 0 0 0 1px rgba(255,255,255,0.015);
+  --shadow-pop:  0 24px 60px rgba(0,0,0,0.7);
+}
+
+/* ══ ALIAS heredados ═══════════════════════════════════
+   Las pantallas existentes usan estos nombres en estilos
+   inline; al mapearlos a los tokens, cambian solas de tema. */
+:root, .dark {
+  --black:   rgb(var(--surface-2));
+  --bg:      rgb(var(--surface-2));
+  --bg2:     rgb(var(--surface));
+  --bg3:     rgb(var(--surface-3));
+  --text:    rgb(var(--content));
+  --muted:   rgb(var(--content-muted));
+  --faint:   rgb(var(--content-faint));
+  --dim:     rgb(var(--content-faint));
+  --border2: rgb(var(--line));
+  --border-soft: rgb(var(--line-soft));
+  --hover-bg:    rgb(var(--hover));
+
+  /* Colores de estado (tono para fondo claro) */
+  --danger:  #e5484d;
+  --success: #12a150;
+  --info:    #3a6df0;
+  --purple:  #7a5af0;
+  --orange:  #b45309;
+  --danger-soft:  rgba(229,72,77,0.10);
+  --success-soft: rgba(18,161,80,0.10);
+  --info-soft:    rgba(58,109,240,0.10);
+  --purple-soft:  rgba(122,90,240,0.10);
+
+  /* Tipografía de sistema, sentence case (renovado v6) */
+  --font-display: system-ui, -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+  --font-body:    system-ui, -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+  --page-px:   1.75rem;
+  --page-pb:   3rem;
+  --topbar-h:  60px;
+  --sidebar-w: 236px;
+
+  /* Radios: lenguaje visual redondeado y consistente */
+  --r-xs: 4px;
+  --r-sm: 6px;
+  --r:    8px;
+  --r-md: 10px;
+  --r-lg: 14px;
+  --radius: var(--r);
+}
+/* Tonos claros para fondo oscuro */
+.dark {
+  --danger:  #ff6b6f;
+  --success: #3ddc84;
+  --info:    #6f9bff;
+  --purple:  #a48bff;
+  --orange:  #fb923c;
+  --danger-soft:  rgba(255,107,111,0.14);
+  --success-soft: rgba(61,220,132,0.13);
+  --info-soft:    rgba(111,155,255,0.13);
+  --purple-soft:  rgba(164,139,255,0.13);
 }
 
 @media (max-width: 640px) {
-  :root {
-    --page-px: 1rem;
-    --page-pb: 2rem;
-  }
+  :root { --page-px: 1rem; --page-pb: 2rem; }
 }
 
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 html { font-size: 16px; scroll-behavior: smooth; }
 
 body {
-  background: var(--black);
-  color: var(--text);
+  background: rgb(var(--surface-2));
+  color: rgb(var(--content));
   font-family: var(--font-body);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   overflow-x: hidden;
   line-height: 1.5;
+  transition: background-color 0.2s ease, color 0.2s ease;
 }
 
-::selection { background: var(--y); color: #000; }
-::-webkit-scrollbar { width: 3px; height: 3px; }
-::-webkit-scrollbar-track { background: #000; }
-::-webkit-scrollbar-thumb { background: var(--y); }
+::selection { background: var(--y-brand); color: var(--on-accent); }
+::-webkit-scrollbar { width: 8px; height: 8px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: rgb(var(--line)); border-radius: 8px; }
+::-webkit-scrollbar-thumb:hover { background: rgb(var(--content-faint)); }
+
+/* Cifras alineadas en tablas y montos */
+.tabular { font-variant-numeric: tabular-nums; }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}
 
 /* ── Tipografía ────────────────────────────────────────── */
 .display {
   font-family: var(--font-display);
-  font-weight: 900;
-  text-transform: uppercase;
-  line-height: 0.9;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  line-height: 1.05;
 }
+/* Eyebrow / etiqueta pequeña — sentence case suave */
 .label {
-  font-family: var(--font-display);
-  font-weight: 700;
-  font-size: 0.6rem;
-  letter-spacing: 0.32em;
+  font-family: var(--font-body);
+  font-weight: 500;
+  font-size: 0.68rem;
+  letter-spacing: 0.06em;
   text-transform: uppercase;
   color: var(--y);
 }
 .label-muted {
-  font-family: var(--font-display);
-  font-weight: 700;
-  font-size: 0.58rem;
-  letter-spacing: 0.28em;
+  font-family: var(--font-body);
+  font-weight: 500;
+  font-size: 0.68rem;
+  letter-spacing: 0.06em;
   text-transform: uppercase;
-  color: var(--muted);
+  color: rgb(var(--content-faint));
 }
 
 /* ── Botones ────────────────────────────────────────────── */
 .btn {
   display: inline-flex;
   align-items: center;
-  gap: 0.5rem;
-  font-family: var(--font-display);
-  font-weight: 700;
-  font-size: 0.75rem;
-  letter-spacing: 0.15em;
-  text-transform: uppercase;
+  justify-content: center;
+  gap: 0.45rem;
+  font-family: var(--font-body);
+  font-weight: 500;
+  font-size: 0.84rem;
+  letter-spacing: -0.005em;
   border: none;
   cursor: pointer;
-  transition: all 0.15s ease;
+  transition: all 0.13s ease;
   white-space: nowrap;
   text-decoration: none;
   user-select: none;
   -webkit-tap-highlight-color: transparent;
   outline: none;
-}
-.btn:disabled { opacity: 0.45; cursor: not-allowed; }
-
-.btn-primary {
-  background: var(--y);
-  color: #000;
-  padding: 0 1.25rem;
+  border-radius: 9px;
   height: 38px;
+  padding: 0 0.95rem;
 }
-.btn-primary:hover:not(:disabled) { background: var(--y2); }
+.btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+/* Primario: relleno de acento índigo con texto legible */
+.btn-primary {
+  background: var(--y-brand);
+  color: var(--on-accent);
+  border: 1px solid var(--y-brand);
+}
+.btn-primary:hover:not(:disabled) { background: var(--y2); border-color: var(--y2); }
 
 .btn-ghost {
-  background: var(--bg2);
-  border: 1px solid var(--border2);
-  color: rgba(255,255,255,0.45);
+  background: rgb(var(--surface));
+  border: 1px solid rgb(var(--line));
+  color: rgb(var(--content-muted));
   padding: 0 0.875rem;
   height: 36px;
 }
 .btn-ghost:hover:not(:disabled) {
-  border-color: rgba(255,198,0,0.3);
-  color: rgba(255,255,255,0.7);
+  border-color: var(--border);
+  color: rgb(var(--content));
+  background: rgb(var(--surface-3));
 }
 
 .btn-danger {
   background: transparent;
-  border: 1px solid rgba(248,113,113,0.2);
-  color: #f87171;
+  border: 1px solid rgb(239 68 68 / 0.3);
+  color: var(--danger);
   padding: 0 0.875rem;
   height: 36px;
 }
-.btn-danger:hover:not(:disabled) { background: rgba(248,113,113,0.08); }
+.btn-danger:hover:not(:disabled) { background: rgb(239 68 68 / 0.08); }
 
 .btn-sm { height: 30px; padding: 0 0.75rem; font-size: 0.65rem; }
 .btn-xs { height: 26px; padding: 0 0.6rem; font-size: 0.6rem; }
 
 /* ── Inputs ─────────────────────────────────────────────── */
 .input {
-  background: var(--bg2);
-  border: 1px solid var(--border2);
-  color: var(--text);
+  background: var(--input-bg);
+  border: 1px solid rgb(var(--line));
+  color: rgb(var(--content));
   font-family: var(--font-body);
   font-size: 0.875rem;
   padding: 0.5rem 0.75rem;
   outline: none;
-  transition: border-color 0.15s;
+  transition: border-color 0.15s, background-color 0.15s;
   width: 100%;
+  border-radius: 6px;
 }
-.input:focus { border-color: rgba(255,198,0,0.4); }
-.input::placeholder { color: var(--muted); }
+.input:focus {
+  border-color: var(--y);
+  background: var(--input-bg-focus);
+}
+.input::placeholder { color: rgb(var(--content-muted)); }
 
-.input-sm {
-  padding: 0.35rem 0.6rem;
-  font-size: 0.8rem;
-  height: 32px;
-}
+.input-sm { padding: 0.35rem 0.6rem; font-size: 0.8rem; height: 32px; }
 
 /* ── Cards / Panels ─────────────────────────────────────── */
 .panel {
-  background: var(--bg2);
-  border: 1px solid var(--border2);
+  background: rgb(var(--surface));
+  border: 1px solid rgb(var(--line));
+  border-radius: 10px;
+  box-shadow: var(--shadow-card);
 }
 .panel-y {
-  background: var(--bg2);
-  border: 1px solid var(--border2);
-  border-top: 2px solid var(--y);
+  background: rgb(var(--surface));
+  border: 1px solid rgb(var(--line));
+  border-top: 2px solid var(--y-brand);
+  border-radius: 10px;
+  box-shadow: var(--shadow-card);
+}
+
+/* ── Acabado de paneles heredados ───────────────────────
+   Muchas pantallas definen sus tarjetas con estilos inline
+   (background: var(--bg2) / var(--bg3)). Esta regla les da el
+   radio y la sombra del sistema. Como los estilos inline tienen
+   más prioridad, cualquier elemento con su propio borderRadius
+   conserva el suyo. Se limita a <div> para no redondear el
+   sidebar (<aside>), la barra superior (<header>) ni <main>. */
+div[style*="--bg2"],
+div[style*="--bg3"] {
+  border-radius: var(--r-md);
+}
+div[style*="1px solid var(--border2)"][style*="--bg2"] {
+  box-shadow: var(--shadow-card);
+}
+/* Filas de tabla y barras a ancho completo: sin redondeo */
+tr div[style*="--bg2"], td div[style*="--bg2"],
+tr div[style*="--bg3"], td div[style*="--bg3"] {
+  border-radius: 0;
 }
 
 /* ── Table ──────────────────────────────────────────────── */
@@ -175,18 +319,19 @@ body {
   font-size: 0.58rem;
   letter-spacing: 0.25em;
   text-transform: uppercase;
-  color: var(--muted);
+  color: rgb(var(--content-muted));
   text-align: left;
   padding: 0.5rem 0.75rem;
-  border-bottom: 1px solid var(--border2);
+  border-bottom: 1px solid rgb(var(--line));
   white-space: nowrap;
+  background: rgb(var(--surface-3));
 }
 .iv-table td {
   padding: 0.5rem 0.75rem;
-  border-bottom: 1px solid rgba(255,255,255,0.03);
+  border-bottom: 1px solid rgb(var(--line) / 0.6);
   vertical-align: middle;
 }
-.iv-table tr:hover td { background: rgba(255,198,0,0.02); }
+.iv-table tr:hover td { background: rgb(var(--surface-3)); }
 
 /* ── Layout ─────────────────────────────────────────────── */
 .page-content {
@@ -212,22 +357,26 @@ body {
 }
 
 /* ── Grid cotizador ─────────────────────────────────────── */
-.cotizador-grid {
-  grid-template-columns: 280px 1fr;
-}
+.cotizador-grid { grid-template-columns: 280px 1fr; }
 @media (max-width: 900px) {
-  .cotizador-grid {
-    grid-template-columns: 1fr;
-  }
+  .cotizador-grid { grid-template-columns: 1fr; }
 }
 
+/* ── Logo según tema ────────────────────────────────────
+   Se alternan por CSS (no por JS) para que no haya parpadeo.
+   Nota: no se usan las clases `dark:` de Tailwind porque los
+   logos llevan estilos inline, y `display` inline gana siempre. */
+.logo-claro  { display: block; }
+.logo-oscuro { display: none; }
+.dark .logo-claro  { display: none; }
+.dark .logo-oscuro { display: block; }
+
 /* ── Sidebar desktop ────────────────────────────────────── */
-.sidebar-desktop {
-  display: flex;
-}
-.mobile-ham {
-  display: none;
-}
+.sidebar-desktop { display: flex; }
+/* En tema claro la barra lateral va blanca sobre una página gris,
+   con un borde nítido: así se separa en vez de fundirse. */
+aside.sidebar-desktop { border-right-color: rgb(var(--line)) !important; }
+.mobile-ham { display: none; }
 @media (max-width: 768px) {
   .sidebar-desktop { display: none !important; }
   .mobile-ham { display: flex !important; }
@@ -236,7 +385,7 @@ body {
 /* ── Divider ─────────────────────────────────────────────── */
 .iv-divider {
   height: 1px;
-  background: var(--border2);
+  background: rgb(var(--line));
   margin: 0.75rem 0;
 }
 
@@ -247,22 +396,23 @@ body {
 }
 .anim-in { animation: fadeIn 0.25s ease both; }
 
-@keyframes spin {
-  to { transform: rotate(360deg); }
-}
+@keyframes spin { to { transform: rotate(360deg); } }
 .iv-spin { animation: spin 0.8s linear infinite; }
 
 @keyframes pulse {
   0%, 100% { opacity: 1; }
-  50%       { opacity: 0.4; }
+  50%      { opacity: 0.4; }
 }
 .iv-pulse { animation: pulse 2s ease-in-out infinite; }
 
-/* ── Grid bg ─────────────────────────────────────────────── */
-.iv-grid-bg {
+/* ── Grid bg ─────────────────────────────────────────────
+   Textura sutil solo en tema oscuro: sobre fondo claro las
+   líneas se leen como suciedad, así que ahí se desactiva. */
+.iv-grid-bg { background-image: none; }
+.dark .iv-grid-bg {
   background-image:
-    linear-gradient(rgba(255,198,0,0.04) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(255,198,0,0.04) 1px, transparent 1px);
+    linear-gradient(rgb(255 255 255 / 0.03) 1px, transparent 1px),
+    linear-gradient(90deg, rgb(255 255 255 / 0.03) 1px, transparent 1px);
   background-size: 40px 40px;
 }
 
@@ -285,32 +435,42 @@ body {
   font-size: 0.58rem;
   letter-spacing: 0.2em;
   text-transform: uppercase;
+  border-radius: 999px;
 }
 
 /* ── KPI card ───────────────────────────────────────────── */
 .kpi-card {
-  background: var(--bg2);
-  border: 1px solid var(--border2);
+  background: rgb(var(--surface));
+  border: 1px solid rgb(var(--line));
   padding: 1.25rem 1.5rem;
   display: flex;
   flex-direction: column;
   gap: 0.5rem;
   position: relative;
   overflow: hidden;
+  border-radius: 10px;
+  box-shadow: var(--shadow-card);
 }
+/* Franja superior: toma el color del acento de la tarjeta, a plena
+   intensidad. Con opacidad reducida el amarillo se ensucia y se lee café. */
 .kpi-card::before {
   content: '';
   position: absolute;
   top: 0; left: 0; right: 0;
-  height: 2px;
-  background: var(--y);
-  opacity: 0.6;
+  height: 3px;
+  background: var(--kpi-accent, var(--y-brand));
+}
+.kpi-icon {
+  width: 32px; height: 32px;
+  display: flex; align-items: center; justify-content: center;
+  border-radius: var(--r-sm);
+  background: color-mix(in srgb, var(--kpi-accent, var(--y-brand)) 14%, transparent);
 }
 .kpi-value {
   font-family: var(--font-display);
   font-weight: 900;
   font-size: clamp(1.6rem, 3vw, 2.2rem);
-  color: var(--text);
+  color: rgb(var(--content));
   line-height: 1;
 }
 
@@ -320,9 +480,13 @@ body {
   to   { background-position: 200% 0; }
 }
 .skeleton {
-  background: linear-gradient(90deg, var(--bg2) 25%, var(--bg3) 50%, var(--bg2) 75%);
+  background: linear-gradient(90deg,
+    rgb(var(--surface-3)) 25%,
+    rgb(var(--line)) 50%,
+    rgb(var(--surface-3)) 75%);
   background-size: 200% 100%;
   animation: shimmer 1.5s infinite;
+  border-radius: 6px;
 }
 
 /* ── Toast ──────────────────────────────────────────────── */
@@ -341,44 +505,45 @@ body {
   min-width: 280px;
   max-width: 380px;
   padding: 0.75rem 1rem;
-  background: var(--bg3);
-  border: 1px solid var(--border2);
+  background: rgb(var(--surface));
+  border: 1px solid rgb(var(--line));
   display: flex;
   align-items: flex-start;
   gap: 0.6rem;
   font-size: 0.85rem;
   animation: fadeIn 0.2s ease both;
+  border-radius: 8px;
+  box-shadow: 0 6px 20px rgba(0,0,0,0.14);
 }
 
 /* ── Modal ──────────────────────────────────────────────── */
 .modal-overlay {
   position: fixed;
   inset: 0;
-  background: rgba(0,0,0,0.85);
+  background: rgba(0,0,0,0.55);
   backdrop-filter: blur(4px);
   z-index: 9999;
   display: flex;
   align-items: flex-start;
   justify-content: center;
-  padding: 1rem;
   overflow-y: auto;
   padding: 2rem 1rem;
-  background: rgba(0, 0, 0, 0.75);
-  backdrop-filter: blur(4px);
 }
+.dark .modal-overlay { background: rgba(0,0,0,0.78); }
+
 .modal-box {
-  background: var(--bg2);
-  border: 1px solid var(--border2);
-  border-top: 2px solid var(--y);
+  background: rgb(var(--surface));
+  border: 1px solid rgb(var(--line));
+  border-top: 2px solid var(--y-brand);
   width: min(95vw, 620px);
-  max-width: 560px; 
+  max-width: 560px;
   max-height: calc(100vh - 4rem);
   overflow-y: auto;
   animation: fadeIn 0.2s ease both;
   margin: 0 auto;
+  border-radius: 12px;
+  box-shadow: 0 20px 50px rgba(0,0,0,0.25);
 }
-
-/* ── Scrollbar reset inside modal ───────────────────────── */
 .modal-box::-webkit-scrollbar { width: 3px; }
 .modal-box::-webkit-scrollbar-thumb { background: var(--border); }
 
@@ -413,18 +578,18 @@ body {
   gap: 0.15rem;
   padding: 0.75rem 1rem;
   cursor: pointer;
-  border-bottom: 1px solid var(--border2);
+  border-bottom: 1px solid rgb(var(--line));
   transition: background 0.1s;
 }
-.clientes-list-row:hover { background: rgba(255,255,255,0.02); }
-.clientes-list-row.active { background: rgba(255,198,0,0.06); }
+.clientes-list-row:hover { background: rgb(var(--surface-3)); }
+.clientes-list-row.active { background: rgb(var(--fg) / 0.05); }
 
 @media (min-width: 769px) {
   .clientes-list-header {
     display: grid;
     grid-template-columns: 1fr 160px 140px 120px 80px;
     padding: 0.4rem 1rem;
-    border-bottom: 1px solid var(--border2);
+    border-bottom: 1px solid rgb(var(--line));
   }
   .clientes-list-row {
     display: grid;
@@ -448,15 +613,15 @@ body {
   position: fixed;
   inset: 0;
   z-index: 80;
-  background: rgba(0,0,0,0.85);
+  background: rgba(0,0,0,0.6);
   display: none;
 }
 .cliente-detail-panel-mobile {
   position: absolute;
   right: 0; top: 0; bottom: 0;
   width: min(340px, 100vw);
-  background: var(--bg2);
-  border-left: 1px solid var(--border2);
+  background: rgb(var(--surface));
+  border-left: 1px solid rgb(var(--line));
   overflow-y: auto;
   animation: slideInRight 0.2s ease both;
 }
@@ -480,7 +645,12 @@ body {
 }
 
 /* ── Dashboard responsive ───────────────────────────────── */
-.dashboard-main-grid { display: grid; grid-template-columns: minmax(0,1fr) 280px; gap: 2px; margin-top: 2px; }
+.dashboard-main-grid {
+  display: grid;
+  grid-template-columns: minmax(0,1fr) 280px;
+  gap: 2px;
+  margin-top: 2px;
+}
 @media (max-width: 900px) {
   .dashboard-main-grid { grid-template-columns: 1fr !important; }
 }
@@ -491,12 +661,14 @@ body {
   top: 100%;
   left: 0;
   right: 0;
-  background: var(--bg3);
-  border: 1px solid var(--border2);
+  background: rgb(var(--surface));
+  border: 1px solid rgb(var(--line));
   border-top: none;
   max-height: 220px;
   overflow-y: auto;
   z-index: 50;
+  border-radius: 0 0 8px 8px;
+  box-shadow: 0 8px 24px rgba(0,0,0,0.18);
 }
 .dropdown-item {
   padding: 0.65rem 0.875rem;
@@ -504,4 +676,4 @@ body {
   font-size: 0.875rem;
   transition: background 0.1s;
 }
-.dropdown-item:hover { background: rgba(255,198,0,0.07); }
+.dropdown-item:hover { background: rgb(var(--surface-3)); }

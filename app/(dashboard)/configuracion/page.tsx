@@ -109,12 +109,12 @@ export default function ConfiguracionPage() {
       <div className="iv-page-header">
         <div>
           <p className="label-muted" style={{ marginBottom: '0.35rem', letterSpacing: '0.4em' }}>Preferencias del sistema</p>
-          <h1 style={{ fontFamily: 'var(--font-display)', fontWeight: 900, fontSize: 'clamp(2rem,5vw,3.2rem)', textTransform: 'uppercase', lineHeight: 0.9, color: '#fff' }}>
+          <h1 style={{ fontFamily: 'var(--font-display)', fontWeight: 900, fontSize: 'clamp(2rem,5vw,3.2rem)', textTransform: 'uppercase', lineHeight: 0.9, color: 'var(--text)' }}>
             CONFI<span style={{ color: 'var(--y)' }}>GURACIÓN</span>
           </h1>
         </div>
         <div className="iv-header-actions">
-          <button onClick={handleSave} disabled={saving} style={{ background: 'var(--y)', color: '#000', border: 'none', cursor: 'pointer', padding: '0 1.25rem', height: 36, fontFamily: 'var(--font-display)', fontWeight: 900, fontSize: '0.72rem', letterSpacing: '0.12em', textTransform: 'uppercase', display: 'inline-flex', alignItems: 'center', gap: '0.4rem', opacity: saving ? 0.5 : 1 }}>
+          <button onClick={handleSave} disabled={saving} style={{ background: 'var(--y-brand)', color: 'var(--on-accent)', border: 'none', cursor: 'pointer', padding: '0 1.25rem', height: 36, fontFamily: 'var(--font-display)', fontWeight: 900, fontSize: '0.72rem', letterSpacing: '0.12em', textTransform: 'uppercase', display: 'inline-flex', alignItems: 'center', gap: '0.4rem', opacity: saving ? 0.5 : 1 }}>
             {saving ? <Loader2 size={13} className="iv-spin" /> : <Save size={13} />}
             Guardar cambios
           </button>
@@ -124,7 +124,7 @@ export default function ConfiguracionPage() {
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '2px' }}>
 
         {/* Datos empresa */}
-        <div style={{ background: 'var(--bg2)', border: '1px solid var(--border2)', borderTop: '2px solid var(--y)', padding: '1.5rem' }}>
+        <div style={{ background: 'var(--bg2)', border: '1px solid var(--border2)', borderTop: '2px solid var(--y-brand)', padding: '1.5rem' }}>
           <p style={sectionLabel}><Building2 size={13} /> Datos de la empresa</p>
           <div style={{ display: 'flex', flexDirection: 'column', gap: '0.875rem' }}>
             {[
@@ -151,7 +151,7 @@ export default function ConfiguracionPage() {
 
         {/* Config fiscal */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
-          <div style={{ background: 'var(--bg2)', border: '1px solid var(--border2)', borderTop: '2px solid var(--y)', padding: '1.5rem' }}>
+          <div style={{ background: 'var(--bg2)', border: '1px solid var(--border2)', borderTop: '2px solid var(--y-brand)', padding: '1.5rem' }}>
             <p style={sectionLabel}><Percent size={13} /> Configuración fiscal</p>
             <div style={{ display: 'flex', flexDirection: 'column', gap: '0.875rem' }}>
               <div>

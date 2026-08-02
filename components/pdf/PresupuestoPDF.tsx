@@ -5,6 +5,28 @@ import {
 import type { CotizacionItem, Cliente } from '@/types';
 import type { Totals } from '@/utils';
 
+/** Logo con tinta oscura: es el que contrasta sobre el papel blanco del PDF. */
+const LOGO_PDF = '/InnVolt-transparente-claro.png';
+
+/** Solo se aplica el logo por defecto si la empresa emisora es InnVolt. */
+const esInnVolt = (nombre: string) =>
+  nombre.toLowerCase().replace(/[^a-z]/g, '').includes('innvolt');
+
+/**
+ * Convierte un texto multilínea del cotizador en viñetas para el PDF.
+ * Quita los "•" o "-" iniciales (el PDF pone su propio símbolo) y
+ * descarta las líneas vacías.
+ */
+const lineasTexto = (texto?: string): string[] =>
+  (texto || '')
+    .split('\n')
+    .map(l => l.replace(/^\s*[•\-*]\s*/, '').trim())
+    .filter(Boolean);
+
+/** Sufijo con el descuento promedio de una categoría (ej. " (desc. prom. 12%)"). */
+const descTxt = (promedio: number): string =>
+  promedio > 0 ? ` (desc. prom. ${Math.round(promedio)}%)` : '';
+
 // ─── Paleta INNVOLT ───────────────────────────────────────────────────────────
 const Y      = '#000000';
 const BLACK  = '#000000';
@@ -284,14 +306,17 @@ interface Props {
 }
 
 // ─── Cláusulas ───────────────────────────────────────────────────────────────
-const buildGarantiasEquipos = (empresa: EmpresaInfo) => [
-  { l: 'a.', t: 'Garantía de instalación y mano de obra: 6 meses desde la fecha de entrega o puesta en servicio, salvo que la propuesta indique expresamente un plazo distinto.' },
-  { l: 'b.', t: 'Los equipos, componentes y materiales suministrados cuentan con la garantía otorgada por sus respectivos fabricantes o distribuidores autorizados.' },
-  { l: 'c.', t: 'La garantía cubre exclusivamente defectos atribuibles a errores de instalación, montaje o configuración realizados por personal de la empresa.' },
-  { l: 'd.', t: 'La garantía no cubre daños provocados por manipulación de terceros, modificaciones no autorizadas, vandalismo, robo, incendios, inundaciones, humedad, sobretensiones, descargas atmosféricas, catástrofes naturales, fallas de suministro eléctrico o uso indebido.' },
-  { l: 'e.', t: 'Equipos, materiales o instalaciones preexistentes propiedad del cliente y no suministrados por la empresa quedan expresamente excluidos de cualquier garantía.' },
-  { l: 'f.', t: 'Toda intervención realizada por terceros no autorizados dejará sin efecto la garantía sobre el elemento intervenido.' },
-];
+const buildGarantiasEquipos = (empresa: EmpresaInfo) => {
+  const nombre = empresa.nombre?.trim() || 'la empresa';
+  return [
+    { l: 'a.', t: 'Garantía de instalación y mano de obra: 6 meses desde la fecha de entrega o puesta en servicio, salvo que la propuesta indique expresamente un plazo distinto.' },
+    { l: 'b.', t: 'Los equipos, componentes y materiales suministrados cuentan con la garantía otorgada por sus respectivos fabricantes o distribuidores autorizados.' },
+    { l: 'c.', t: `La garantía cubre exclusivamente defectos atribuibles a errores de instalación, montaje o configuración realizados por personal de ${nombre}.` },
+    { l: 'd.', t: 'La garantía no cubre daños provocados por manipulación de terceros, modificaciones no autorizadas, vandalismo, robo, incendios, inundaciones, humedad, sobretensiones, descargas atmosféricas, catástrofes naturales, fallas de suministro eléctrico o uso indebido.' },
+    { l: 'e.', t: `Equipos, materiales o instalaciones preexistentes propiedad del cliente y no suministrados por ${nombre} quedan expresamente excluidos de cualquier garantía.` },
+    { l: 'f.', t: 'Toda intervención realizada por terceros no autorizados dejará sin efecto la garantía sobre el elemento intervenido.' },
+  ];
+};
 
 const GARANTIAS_SERVICIOS = [
   { l: 'a.', t: 'Los servicios cotizados consideran únicamente las actividades expresamente indicadas en el alcance de esta propuesta.' },
@@ -343,7 +368,7 @@ function TablaFila({
 
 // ─── Componente ───────────────────────────────────────────────────────────────
 export default function PresupuestoPDF({
-  cliente, items, totals, descuentoPorcentajeMO,
+  cliente, items, totals,
   folio, descripcionGeneral, garantia, condicionesComerciales,
   ocultarSuministros, empresa,
 }: Props) {
@@ -357,10 +382,9 @@ export default function PresupuestoPDF({
               descripcion: 'Suministros y materiales',
               categoria: 'material' as const,
               cantidad: 1, unidad: 'global',
-              costo: 0, margen: 0,
+              costo: 0, imprevistos: 0, margen: 0,
               precio: totals.netoMateriales + totals.ivaMateriales,
-              iva_incluido: true,
-              esMaterial: true,
+              iva: 0,
             }]
           : []),
       ]
@@ -370,7 +394,15 @@ export default function PresupuestoPDF({
     material:  'MATERIAL',
     mano_obra: 'MANO DE OBRA',
     servicio:  'SERVICIO',
+    operacion: 'OPERACIÓN',
   };
+
+  // El PDF se imprime sobre papel blanco: si la empresa no tiene logo propio,
+  // se usa el de InnVolt con tinta oscura (la variante "claro").
+  const logoPDF = empresa.logo_url ||
+    (esInnVolt(empresa.nombre)
+      ? (typeof window !== 'undefined' ? window.location.origin : '') + LOGO_PDF
+      : '');
 
   const textoImportante =
     empresa.texto_importante ||
@@ -392,8 +424,9 @@ export default function PresupuestoPDF({
         {/* ── HEADER ── */}
         <View style={s.header}>
           <View style={s.logoBlock}>
-            {empresa.logo_url ? (
-              <Image style={s.logoImage} src={empresa.logo_url} />
+            {logoPDF ? (
+              // eslint-disable-next-line jsx-a11y/alt-text -- <Image> de @react-pdf no admite alt
+              <Image style={s.logoImage} src={logoPDF} />
             ) : (
               <Text style={s.logoName}>{empresa.nombre.toUpperCase()}</Text>
             )}
@@ -514,28 +547,38 @@ export default function PresupuestoPDF({
                 </View>
                 {totals.netoMateriales > 0 && (
                   <View style={s.totalesRow}>
-                    <Text style={s.totalesLabel}>Neto Materiales</Text>
+                    <Text style={s.totalesLabel}>Neto Materiales{descTxt(totals.porCategoria.material.descuentoPromedio)}</Text>
                     <Text style={s.totalesValue}>{fmtCLP(totals.netoMateriales)}</Text>
                   </View>
                 )}
                 {totals.ivaMateriales > 0 && (
                   <View style={s.totalesRow}>
-                    <Text style={s.totalesLabel}>IVA Materiales (19%)</Text>
+                    <Text style={s.totalesLabel}>IVA Materiales</Text>
                     <Text style={s.totalesValue}>{fmtCLP(totals.ivaMateriales)}</Text>
                   </View>
                 )}
                 {totals.netoMO > 0 && (
                   <View style={s.totalesRow}>
-                    <Text style={s.totalesLabel}>
-                      Mano de Obra{descuentoPorcentajeMO > 0 ? ` (-${descuentoPorcentajeMO}%)` : ''}
-                    </Text>
+                    <Text style={s.totalesLabel}>Mano de Obra{descTxt(totals.porCategoria.mano_obra.descuentoPromedio)}</Text>
                     <Text style={s.totalesValue}>{fmtCLP(totals.netoMO)}</Text>
                   </View>
                 )}
                 {totals.netoServicios > 0 && (
                   <View style={s.totalesRow}>
-                    <Text style={s.totalesLabel}>Servicios</Text>
+                    <Text style={s.totalesLabel}>Servicios{descTxt(totals.porCategoria.servicio.descuentoPromedio)}</Text>
                     <Text style={s.totalesValue}>{fmtCLP(totals.netoServicios)}</Text>
+                  </View>
+                )}
+                {totals.netoOperacion > 0 && (
+                  <View style={s.totalesRow}>
+                    <Text style={s.totalesLabel}>Operación y Extras{descTxt(totals.porCategoria.operacion.descuentoPromedio)}</Text>
+                    <Text style={s.totalesValue}>{fmtCLP(totals.netoOperacion)}</Text>
+                  </View>
+                )}
+                {totals.montoDescuentoTotal > 0 && (
+                  <View style={s.totalesRow}>
+                    <Text style={s.totalesLabel}>Descuento aplicado</Text>
+                    <Text style={s.totalesValue}>- {fmtCLP(totals.montoDescuentoTotal)}</Text>
                   </View>
                 )}
                 <View style={s.totalesRow}>
@@ -543,7 +586,7 @@ export default function PresupuestoPDF({
                   <Text style={s.totalesValue}>{fmtCLP(totals.netoGeneral)}</Text>
                 </View>
                 <View style={s.totalesRow}>
-                  <Text style={s.totalesLabel}>IVA (19%)</Text>
+                  <Text style={s.totalesLabel}>IVA</Text>
                   <Text style={s.totalesValue}>{fmtCLP(totals.ivaGeneral)}</Text>
                 </View>
                 <View style={s.totalFinalRow}>
@@ -650,6 +693,38 @@ export default function PresupuestoPDF({
             ))}
 
           </View>
+
+          {/* ── CONDICIONES PARTICULARES (lo que se escribe en el cotizador) ──
+              Antes estos textos se editaban en la app pero nunca se imprimían. */}
+          {(lineasTexto(garantia).length > 0 || lineasTexto(condicionesComerciales).length > 0) && (
+            <View style={s.seccionBox}>
+              <Text style={s.seccionTitulo}>CONDICIONES PARTICULARES DE ESTA COTIZACIÓN</Text>
+
+              {lineasTexto(garantia).length > 0 && (
+                <>
+                  <Text style={s.seccionSubtitulo}>GARANTÍA</Text>
+                  {lineasTexto(garantia).map((t, i) => (
+                    <View key={`gar-${i}`} style={s.clausulaRow} wrap={false}>
+                      <Text style={s.clausulaLetra}>•</Text>
+                      <Text style={s.clausulaTexto}>{t}</Text>
+                    </View>
+                  ))}
+                </>
+              )}
+
+              {lineasTexto(condicionesComerciales).length > 0 && (
+                <>
+                  <Text style={s.seccionSubtitulo}>CONDICIONES COMERCIALES</Text>
+                  {lineasTexto(condicionesComerciales).map((t, i) => (
+                    <View key={`con-${i}`} style={s.clausulaRow} wrap={false}>
+                      <Text style={s.clausulaLetra}>•</Text>
+                      <Text style={s.clausulaTexto}>{t}</Text>
+                    </View>
+                  ))}
+                </>
+              )}
+            </View>
+          )}
         </View>
 
         {/* ── FIRMA — al fondo gracias a justifyContent: space-between ── */}

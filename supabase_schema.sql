@@ -64,6 +64,8 @@ CREATE TABLE IF NOT EXISTS public.cotizaciones (
   folio                  SERIAL UNIQUE NOT NULL,
   cliente_id             UUID REFERENCES public.clientes(id) ON DELETE SET NULL,
   items                  JSONB DEFAULT '[]'::JSONB,
+  -- Supuestos globales del Excel (margen / imprevistos / IVA por categoría)
+  supuestos              JSONB DEFAULT '{}'::JSONB,
   subtotal               NUMERIC(12,2) DEFAULT 0,
   iva                    NUMERIC(12,2) DEFAULT 0,
   total                  NUMERIC(12,2) DEFAULT 0,
@@ -268,7 +270,107 @@ DROP POLICY IF EXISTS "logos_auth_delete" ON storage.objects;
 CREATE POLICY "logos_auth_delete" ON storage.objects
   FOR DELETE USING (bucket_id = 'logos' AND auth.role() = 'authenticated');
 
--- ─── 12. DATOS DE PRUEBA (opcional) ──────────────────────────────────────────
+-- ══════════════════════════════════════════════════════════════════════════════
+-- FASE 3 — BIBLIOTECA (CATÁLOGO) Y RECETAS (ENSAMBLES)
+-- ══════════════════════════════════════════════════════════════════════════════
+
+-- ─── 12. CATÁLOGO DE ÍTEMS ───────────────────────────────────────────────────
+-- Biblioteca reutilizable de materiales / mano de obra / servicios / operación.
+-- Es la fuente de precios: se edita en un solo lugar y las recetas lo usan.
+CREATE TABLE IF NOT EXISTS public.catalogo_items (
+  id          UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  codigo      TEXT,                       -- opcional, ej "MAT-001"
+  descripcion TEXT NOT NULL,
+  categoria   TEXT NOT NULL DEFAULT 'material'
+              CHECK (categoria IN ('material','mano_obra','servicio','operacion')),
+  unidad      TEXT NOT NULL DEFAULT 'un',
+  costo       NUMERIC(12,2) NOT NULL DEFAULT 0,   -- costo unitario interno
+  activo      BOOLEAN DEFAULT TRUE,
+  created_at  TIMESTAMPTZ DEFAULT NOW(),
+  updated_at  TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_catalogo_categoria ON public.catalogo_items(categoria);
+CREATE INDEX IF NOT EXISTS idx_catalogo_activo    ON public.catalogo_items(activo);
+CREATE INDEX IF NOT EXISTS idx_catalogo_desc      ON public.catalogo_items(descripcion);
+
+DROP TRIGGER IF EXISTS trg_catalogo_updated ON public.catalogo_items;
+CREATE TRIGGER trg_catalogo_updated
+  BEFORE UPDATE ON public.catalogo_items
+  FOR EACH ROW EXECUTE FUNCTION public.set_updated_at();
+
+-- ─── 13. RECETAS (ENSAMBLES) ─────────────────────────────────────────────────
+-- Una receta ("punto eléctrico") agrupa varios ítems del catálogo con su
+-- cantidad. Al cotizar se EXPANDE en líneas editables.
+CREATE TABLE IF NOT EXISTS public.recetas (
+  id          UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  nombre      TEXT NOT NULL,
+  descripcion TEXT,
+  categoria   TEXT,                       -- agrupador libre, ej "Enchufes"
+  unidad      TEXT NOT NULL DEFAULT 'un', -- unidad de la receta (1 punto, 1 m²…)
+  activo      BOOLEAN DEFAULT TRUE,
+  created_at  TIMESTAMPTZ DEFAULT NOW(),
+  updated_at  TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_recetas_nombre ON public.recetas(nombre);
+CREATE INDEX IF NOT EXISTS idx_recetas_activo ON public.recetas(activo);
+
+DROP TRIGGER IF EXISTS trg_recetas_updated ON public.recetas;
+CREATE TRIGGER trg_recetas_updated
+  BEFORE UPDATE ON public.recetas
+  FOR EACH ROW EXECUTE FUNCTION public.set_updated_at();
+
+-- Componentes de cada receta: referencian un ítem del catálogo (precio vivo).
+-- Se guarda un snapshot de descripción/categoría/unidad/costo para que la
+-- receta siga funcionando aunque el ítem del catálogo se elimine.
+CREATE TABLE IF NOT EXISTS public.receta_componentes (
+  id           UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  receta_id    UUID NOT NULL REFERENCES public.recetas(id) ON DELETE CASCADE,
+  item_id      UUID REFERENCES public.catalogo_items(id) ON DELETE SET NULL,
+  descripcion  TEXT NOT NULL,
+  categoria    TEXT NOT NULL DEFAULT 'material'
+               CHECK (categoria IN ('material','mano_obra','servicio','operacion')),
+  unidad       TEXT NOT NULL DEFAULT 'un',
+  costo        NUMERIC(12,2) NOT NULL DEFAULT 0,   -- snapshot del costo
+  cantidad     NUMERIC(12,3) NOT NULL DEFAULT 1,   -- por 1 unidad de receta
+  orden        INTEGER DEFAULT 0,
+  created_at   TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_receta_comp_receta ON public.receta_componentes(receta_id);
+
+-- ─── 14. RLS del catálogo y recetas ──────────────────────────────────────────
+ALTER TABLE public.catalogo_items      ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.recetas             ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.receta_componentes  ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS "catalogo_all" ON public.catalogo_items;
+CREATE POLICY "catalogo_all" ON public.catalogo_items
+  FOR ALL USING (auth.role() = 'authenticated');
+
+DROP POLICY IF EXISTS "recetas_all" ON public.recetas;
+CREATE POLICY "recetas_all" ON public.recetas
+  FOR ALL USING (auth.role() = 'authenticated');
+
+DROP POLICY IF EXISTS "receta_comp_all" ON public.receta_componentes;
+CREATE POLICY "receta_comp_all" ON public.receta_componentes
+  FOR ALL USING (auth.role() = 'authenticated');
+
+-- ─── 15. MIGRACIONES SOBRE TABLAS EXISTENTES ─────────────────────────────────
+-- CREATE TABLE ... IF NOT EXISTS no altera tablas ya creadas, así que las
+-- columnas nuevas se agregan explícitamente aquí.
+ALTER TABLE public.cotizaciones
+  ADD COLUMN IF NOT EXISTS supuestos JSONB DEFAULT '{}'::JSONB;
+
+-- Empresa emisora de la cotización. Sin esto, al reabrir una cotización o
+-- generar su PDF desde el historial siempre se usaba la primera empresa.
+ALTER TABLE public.cotizaciones
+  ADD COLUMN IF NOT EXISTS empresa_id UUID REFERENCES public.empresas(id) ON DELETE SET NULL;
+
+CREATE INDEX IF NOT EXISTS idx_cotizaciones_empresa ON public.cotizaciones(empresa_id);
+
+-- ─── 13. DATOS DE PRUEBA (opcional) ──────────────────────────────────────────
 -- Descomenta para insertar datos de demo
 /*
 INSERT INTO public.clientes (nombre_cliente, empresa, rut, email, telefono, direccion) VALUES

@@ -42,9 +42,9 @@ import type { EmpresaInfo } from '@/components/pdf/PresupuestoPDF';
 const panelStyle: React.CSSProperties = {
   background: 'var(--bg2)',
   border: '1px solid var(--border2)',
-  borderTop: '2px solid var(--y)',
+  borderTop: '2px solid var(--y-brand)',
   padding: '1rem',
-  borderRadius: '4px',
+  borderRadius: 'var(--r)',
 };
 
 const labelStyle: React.CSSProperties = {
@@ -61,20 +61,20 @@ const labelStyle: React.CSSProperties = {
 };
 
 const inputStyle: React.CSSProperties = {
-  background: 'rgba(0,0,0,0.25)',
-  border: '1px solid var(--border2)',
-  color: '#fff',
+  background: 'var(--input-bg)',
+  border: '1px solid var(--input-border)',
+  color: 'var(--text)',
   fontFamily: 'var(--font-body)',
   fontSize: '0.82rem',
   padding: '0.45rem 0.6rem',
   outline: 'none',
   width: '100%',
-  borderRadius: '4px',
+  borderRadius: 'var(--r)',
 };
 
 const fieldLabel: React.CSSProperties = {
   fontSize: '0.68rem',
-  color: 'rgba(255,255,255,0.4)',
+  color: 'var(--muted)',
   marginBottom: '0.2rem',
   display: 'block',
   fontFamily: 'var(--font-display)',
@@ -258,7 +258,7 @@ export default function EmpresaModal({ empresa, onSave, onClose }: Props) {
               <div style={{
                 width: 140, height: 60, border: '1px dashed var(--border2)',
                 display: 'flex', alignItems: 'center', justifyContent: 'center',
-                background: 'rgba(0,0,0,0.2)', borderRadius: '4px', overflow: 'hidden', flexShrink: 0,
+                background: 'var(--input-bg)', borderRadius: 'var(--r)', overflow: 'hidden', flexShrink: 0,
               }}>
                 {logoPreview ? (
                   <img
@@ -286,13 +286,13 @@ export default function EmpresaModal({ empresa, onSave, onClose }: Props) {
                   disabled={uploading}
                   style={{
                     background: 'var(--bg3)', border: '1px solid var(--border2)',
-                    color: uploading ? 'var(--muted)' : '#fff',
+                    color: uploading ? 'var(--muted)' : 'var(--text)',
                     cursor: uploading ? 'not-allowed' : 'pointer',
                     padding: '0.4rem 0.8rem', fontSize: '0.75rem',
                     fontFamily: 'var(--font-display)', fontWeight: 700,
                     letterSpacing: '0.08em', textTransform: 'uppercase',
                     display: 'flex', alignItems: 'center', gap: '0.4rem',
-                    borderRadius: '4px',
+                    borderRadius: 'var(--r)',
                   }}
                 >
                   {uploading
@@ -306,12 +306,12 @@ export default function EmpresaModal({ empresa, onSave, onClose }: Props) {
                     onClick={removeLogo}
                     style={{
                       background: 'none', border: '1px solid rgba(248,113,113,0.3)',
-                      color: '#f87171', cursor: 'pointer',
+                      color: 'var(--danger)', cursor: 'pointer',
                       padding: '0.4rem 0.8rem', fontSize: '0.7rem',
                       fontFamily: 'var(--font-display)', fontWeight: 700,
                       letterSpacing: '0.08em', textTransform: 'uppercase',
                       display: 'flex', alignItems: 'center', gap: '0.4rem',
-                      borderRadius: '4px',
+                      borderRadius: 'var(--r)',
                     }}
                   >
                     <Trash2 size={11} /> Quitar Logo
@@ -446,7 +446,7 @@ export default function EmpresaModal({ empresa, onSave, onClose }: Props) {
 
           {/* ── TEXTO IMPORTANTE (personalizable) ── */}
           <div style={panelStyle}>
-            <p style={labelStyle}><FileText size={12} /> Texto "Importante" del PDF</p>
+            <p style={labelStyle}><FileText size={12} /> Texto &quot;Importante&quot; del PDF</p>
             <textarea
               style={{ ...inputStyle, resize: 'vertical' as const, lineHeight: 1.5 }}
               rows={3}
@@ -463,9 +463,9 @@ export default function EmpresaModal({ empresa, onSave, onClose }: Props) {
           {error && (
             <div style={{
               background: 'rgba(248,113,113,0.08)', border: '1px solid rgba(248,113,113,0.3)',
-              padding: '0.6rem 0.8rem', borderRadius: '4px',
+              padding: '0.6rem 0.8rem', borderRadius: 'var(--r)',
             }}>
-              <p style={{ color: '#f87171', fontSize: '0.78rem', margin: 0 }}>{error}</p>
+              <p style={{ color: 'var(--danger)', fontSize: '0.78rem', margin: 0 }}>{error}</p>
             </div>
           )}
 
@@ -475,8 +475,8 @@ export default function EmpresaModal({ empresa, onSave, onClose }: Props) {
               onClick={onClose}
               style={{
                 background: 'var(--bg3)', border: '1px solid var(--border2)',
-                color: 'rgba(255,255,255,0.4)', cursor: 'pointer',
-                padding: '0 1.2rem', height: 40, borderRadius: '4px',
+                color: 'var(--muted)', cursor: 'pointer',
+                padding: '0 1.2rem', height: 40, borderRadius: 'var(--r)',
                 fontFamily: 'var(--font-display)', fontWeight: 700,
                 fontSize: '0.68rem', letterSpacing: '0.12em', textTransform: 'uppercase',
               }}
@@ -487,9 +487,9 @@ export default function EmpresaModal({ empresa, onSave, onClose }: Props) {
               onClick={handleSave}
               disabled={saving || uploading}
               style={{
-                background: 'var(--y)', color: '#000', border: 'none',
+                background: 'var(--y-brand)', color: 'var(--on-accent)', border: 'none',
                 cursor: (saving || uploading) ? 'not-allowed' : 'pointer',
-                padding: '0 1.5rem', height: 40, borderRadius: '4px',
+                padding: '0 1.5rem', height: 40, borderRadius: 'var(--r)',
                 fontFamily: 'var(--font-display)', fontWeight: 900,
                 fontSize: '0.68rem', letterSpacing: '0.12em', textTransform: 'uppercase',
                 display: 'flex', alignItems: 'center', gap: '0.4rem',

@@ -6,7 +6,7 @@ import { Save, Printer, ArrowLeft, AlertTriangle, CheckCircle, FileDown } from '
 import { levantamientosService } from '@/services/levantamientos';
 import { clientesService } from '@/services/clientes';
 import type { Cliente } from '@/types';
-import type { TableroRow, CircuitoRow, LevantamientoData } from '@/types/levantamiento';
+import type { TableroRow, CircuitoRow, LevantamientoData, EstadoLevantamiento } from '@/types/levantamiento';
 import {
   emptyLevantamiento, CHECKLIST_CRITICO, TIPOS_PROYECTO, TIPOS_EMPALME,
   ESTADOS_GEN, TIPOS_TABLERO, TIPOS_CABLE, TIPOS_CANAL, TIPOS_LUM, SISTEMAS_ELEC,
@@ -25,12 +25,12 @@ const FL = ({ children, req }: { children: React.ReactNode; req?: boolean }) => 
     letterSpacing: '0.28em', textTransform: 'uppercase', color: 'var(--y)',
     marginBottom: 5,
   }}>
-    {children}{req && <span style={{ color: '#f87171', marginLeft: 3 }}>★</span>}
+    {children}{req && <span style={{ color: 'var(--danger)', marginLeft: 3 }}>★</span>}
   </p>
 );
 
 const inputBase: React.CSSProperties = {
-  width: '100%', background: 'var(--bg3)', border: '1px solid rgba(255,255,255,0.1)',
+  width: '100%', background: 'var(--bg3)', border: '1px solid var(--border2)',
   color: 'var(--text)', padding: '11px 14px', fontSize: '0.92rem',
   fontFamily: 'var(--font-body)', outline: 'none', transition: 'border-color .15s',
   boxSizing: 'border-box',
@@ -43,7 +43,7 @@ const F = ({
     {label && <FL req={req}>{label}</FL>}
     <input type={type} {...p} style={{ ...inputBase, ...p.style }}
       onFocus={e => (e.target.style.borderColor = 'var(--y)')}
-      onBlur={e => (e.target.style.borderColor = 'rgba(255,255,255,0.1)')} />
+      onBlur={e => (e.target.style.borderColor = 'var(--border2)')} />
   </div>
 );
 
@@ -56,7 +56,7 @@ const T = ({
       ...inputBase, resize: 'vertical', ...p.style,
     } as React.CSSProperties}
       onFocus={e => (e.target.style.borderColor = 'var(--y)')}
-      onBlur={e => (e.target.style.borderColor = 'rgba(255,255,255,0.1)')} />
+      onBlur={e => (e.target.style.borderColor = 'var(--border2)')} />
   </div>
 );
 
@@ -71,7 +71,7 @@ const S = ({
         color: p.value ? 'var(--text)' : 'var(--muted)', ...p.style,
       } as React.CSSProperties}
         onFocus={e => (e.target.style.borderColor = 'var(--y)')}
-        onBlur={e => (e.target.style.borderColor = 'rgba(255,255,255,0.1)')}>
+        onBlur={e => (e.target.style.borderColor = 'var(--border2)')}>
         <option value="">— Seleccionar —</option>
         {options.map(o => <option key={o} value={o}>{o}</option>)}
       </select>
@@ -91,8 +91,8 @@ const Radio = ({ label, options, value, onChange }: {
           padding: '8px 16px', fontSize: '0.78rem',
           fontFamily: 'var(--font-display)', fontWeight: 700,
           letterSpacing: '0.1em', textTransform: 'uppercase',
-          border: `1px solid ${value === o ? 'var(--y)' : 'rgba(255,255,255,0.1)'}`,
-          background: value === o ? 'rgba(255,198,0,0.12)' : 'transparent',
+          border: `1px solid ${value === o ? 'var(--y)' : 'var(--border2)'}`,
+          background: value === o ? 'var(--y-soft)' : 'transparent',
           color: value === o ? 'var(--y)' : 'var(--muted)',
           cursor: 'pointer', transition: 'all .15s',
         }}>{o}</button>
@@ -104,11 +104,11 @@ const Radio = ({ label, options, value, onChange }: {
 const Toggle = ({ label, checked, onChange }: { label: string; checked: boolean; onChange: (v: boolean) => void }) => (
   <div onClick={() => onChange(!checked)} style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 14, cursor: 'pointer', userSelect: 'none' }}>
     <div style={{
-      width: 44, height: 24, background: checked ? 'var(--y)' : 'var(--bg3)',
-      border: `1px solid ${checked ? 'var(--y)' : 'rgba(255,255,255,0.1)'}`,
+      width: 44, height: 24, background: checked ? 'var(--y-brand)' : 'var(--bg3)',
+      border: `1px solid ${checked ? 'var(--y)' : 'var(--border2)'}`,
       position: 'relative', transition: 'all .2s', flexShrink: 0,
     }}>
-      <div style={{ position: 'absolute', top: 3, left: checked ? 22 : 3, width: 16, height: 16, background: checked ? '#000' : 'var(--muted)', transition: 'left .2s' }} />
+      <div style={{ position: 'absolute', top: 3, left: checked ? 22 : 3, width: 16, height: 16, background: checked ? 'var(--on-accent)' : 'var(--muted)', transition: 'left .2s' }} />
     </div>
     <span style={{ fontSize: '0.88rem', color: checked ? 'var(--y)' : 'var(--muted)' }}>{label}</span>
   </div>
@@ -201,7 +201,7 @@ export default function LevantamientoPage() {
   const [data,     setData]     = useState<LevantamientoData>(emptyLevantamiento());
   const [clientes, setClientes] = useState<Cliente[]>([]);
   const [clienteId,setClienteId]= useState('');
-  const [estado,   setEstado]   = useState('Borrador');
+  const [estado,   setEstado]   = useState<EstadoLevantamiento>('Borrador');
   const [saving,   setSaving]   = useState(false);
   const [saved,    setSaved]    = useState(false);
   const [activeNav,setActiveNav]= useState('s1');
@@ -227,7 +227,7 @@ export default function LevantamientoPage() {
   const handleSave = async () => {
     setSaving(true);
     try {
-      const payload = { cliente_id: clienteId || null, data, estado: estado as any };
+      const payload = { cliente_id: clienteId || null, data, estado };
       if (editId) await levantamientosService.update(editId, payload);
       else {
         const created = await levantamientosService.create(payload);
@@ -262,17 +262,17 @@ export default function LevantamientoPage() {
         /* ── Section ─────────────────────────── */
         .lev-section{
           background:var(--bg);
-          border:1px solid rgba(255,255,255,0.07);
+          border:1px solid var(--border2);
           margin-bottom:18px;
         }
         .lev-sec-head{
           display:flex; align-items:center; gap:12px;
-          padding:13px 20px; border-bottom:1px solid rgba(255,255,255,0.07);
+          padding:13px 20px; border-bottom:1px solid var(--border-soft);
           background:linear-gradient(90deg,var(--bg2) 0%,var(--bg) 100%);
         }
         .lev-sec-icon{
-          width:30px; height:30px; background:rgba(255,198,0,0.08);
-          border:1px solid rgba(255,198,0,0.25);
+          width:30px; height:30px; background:var(--y-soft);
+          border:1px solid var(--border);
           display:flex; align-items:center; justify-content:center; font-size:.9rem; flex-shrink:0;
         }
         .lev-sec-num{
@@ -284,7 +284,7 @@ export default function LevantamientoPage() {
         .lev-sec-title{
           font-family:var(--font-display);
           font-weight:900;
-          font-size:.88rem; letter-spacing:.1em; text-transform:uppercase; color:#fff;
+          font-size:.88rem; letter-spacing:.1em; text-transform:uppercase; color:var(--text);
         }
         .lev-sec-body{ padding:20px 20px 6px; }
 
@@ -296,13 +296,13 @@ export default function LevantamientoPage() {
           text-align:left; white-space:nowrap;
           font-family:var(--font-display); font-weight:700;
           font-size:.52rem; letter-spacing:.2em; text-transform:uppercase;
-          color:var(--y); background:var(--bg2); border-bottom:1px solid rgba(255,255,255,0.07);
+          color:var(--y); background:var(--bg2); border-bottom:1px solid var(--border-soft);
         }
-        .lev-dyntable td{ padding:5px 5px; border-bottom:1px solid rgba(255,255,255,0.04); }
-        .lev-dyntable tr:nth-child(even) td{ background:rgba(255,255,255,0.015); }
+        .lev-dyntable td{ padding:5px 5px; border-bottom:1px solid var(--border-soft); }
+        .lev-dyntable tr:nth-child(even) td{ background:var(--hover-bg); }
         .lev-cell-input,.lev-cell-select{
           width:100%; background:var(--bg3);
-          border:1px solid rgba(255,255,255,0.07);
+          border:1px solid var(--border2);
           color:var(--text); padding:6px 8px; font-size:.8rem;
           font-family:var(--font-body); outline:none; box-sizing:border-box;
         }
@@ -312,16 +312,16 @@ export default function LevantamientoPage() {
           border:none; color:var(--muted);
           cursor:pointer; font-size:1.1rem; line-height:1; padding:2px 6px;
         }
-        .lev-del-btn:hover{ color:#f87171; }
+        .lev-del-btn:hover{ color:var(--danger); }
         .lev-add-btn{
           margin-top:8px;
           padding:7px 16px;
-          border:1px dashed rgba(255,198,0,.3); background:transparent;
+          border:1px dashed var(--border); background:transparent;
           color:var(--y); font-family:var(--font-display); font-weight:700;
           font-size:.65rem; letter-spacing:.12em; text-transform:uppercase;
           cursor:pointer; transition:background .15s;
         }
-        .lev-add-btn:hover{ background:rgba(255,198,0,.05); }
+        .lev-add-btn:hover{ background:var(--y-soft); }
 
         /* ── Nav pills ───────────────────────── */
         .lev-nav{
@@ -334,12 +334,12 @@ export default function LevantamientoPage() {
           flex-shrink:0;
           padding:6px 12px; font-family:var(--font-display);
           font-weight:700; font-size:.6rem; letter-spacing:.1em; text-transform:uppercase;
-          border:1px solid rgba(255,255,255,0.08); background:transparent;
+          border:1px solid var(--border2); background:transparent;
           color:var(--muted); cursor:pointer; transition:all .15s; white-space:nowrap;
         }
         .lev-nav button.active{
           border-color:var(--y);
-          background:rgba(255,198,0,.1); color:var(--y);
+          background:var(--y-soft); color:var(--y);
         }
 
         /* ── Checklist ───────────────────────── */
@@ -353,7 +353,7 @@ export default function LevantamientoPage() {
           display:flex;
           align-items:center; gap:10px; cursor:pointer;
           padding:10px 12px;
-          border:1px solid rgba(255,255,255,0.07);
+          border:1px solid var(--border2);
           background:transparent; transition:all .15s;
         }
         .lev-check-item.on{
@@ -364,7 +364,7 @@ export default function LevantamientoPage() {
           width:20px; height:20px;
           flex-shrink:0;
           display:flex; align-items:center; justify-content:center;
-          background:var(--bg3); border:1px solid rgba(255,255,255,.1);
+          background:var(--bg3); border:1px solid var(--border2);
           font-size:.7rem; color:#fff; transition:all .15s;
         }
         .lev-check-box.on{ background:#ef4444; border-color:#ef4444; }
@@ -407,14 +407,14 @@ export default function LevantamientoPage() {
           .lev-dyntable tr:nth-child(even) td { background:#f9f9f9 !important; }
           .lev-cell-input, .lev-cell-select { background:#fafafa !important; border:1px solid #ddd !important; color:#000 !important; font-size:8.5pt !important; }
           .lev-check-item { border:1px solid #ddd !important; background:#fff !important; }
-          .lev-check-item.on { background:#fff4f4 !important; border-color:#f87171 !important; }
+          .lev-check-item.on { background:var(--danger-soft) !important; border-color:var(--danger) !important; }
           .lev-check-box { background:#f0f0f0 !important; border:1px solid #ccc !important; color:#000 !important; }
           .lev-check-box.on { background:#ef4444 !important; color:#fff !important; border-color:#ef4444 !important; }
           .lev-check-label { color:#333 !important; }
-          .lev-check-label.on { color:#c0392b !important; }
+          .lev-check-label.on { color:var(--danger) !important; }
           button { display:none !important; }
           .lev-radio-print { display:block !important; font-size:10pt !important; color:#000 !important; padding:8px 0 !important; }
-          .lev-crit-alert { background:#fff4f4 !important; border:1px solid #f87171 !important; color:#c0392b !important; }
+          .lev-crit-alert { background:var(--danger-soft) !important; border:1px solid var(--danger) !important; color:var(--danger) !important; }
           .lev-section { page-break-inside:avoid; break-inside:avoid; margin-bottom:12px !important; }
           #s3, #s4, #s8, #s11 { page-break-before:auto; }
           .lev-print-header { display:flex !important; }
@@ -450,7 +450,7 @@ export default function LevantamientoPage() {
         <div className="iv-page-header" data-no-print>
           <div>
             <p className="label-muted" style={{ marginBottom:'0.35rem', letterSpacing:'0.4em' }}>Módulo técnico</p>
-            <h1 style={{ fontFamily:'var(--font-display)', fontWeight:900, fontSize:'clamp(1.6rem,4vw,2.8rem)', textTransform:'uppercase', lineHeight:0.9, color:'#fff' }}>
+            <h1 style={{ fontFamily:'var(--font-display)', fontWeight:900, fontSize:'clamp(1.6rem,4vw,2.8rem)', textTransform:'uppercase', lineHeight:0.9, color:'var(--text)' }}>
               LEVANTA<span style={{ color:'var(--y)' }}>MIENTO</span>
             </h1>
           </div>
@@ -459,8 +459,8 @@ export default function LevantamientoPage() {
               <ArrowLeft size={13} /> Historial
             </button>
             <div style={{ position:'relative' }}>
-              <select value={estado} onChange={e => setEstado(e.target.value)} style={{
-                background:'var(--bg2)', border:'1px solid rgba(255,255,255,0.1)',
+              <select value={estado} onChange={e => setEstado(e.target.value as EstadoLevantamiento)} style={{
+                background:'var(--bg2)', border:'1px solid var(--border2)',
                 color:'var(--text)', padding:'8px 28px 8px 12px', fontSize:'0.8rem',
                 fontFamily:'var(--font-display)', fontWeight:700, letterSpacing:'0.1em',
                 textTransform:'uppercase', outline:'none', appearance:'none', cursor:'pointer',
@@ -479,9 +479,9 @@ export default function LevantamientoPage() {
             
             {/* Componente Asíncrono para descarga directa estructurada de PDF */}
             <PDFDownloadLink 
-              document={<LevantamientoPDF data={data} estado={estado} />} 
+              document={<LevantamientoPDF data={data} estado={estado} />}
               fileName={`Levantamiento_${data.cliente_nombre || 'Sin_Nombre'}.pdf`}
-              className="btn btn-secondary btn-sm"
+              className="btn btn-primary btn-sm"
               style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}
             >
               {({ loading }) => (
@@ -508,7 +508,7 @@ export default function LevantamientoPage() {
         {/* ── Critical alert (screen) ── */}
         {critCount > 0 && (
           <div data-no-print style={{ background:'rgba(248,113,113,0.08)', border:'1px solid rgba(248,113,113,0.3)', padding:'10px 16px', marginBottom:16, display:'flex', alignItems:'center', gap:10 }}>
-            <AlertTriangle size={16} color="#f87171" />
+            <AlertTriangle size={16} color="var(--danger)" />
             <span style={{ fontSize:'0.82rem', color:'#fca5a5' }}>
               <strong>{critCount}</strong> observación{critCount>1?'es':''} crítica{critCount>1?'s':''} detectada{critCount>1?'s':''} — ver Sección 08
             </span>
@@ -667,8 +667,8 @@ export default function LevantamientoPage() {
                   <button key={k} type="button" onClick={()=>set(k,!data[k])} style={{
                     padding:'8px 18px', fontSize:'.78rem',
                     fontFamily:'var(--font-display)', fontWeight:700, letterSpacing:'.1em', textTransform:'uppercase',
-                    border:`1px solid ${data[k]?'var(--y)':'rgba(255,255,255,.1)'}`,
-                    background:data[k]?'rgba(255,198,0,.1)':'transparent',
+                    border:`1px solid ${data[k]?'var(--y)':'var(--border2)'}`,
+                    background:data[k]?'var(--y-soft)':'transparent',
                     color:data[k]?'var(--y)':'var(--muted)', cursor:'pointer', transition:'all .15s',
                   }}>{lbl}</button>
                 );
@@ -688,7 +688,7 @@ export default function LevantamientoPage() {
         {/* ════ S8: CRÍTICO ════ */}
         <Sec id="s8" num="08" title="Observaciones Técnicas Críticas" icon="⚠️">
           <div style={{ background:'rgba(248,113,113,0.05)', border:'1px solid rgba(248,113,113,0.18)', padding:16, marginBottom:4 }} className="lev-crit-alert">
-            <p style={{ fontFamily:'var(--font-display)', fontWeight:700, fontSize:'.58rem', letterSpacing:'.2em', color:'#f87171', textTransform:'uppercase', marginBottom:12 }}>
+            <p style={{ fontFamily:'var(--font-display)', fontWeight:700, fontSize:'.58rem', letterSpacing:'.2em', color:'var(--danger)', textTransform:'uppercase', marginBottom:12 }}>
               ⚠ Marcar todo lo detectado en terreno
             </p>
             <div className="lev-checklist">
@@ -737,7 +737,7 @@ export default function LevantamientoPage() {
 
         {/* ════ S11: ALCANCE ════ */}
         <Sec id="s11" num="11" title="Alcance Preliminar" icon="🏗️">
-          <div style={{ background:'var(--bg2)', border:'1px solid rgba(255,255,255,0.07)', padding:'10px 14px', marginBottom:16, fontSize:'.78rem', color:'var(--muted)' }}>
+          <div style={{ background:'var(--bg2)', border:'1px solid var(--border2)', padding:'10px 14px', marginBottom:16, fontSize:'.78rem', color:'var(--muted)' }}>
             Esta sección se convierte en la base para la cotización formal.
           </div>
           <T label="Posibles trabajos a ejecutar" rows={3} value={data.alcance_trabajos} onChange={e=>set('alcance_trabajos',e.target.value)} placeholder="Renovación tablero general, instalación de 8 circuitos nuevos…" />
@@ -774,8 +774,8 @@ export default function LevantamientoPage() {
         {/* Saved toast */}
         {saved && (
           <div className="lev-toast">
-            <CheckCircle size={16} color="#4ade80" />
-            <span style={{ fontSize:'.82rem', color:'#4ade80' }}>Levantamiento guardado correctamente</span>
+            <CheckCircle size={16} color="var(--success)" />
+            <span style={{ fontSize:'.82rem', color:'var(--success)' }}>Levantamiento guardado correctamente</span>
           </div>
         )}
       </div>

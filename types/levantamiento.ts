@@ -107,10 +107,10 @@ export interface Levantamiento {
 }
 
 export const ESTADO_LEV_COLORS: Record<EstadoLevantamiento, { color: string; bg: string }> = {
-  Borrador:   { color: '#fbbf24', bg: 'rgba(251,191,36,0.1)'  },
-  Completado: { color: '#4ade80', bg: 'rgba(74,222,128,0.1)'  },
-  Enviado:    { color: '#60a5fa', bg: 'rgba(96,165,250,0.1)'  },
-  Archivado:  { color: '#6b7280', bg: 'rgba(107,114,128,0.1)' },
+  Borrador:   { color: 'var(--y)', bg: 'var(--y-soft)'  },
+  Completado: { color: 'var(--success)', bg: 'var(--success-soft)'  },
+  Enviado:    { color: 'var(--info)', bg: 'var(--info-soft)'  },
+  Archivado:  { color: 'var(--muted)', bg: 'var(--hover-bg)' },
 };
 
 export const CHECKLIST_CRITICO = [

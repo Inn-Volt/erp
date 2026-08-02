@@ -4,6 +4,8 @@ import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
 import { Zap, Loader2, Eye, EyeOff } from 'lucide-react';
+import ThemeToggle from '@/components/ThemeToggle';
+import { LogoImg } from '@/components/Logo';
 
 export default function LoginPage() {
   const router = useRouter();
@@ -38,7 +40,7 @@ export default function LoginPage() {
 
   if (checking) {
     return (
-      <div style={{ height: '100svh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#000' }}>
+      <div style={{ height: '100svh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--bg)' }}>
         <Loader2 size={24} color="var(--y)" className="iv-spin" />
       </div>
     );
@@ -47,7 +49,7 @@ export default function LoginPage() {
   return (
     <div style={{
       height: '100svh', display: 'flex', alignItems: 'center', justifyContent: 'center',
-      background: '#000', position: 'relative', overflow: 'hidden',
+      background: 'var(--bg)', position: 'relative', overflow: 'hidden',
     }}>
       {/* Background grid */}
       <div className="iv-grid-bg" style={{ position: 'absolute', inset: 0, opacity: 0.5 }} />
@@ -58,26 +60,20 @@ export default function LoginPage() {
       <div style={{
         position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%, -50%)',
         width: 400, height: 400, borderRadius: '50%',
-        background: 'radial-gradient(circle, rgba(255,198,0,0.06) 0%, transparent 70%)',
+        background: 'radial-gradient(circle, var(--y-soft) 0%, transparent 70%)',
         pointerEvents: 'none',
       }} />
+
+      {/* Selector de tema */}
+      <div style={{ position: 'absolute', top: '1.25rem', right: '1.25rem', zIndex: 10 }}>
+        <ThemeToggle />
+      </div>
 
       <div className="anim-in" style={{ width: '100%', maxWidth: 400, padding: '1rem' }}>
         {/* Logo */}
         <div style={{ textAlign: 'center', marginBottom: '2.5rem' }}>
-          <div style={{ display: 'inline-flex', alignItems: 'center', gap: '0.6rem', marginBottom: '0.75rem' }}>
-            <div style={{
-              width: 40, height: 40, background: 'var(--y)', display: 'flex',
-              alignItems: 'center', justifyContent: 'center',
-            }}>
-              <Zap size={20} color="#000" fill="#000" />
-            </div>
-            <span style={{
-              fontFamily: 'var(--font-display)', fontWeight: 900, fontSize: '1.8rem',
-              letterSpacing: '0.05em', color: '#fff', textTransform: 'uppercase',
-            }}>
-              Inn<span style={{ color: 'var(--y)' }}>Volt</span>
-            </span>
+          <div style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', marginBottom: '0.75rem' }}>
+            <LogoImg height={104} />
           </div>
           <p className="label-muted" style={{ letterSpacing: '0.35em' }}>Cotizador</p>
         </div>
@@ -85,7 +81,7 @@ export default function LoginPage() {
         {/* Card */}
         <div style={{
           background: 'var(--bg2)', border: '1px solid var(--border2)',
-          borderTop: '2px solid var(--y)', padding: '2rem',
+          borderTop: '2px solid var(--y-brand)', padding: '2rem',
         }}>
           <form onSubmit={handleLogin} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
             <div>
@@ -133,8 +129,8 @@ export default function LoginPage() {
 
             {error && (
               <div style={{
-                background: 'rgba(248,113,113,0.08)', border: '1px solid rgba(248,113,113,0.2)',
-                padding: '0.65rem 0.875rem', color: '#f87171', fontSize: '0.82rem',
+                background: 'rgba(220,38,38,0.08)', border: '1px solid rgba(220,38,38,0.25)',
+                padding: '0.65rem 0.875rem', color: 'var(--danger)', fontSize: '0.82rem',
               }}>
                 {error}
               </div>

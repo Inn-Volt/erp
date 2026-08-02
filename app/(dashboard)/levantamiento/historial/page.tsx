@@ -66,7 +66,7 @@ export default function LevantamientoHistorialPage() {
       <div className="iv-page-header">
         <div>
           <p className="label-muted" style={{ marginBottom: '0.35rem', letterSpacing: '0.4em' }}>Módulo técnico</p>
-          <h1 style={{ fontFamily: 'var(--font-display)', fontWeight: 900, fontSize: 'clamp(1.6rem,4vw,2.8rem)', textTransform: 'uppercase', lineHeight: 0.9, color: '#fff' }}>
+          <h1 style={{ fontFamily: 'var(--font-display)', fontWeight: 900, fontSize: 'clamp(1.6rem,4vw,2.8rem)', textTransform: 'uppercase', lineHeight: 0.9, color: 'var(--text)' }}>
             HISTO<span style={{ color: 'var(--y)' }}>RIAL</span>
           </h1>
         </div>
@@ -85,10 +85,10 @@ export default function LevantamientoHistorialPage() {
             placeholder="Buscar por cliente, empresa, técnico, folio…"
             style={{ width: '100%', background: 'var(--bg2)', border: '1px solid var(--border2)', color: 'var(--text)', padding: '9px 12px 9px 32px', fontSize: '0.82rem', fontFamily: 'var(--font-body)', outline: 'none' }}
             onFocus={e => (e.target.style.borderColor = 'var(--y)')}
-            onBlur={e => (e.target.style.borderColor = 'rgba(255,255,255,0.06)')} />
+            onBlur={e => (e.target.style.borderColor = 'var(--border2)')} />
         </div>
         <div style={{ position: 'relative' }}>
-          <select value={filterEstado} onChange={e => setFilterEstado(e.target.value as any)}
+          <select value={filterEstado} onChange={e => setFilterEstado(e.target.value as EstadoLevantamiento | '')}
             style={{ background: 'var(--bg2)', border: '1px solid var(--border2)', color: filterEstado ? 'var(--text)' : 'var(--muted)', padding: '9px 32px 9px 12px', fontSize: '0.82rem', fontFamily: 'var(--font-body)', outline: 'none', appearance: 'none', cursor: 'pointer' }}>
             <option value="">Todos los estados</option>
             {ESTADOS.map(e => <option key={e} value={e}>{e}</option>)}
@@ -140,11 +140,11 @@ export default function LevantamientoHistorialPage() {
               <div key={lev.id} style={{
                 display: 'grid', gridTemplateColumns: '80px 1fr 1fr 120px 100px 130px 90px',
                 gap: 0, padding: '11px 16px', borderBottom: '1px solid var(--border2)',
-                background: i % 2 ? 'rgba(255,255,255,0.01)' : 'transparent',
+                background: i % 2 ? 'var(--hover-bg)' : 'transparent',
                 alignItems: 'center', transition: 'background .15s',
               }}
-              onMouseOver={e => (e.currentTarget.style.background = 'rgba(255,198,0,0.03)')}
-              onMouseOut={e => (e.currentTarget.style.background = i % 2 ? 'rgba(255,255,255,0.01)' : 'transparent')}>
+              onMouseOver={e => (e.currentTarget.style.background = 'var(--y-soft)')}
+              onMouseOut={e => (e.currentTarget.style.background = i % 2 ? 'var(--hover-bg)' : 'transparent')}>
 
                 {/* Folio */}
                 <div style={{ fontFamily: 'var(--font-display)', fontWeight: 900, fontSize: '0.8rem', color: 'var(--y)' }}>
@@ -185,8 +185,8 @@ export default function LevantamientoHistorialPage() {
                   <p style={{ fontSize: '0.75rem', color: 'var(--muted)' }}>{formatDate(lev.created_at)}</p>
                   {crit > 0 && (
                     <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginTop: 2 }}>
-                      <AlertTriangle size={10} color="#f87171" />
-                      <span style={{ fontSize: '0.6rem', color: '#f87171' }}>{crit} crítico{crit>1?'s':''}</span>
+                      <AlertTriangle size={10} color="var(--danger)" />
+                      <span style={{ fontSize: '0.6rem', color: 'var(--danger)' }}>{crit} crítico{crit>1?'s':''}</span>
                     </div>
                   )}
                 </div>

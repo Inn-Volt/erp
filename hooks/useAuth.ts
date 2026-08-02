@@ -14,12 +14,12 @@ export function useAuth(requireAuth = true) {
     supabase.auth.getSession().then(({ data }) => {
       setUser(data.session?.user ?? null);
       setLoading(false);
-      if (requireAuth && !data.session) router.replace('/');
+      if (requireAuth && !data.session) router.replace('/login');
     });
 
     const { data: sub } = supabase.auth.onAuthStateChange((_ev, session) => {
       setUser(session?.user ?? null);
-      if (requireAuth && !session) router.replace('/');
+      if (requireAuth && !session) router.replace('/login');
     });
 
     return () => sub.subscription.unsubscribe();
@@ -27,7 +27,7 @@ export function useAuth(requireAuth = true) {
 
   const logout = async () => {
     await supabase.auth.signOut();
-    router.replace('/');
+    router.replace('/login');
   };
 
   const userName = user?.user_metadata?.nombre

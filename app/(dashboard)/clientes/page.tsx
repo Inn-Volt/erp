@@ -105,10 +105,16 @@ export default function ClientesPage() {
 
   const load = useCallback(async () => {
     setLoading(true);
-    const data = await clientesService.getAll();
-    setClientes(data);
-    setLoading(false);
-  }, []);
+    try {
+      const data = await clientesService.getAll();
+      setClientes(data);
+    } catch (e) {
+      console.error('Error al cargar clientes:', e);
+      toastError('No se pudieron cargar los clientes');
+    } finally {
+      setLoading(false);
+    }
+  }, [toastError]);
 
   useEffect(() => { load(); }, [load]);
 
@@ -160,7 +166,7 @@ export default function ClientesPage() {
       <div className="iv-page-header">
         <div>
           <p className="label-muted" style={{ marginBottom: '0.35rem', letterSpacing: '0.4em' }}>Base de datos</p>
-          <h1 style={{ fontFamily: 'var(--font-display)', fontWeight: 900, fontSize: 'clamp(2rem,5vw,3.2rem)', textTransform: 'uppercase', lineHeight: 0.9, color: '#fff' }}>
+          <h1 style={{ fontFamily: 'var(--font-display)', fontWeight: 900, fontSize: 'clamp(2rem,5vw,3.2rem)', textTransform: 'uppercase', lineHeight: 0.9, color: 'var(--text)' }}>
             CLIEN<span style={{ color: 'var(--y)' }}>TES</span>
           </h1>
         </div>
@@ -183,26 +189,26 @@ export default function ClientesPage() {
             </div>
             <div style={{ padding: '1.25rem', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
               <div>
-                <p style={{ fontFamily: 'var(--font-display)', fontWeight: 900, fontSize: '1.2rem', textTransform: 'uppercase', color: '#fff', lineHeight: 1.1 }}>{selected.nombre_cliente}</p>
+                <p style={{ fontFamily: 'var(--font-display)', fontWeight: 900, fontSize: '1.2rem', textTransform: 'uppercase', color: 'var(--text)', lineHeight: 1.1 }}>{selected.nombre_cliente}</p>
                 {selected.empresa && <p style={{ color: 'var(--muted)', fontSize: '0.82rem', marginTop: '0.25rem' }}>{selected.empresa}</p>}
               </div>
               <div className="iv-divider" />
               {[
-                [<Building2 size={12} />, 'RUT', selected.rut || '—'],
-                [<Phone size={12} />, 'Teléfono', selected.telefono || '—'],
-                [<Mail size={12} />, 'Correo', selected.email || '—'],
-                [<MapPin size={12} />, 'Dirección', selected.direccion || '—'],
-              ].map(([icon, label, val]) => (
-                <div key={label as string} style={{ display: 'flex', gap: '0.75rem', alignItems: 'flex-start' }}>
-                  <span style={{ color: 'var(--y)', marginTop: 2, flexShrink: 0 }}>{icon as React.ReactNode}</span>
+                { Icon: Building2, label: 'RUT',       val: selected.rut       || '—' },
+                { Icon: Phone,     label: 'Teléfono',  val: selected.telefono  || '—' },
+                { Icon: Mail,      label: 'Correo',    val: selected.email     || '—' },
+                { Icon: MapPin,    label: 'Dirección', val: selected.direccion || '—' },
+              ].map(({ Icon, label, val }) => (
+                <div key={label} style={{ display: 'flex', gap: '0.75rem', alignItems: 'flex-start' }}>
+                  <span style={{ color: 'var(--y)', marginTop: 2, flexShrink: 0, display: 'flex' }}><Icon size={12} /></span>
                   <div>
-                    <p className="label-muted" style={{ fontSize: '0.55rem', marginBottom: '0.15rem' }}>{label as string}</p>
-                    <p style={{ fontSize: '0.82rem', color: 'rgba(255,255,255,0.7)', wordBreak: 'break-all' }}>{val as string}</p>
+                    <p className="label-muted" style={{ fontSize: '0.55rem', marginBottom: '0.15rem' }}>{label}</p>
+                    <p style={{ fontSize: '0.82rem', color: 'var(--text)', wordBreak: 'break-all' }}>{val}</p>
                   </div>
                 </div>
               ))}
               {selected.notas && (
-                <div style={{ background: 'var(--bg3)', padding: '0.75rem', borderLeft: '2px solid rgba(255,198,0,0.3)' }}>
+                <div style={{ background: 'var(--bg3)', padding: '0.75rem', borderLeft: '2px solid var(--border)' }}>
                   <p className="label-muted" style={{ fontSize: '0.55rem', marginBottom: '0.35rem' }}>Notas</p>
                   <p style={{ fontSize: '0.82rem', color: 'var(--muted)', lineHeight: 1.5 }}>{selected.notas}</p>
                 </div>
@@ -291,8 +297,8 @@ export default function ClientesPage() {
                   <span style={{ fontSize: '0.82rem', color: 'var(--muted)', fontFamily: 'monospace' }}>{c.rut || '—'}</span>
                   <span style={{ fontSize: '0.82rem', color: 'var(--muted)' }}>{c.telefono || '—'}</span>
                   <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.3rem' }}>
-                    <span style={{ width: 6, height: 6, borderRadius: '50%', background: c.estado === 'activo' ? '#4ade80' : '#f87171', flexShrink: 0 }} />
-                    <span style={{ fontSize: '0.72rem', color: c.estado === 'activo' ? '#4ade80' : '#f87171', fontFamily: 'var(--font-display)', letterSpacing: '0.2em', textTransform: 'uppercase' }}>{c.estado}</span>
+                    <span style={{ width: 6, height: 6, borderRadius: '50%', background: c.estado === 'activo' ? 'var(--success)' : 'var(--danger)', flexShrink: 0 }} />
+                    <span style={{ fontSize: '0.72rem', color: c.estado === 'activo' ? 'var(--success)' : 'var(--danger)', fontFamily: 'var(--font-display)', letterSpacing: '0.2em', textTransform: 'uppercase' }}>{c.estado}</span>
                   </span>
                   <ChevronRight size={13} color="var(--muted)" style={{ marginLeft: 'auto' }} />
                 </div>
@@ -316,26 +322,26 @@ export default function ClientesPage() {
             </div>
             <div style={{ padding: '1.25rem', display: 'flex', flexDirection: 'column', gap: '1rem', flex: 1 }}>
               <div>
-                <p style={{ fontFamily: 'var(--font-display)', fontWeight: 900, fontSize: '1.2rem', textTransform: 'uppercase', color: '#fff', lineHeight: 1.1 }}>{selected.nombre_cliente}</p>
+                <p style={{ fontFamily: 'var(--font-display)', fontWeight: 900, fontSize: '1.2rem', textTransform: 'uppercase', color: 'var(--text)', lineHeight: 1.1 }}>{selected.nombre_cliente}</p>
                 {selected.empresa && <p style={{ color: 'var(--muted)', fontSize: '0.82rem', marginTop: '0.25rem' }}>{selected.empresa}</p>}
               </div>
               <div className="iv-divider" />
               {[
-                [<Building2 size={12} />, 'RUT', selected.rut || '—'],
-                [<Phone size={12} />, 'Teléfono', selected.telefono || '—'],
-                [<Mail size={12} />, 'Correo', selected.email || '—'],
-                [<MapPin size={12} />, 'Dirección', selected.direccion || '—'],
-              ].map(([icon, label, val]) => (
-                <div key={label as string} style={{ display: 'flex', gap: '0.75rem', alignItems: 'flex-start' }}>
-                  <span style={{ color: 'var(--y)', marginTop: 2, flexShrink: 0 }}>{icon as React.ReactNode}</span>
+                { Icon: Building2, label: 'RUT',       val: selected.rut       || '—' },
+                { Icon: Phone,     label: 'Teléfono',  val: selected.telefono  || '—' },
+                { Icon: Mail,      label: 'Correo',    val: selected.email     || '—' },
+                { Icon: MapPin,    label: 'Dirección', val: selected.direccion || '—' },
+              ].map(({ Icon, label, val }) => (
+                <div key={label} style={{ display: 'flex', gap: '0.75rem', alignItems: 'flex-start' }}>
+                  <span style={{ color: 'var(--y)', marginTop: 2, flexShrink: 0, display: 'flex' }}><Icon size={12} /></span>
                   <div>
-                    <p className="label-muted" style={{ fontSize: '0.55rem', marginBottom: '0.15rem' }}>{label as string}</p>
-                    <p style={{ fontSize: '0.82rem', color: 'rgba(255,255,255,0.7)', wordBreak: 'break-all' }}>{val as string}</p>
+                    <p className="label-muted" style={{ fontSize: '0.55rem', marginBottom: '0.15rem' }}>{label}</p>
+                    <p style={{ fontSize: '0.82rem', color: 'var(--text)', wordBreak: 'break-all' }}>{val}</p>
                   </div>
                 </div>
               ))}
               {selected.notas && (
-                <div style={{ background: 'var(--bg3)', padding: '0.75rem', borderLeft: '2px solid rgba(255,198,0,0.3)' }}>
+                <div style={{ background: 'var(--bg3)', padding: '0.75rem', borderLeft: '2px solid var(--border)' }}>
                   <p className="label-muted" style={{ fontSize: '0.55rem', marginBottom: '0.35rem' }}>Notas</p>
                   <p style={{ fontSize: '0.82rem', color: 'var(--muted)', lineHeight: 1.5 }}>{selected.notas}</p>
                 </div>
