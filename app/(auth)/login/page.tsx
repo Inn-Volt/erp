@@ -17,10 +17,15 @@ export default function LoginPage() {
   const [checking, setChecking] = useState(true);
 
   useEffect(() => {
+    let listo = false;
     supabase.auth.getSession().then(({ data }) => {
+      listo = true;
       if (data.session) router.replace('/dashboard');
       else setChecking(false);
-    });
+    }).catch(() => { listo = true; setChecking(false); });
+    // Red lenta / sin respuesta (típico en móvil): no dejar el spinner infinito.
+    const t = setTimeout(() => { if (!listo) setChecking(false); }, 4000);
+    return () => clearTimeout(t);
   }, [router]);
 
   const handleLogin = async (e: React.FormEvent) => {

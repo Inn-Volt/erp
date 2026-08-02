@@ -7,6 +7,7 @@ import {
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { catalogoService, recetasService } from '@/services/catalogo';
+import NumeroInput from '@/components/NumeroInput';
 import { useToast } from '@/hooks/useToast';
 import { formatCLP, cleanNumber, costoReceta, parseCategoria } from '@/utils';
 import type {
@@ -93,8 +94,8 @@ function ItemModal({ item, onClose, onSaved }: {
           </div>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.6rem' }}>
             <div>
-              <span style={fieldLabel}>Costo unitario (CLP)</span>
-              <input style={field} type="number" min="0" value={form.costo || ''} onChange={e => set('costo', parseFloat(e.target.value) || 0)} placeholder="0" />
+              <span style={fieldLabel}>Costo unitario</span>
+              <NumeroInput prefijo="$" value={Number(form.costo) || 0} onChange={v => set('costo', v)} placeholder="0" style={field} min={0} />
             </div>
             <div>
               <span style={fieldLabel}>Código (opcional)</span>

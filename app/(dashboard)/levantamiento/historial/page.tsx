@@ -172,11 +172,12 @@ export default function LevantamientoHistorialPage() {
                 </p>
 
                 {/* Estado */}
-                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6, background: bg, border: `1px solid ${color}55`, borderRadius: 'var(--r-sm)', padding: '2px 7px' }}>
+                  <span style={{ width: 7, height: 7, borderRadius: '50%', background: color, flexShrink: 0 }} />
                   <select value={lev.estado} onChange={e => handleEstado(lev.id, e.target.value as EstadoLevantamiento)}
                     onClick={e => e.stopPropagation()}
-                    style={{ background: bg, border: `1px solid ${color}44`, color, padding: '3px 6px', fontSize: '0.65rem', fontFamily: 'var(--font-display)', fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', outline: 'none', cursor: 'pointer', appearance: 'none' }}>
-                    {ESTADOS.map(e => <option key={e} value={e}>{e}</option>)}
+                    style={{ background: 'transparent', border: 'none', color, fontSize: '0.72rem', fontWeight: 600, outline: 'none', cursor: 'pointer', appearance: 'none' }}>
+                    {ESTADOS.map(e => <option key={e} value={e} style={{ background: 'var(--bg2)', color: 'var(--text)' }}>{e}</option>)}
                   </select>
                 </div>
 

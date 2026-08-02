@@ -251,6 +251,14 @@ body {
 .btn-sm { height: 30px; padding: 0 0.75rem; font-size: 0.65rem; }
 .btn-xs { height: 26px; padding: 0 0.6rem; font-size: 0.6rem; }
 
+/* ── Opciones de <select> nativas ────────────────────────
+   El popup nativo no hereda el tema: sin esto, en oscuro las
+   opciones salen texto claro sobre popup blanco (ilegibles). */
+select option {
+  background: rgb(var(--surface));
+  color: rgb(var(--content));
+}
+
 /* ── Inputs ─────────────────────────────────────────────── */
 .input {
   background: var(--input-bg);

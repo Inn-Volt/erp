@@ -370,7 +370,21 @@ ALTER TABLE public.cotizaciones
 
 CREATE INDEX IF NOT EXISTS idx_cotizaciones_empresa ON public.cotizaciones(empresa_id);
 
--- ─── 13. DATOS DE PRUEBA (opcional) ──────────────────────────────────────────
+-- La tabla `empresas` pudo crearse antes sin columnas de fecha, pero el trigger
+-- trg_empresas_updated escribe NEW.updated_at → "record new has no field
+-- updated_at" al guardar. Se garantizan aquí ambas columnas.
+ALTER TABLE public.empresas
+  ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ DEFAULT NOW();
+ALTER TABLE public.empresas
+  ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT NOW();
+
+-- Mismo resguardo para clientes/levantamientos por si vienen de versiones viejas.
+ALTER TABLE public.clientes
+  ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT NOW();
+ALTER TABLE public.levantamientos
+  ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT NOW();
+
+-- ─── 16. DATOS DE PRUEBA (opcional) ──────────────────────────────────────────
 -- Descomenta para insertar datos de demo
 /*
 INSERT INTO public.clientes (nombre_cliente, empresa, rut, email, telefono, direccion) VALUES

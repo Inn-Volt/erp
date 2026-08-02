@@ -8,6 +8,10 @@ import { SUPUESTOS_DEFAULT, CATEGORIAS_ORDEN } from '@/types';
 export const formatCLP = (v: number) =>
   new Intl.NumberFormat('es-CL', { style: 'currency', currency: 'CLP', minimumFractionDigits: 0 }).format(Math.round(v) || 0);
 
+/** Número con separador de miles chileno (60000 → "60.000"). */
+export const formatMiles = (v: number) =>
+  new Intl.NumberFormat('es-CL', { maximumFractionDigits: 2 }).format(v || 0);
+
 export const formatFolio = (num: number | null | undefined) =>
   num ? `IV-${num.toString().padStart(4, '0')}` : 'IV-0000';
 
@@ -20,10 +24,17 @@ export const formatPct = (v: number) =>
 export const cleanNumber = (val: unknown): number => {
   if (typeof val === 'number') return isNaN(val) ? 0 : val;
   if (val === null || val === undefined) return 0;
-  // Formato chileno: "1.234.567,89" → 1234567.89
+  // Formato chileno: coma = decimal, punto = miles.
+  //   "1.234.567,89" → 1234567.89 · "60.000" → 60000 · "1,5" → 1.5 · "1.5" → 1.5
   let s = String(val).trim().replace(/[^0-9.,-]/g, '');
-  if (s.includes(',') && s.includes('.')) s = s.replace(/\./g, '').replace(',', '.');
-  else if (s.includes(',')) s = s.replace(',', '.');
+  if (s.includes(',')) {
+    // Hay coma decimal → los puntos son separadores de miles
+    s = s.replace(/\./g, '').replace(',', '.');
+  } else if (/^-?\d{1,3}(\.\d{3})+$/.test(s)) {
+    // Patrón de miles con puntos ("60.000", "1.234.567") → quitar puntos
+    s = s.replace(/\./g, '');
+  }
+  // Si no, se deja el punto como decimal ("1.5")
   const n = Number(s);
   return isNaN(n) ? 0 : n;
 };

@@ -345,19 +345,23 @@ const [empresas, setEmpresas] = useState<EmpresaInfo[]>([]);
                       {formatDate(cot.created_at)}
                     </td>
                     <td>
-                      <select
-                        value={cot.estado}
-                        onChange={e => handleEstado(cot.id, e.target.value as EstadoCotizacion)}
-                        onClick={e => e.stopPropagation()}
-                        style={{
-                          background: ec.bg, border: `1px solid ${ec.color}40`,
-                          color: ec.color, cursor: 'pointer', padding: '0.15rem 0.4rem',
-                          fontFamily: 'var(--font-display)', fontWeight: 700, fontSize: '0.58rem',
-                          letterSpacing: '0.15em', textTransform: 'uppercase', outline: 'none',
-                        }}
-                      >
-                        {ESTADO_OPTIONS.map(e => <option key={e} value={e}>{e}</option>)}
-                      </select>
+                      <div style={{ display: 'inline-flex', alignItems: 'center', gap: '0.4rem', background: ec.bg, border: `1px solid ${ec.color}55`, borderRadius: 'var(--r-sm)', padding: '0.2rem 0.5rem' }}>
+                        <span style={{ width: 7, height: 7, borderRadius: '50%', background: ec.color, flexShrink: 0 }} />
+                        <select
+                          value={cot.estado}
+                          onChange={e => handleEstado(cot.id, e.target.value as EstadoCotizacion)}
+                          onClick={e => e.stopPropagation()}
+                          style={{
+                            background: 'transparent', border: 'none', color: ec.color, cursor: 'pointer',
+                            fontWeight: 600, fontSize: '0.72rem', outline: 'none', appearance: 'none',
+                            paddingRight: '0.15rem',
+                          }}
+                        >
+                          {ESTADO_OPTIONS.map(e => (
+                            <option key={e} value={e} style={{ background: 'var(--bg2)', color: 'var(--text)' }}>{e}</option>
+                          ))}
+                        </select>
+                      </div>
                     </td>
                     <td style={{ textAlign: 'right', fontFamily: 'var(--font-display)', fontWeight: 700, fontSize: '0.9rem', whiteSpace: 'nowrap' }}>
                       {formatCLP(cot.total)}

@@ -15,6 +15,10 @@ export function useAuth(requireAuth = true) {
       setUser(data.session?.user ?? null);
       setLoading(false);
       if (requireAuth && !data.session) router.replace('/login');
+    }).catch(() => {
+      // Sin este catch, un error de red dejaba la app cargando para siempre.
+      setLoading(false);
+      if (requireAuth) router.replace('/login');
     });
 
     const { data: sub } = supabase.auth.onAuthStateChange((_ev, session) => {

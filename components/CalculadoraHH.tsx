@@ -18,6 +18,7 @@ import { useState, useMemo } from 'react';
 import { X, HardHat, Calculator, Check, Users, Clock } from 'lucide-react';
 import { calcularHH, formatCLP, HH_DEFAULT } from '@/utils';
 import type { HHInput } from '@/utils';
+import NumeroInput from '@/components/NumeroInput';
 
 const label: React.CSSProperties = {
   fontFamily: 'var(--font-display)', fontWeight: 700, fontSize: '0.58rem',
@@ -126,13 +127,11 @@ export default function CalculadoraHH({ descripcionInicial = '', onConfirm, onCl
               </div>
               <div>
                 <span style={fieldLabel}>Sueldo técnico / día 8 h</span>
-                <input style={input} type="number" min="0" step="1000"
-                  value={hh.sueldoTecnicoDia || ''} onChange={e => set('sueldoTecnicoDia', e.target.value)} placeholder="60000" />
+                <NumeroInput prefijo="$" value={hh.sueldoTecnicoDia} onChange={v => setHH(p => ({ ...p, sueldoTecnicoDia: v }))} placeholder="60.000" style={{ ...input, textAlign: 'right' }} />
               </div>
               <div>
                 <span style={fieldLabel}>Sueldo ayudante / día 8 h</span>
-                <input style={input} type="number" min="0" step="1000"
-                  value={hh.sueldoAyudanteDia || ''} onChange={e => set('sueldoAyudanteDia', e.target.value)} placeholder="40000" />
+                <NumeroInput prefijo="$" value={hh.sueldoAyudanteDia} onChange={v => setHH(p => ({ ...p, sueldoAyudanteDia: v }))} placeholder="40.000" style={{ ...input, textAlign: 'right' }} />
               </div>
             </div>
           </div>
