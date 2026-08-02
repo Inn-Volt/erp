@@ -1,17 +1,26 @@
 import type { Metadata, Viewport } from 'next';
 import './globals.css';
+import PWARegister from '@/components/PWARegister';
 
 export const metadata: Metadata = {
   title: 'InnVolt — Cotizador ERP',
   description: 'Sistema de cotizaciones eléctricas InnVolt SpA',
+  manifest: '/manifest.webmanifest',
+  applicationName: 'InnVolt',
+  appleWebApp: { capable: true, title: 'InnVolt', statusBarStyle: 'black-translucent' },
+  icons: {
+    icon: [{ url: '/favicon-32.png', sizes: '32x32', type: 'image/png' }, { url: '/icon-192.png', sizes: '192x192', type: 'image/png' }],
+    apple: [{ url: '/apple-touch-icon.png', sizes: '180x180' }],
+  },
 };
 
 export const viewport: Viewport = {
   width: 'device-width',
   initialScale: 1,
+  viewportFit: 'cover',
   themeColor: [
-    { media: '(prefers-color-scheme: light)', color: '#fafaf9' },
-    { media: '(prefers-color-scheme: dark)',  color: '#080808' },
+    { media: '(prefers-color-scheme: light)', color: '#e7e9ef' },
+    { media: '(prefers-color-scheme: dark)',  color: '#000000' },
   ],
 };
 
@@ -31,7 +40,10 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       <head>
         <script dangerouslySetInnerHTML={{ __html: APLICAR_TEMA }} />
       </head>
-      <body>{children}</body>
+      <body>
+        {children}
+        <PWARegister />
+      </body>
     </html>
   );
 }

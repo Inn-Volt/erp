@@ -109,6 +109,8 @@ export interface CatalogoItem {
   categoria: CategoriaItem;
   unidad: string;
   costo: number;          // costo unitario interno
+  proveedor?: string;     // de dónde se compra el producto
+  link?: string;          // URL del producto (para recompra / referencia de precio)
   activo?: boolean;
   created_at?: string;
   updated_at?: string;

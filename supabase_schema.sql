@@ -285,10 +285,15 @@ CREATE TABLE IF NOT EXISTS public.catalogo_items (
               CHECK (categoria IN ('material','mano_obra','servicio','operacion')),
   unidad      TEXT NOT NULL DEFAULT 'un',
   costo       NUMERIC(12,2) NOT NULL DEFAULT 0,   -- costo unitario interno
+  proveedor   TEXT,                               -- de dónde se compra
+  link        TEXT,                               -- URL del producto
   activo      BOOLEAN DEFAULT TRUE,
   created_at  TIMESTAMPTZ DEFAULT NOW(),
   updated_at  TIMESTAMPTZ DEFAULT NOW()
 );
+-- Por si la tabla ya existía sin estas columnas:
+ALTER TABLE public.catalogo_items ADD COLUMN IF NOT EXISTS proveedor TEXT;
+ALTER TABLE public.catalogo_items ADD COLUMN IF NOT EXISTS link TEXT;
 
 CREATE INDEX IF NOT EXISTS idx_catalogo_categoria ON public.catalogo_items(categoria);
 CREATE INDEX IF NOT EXISTS idx_catalogo_activo    ON public.catalogo_items(activo);

@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import {
   Plus, Search, Trash2, Edit3, X, Loader2, Package, Layers, Save,
-  FileUp, FileDown,
+  FileUp, FileDown, ExternalLink,
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { catalogoService, recetasService } from '@/services/catalogo';
@@ -38,7 +38,7 @@ function ItemModal({ item, onClose, onSaved }: {
 }) {
   const { success, error } = useToast();
   const [form, setForm] = useState<Partial<CatalogoItem>>({
-    descripcion: '', categoria: 'material', unidad: 'un', costo: 0, codigo: '', ...item,
+    descripcion: '', categoria: 'material', unidad: 'un', costo: 0, codigo: '', proveedor: '', link: '', ...item,
   });
   const [saving, setSaving] = useState(false);
 
@@ -54,6 +54,8 @@ function ItemModal({ item, onClose, onSaved }: {
         categoria: (form.categoria || 'material') as CategoriaItem,
         unidad: form.unidad || 'un',
         costo: cleanNumber(form.costo),
+        proveedor: form.proveedor?.trim() || undefined,
+        link: form.link?.trim() || undefined,
       };
       if (item?.id) await catalogoService.update(item.id, payload);
       else await catalogoService.create(payload);
@@ -101,6 +103,14 @@ function ItemModal({ item, onClose, onSaved }: {
               <span style={fieldLabel}>Código (opcional)</span>
               <input style={field} value={form.codigo || ''} onChange={e => set('codigo', e.target.value)} placeholder="MAT-001" />
             </div>
+          </div>
+          <div>
+            <span style={fieldLabel}>Proveedor (opcional)</span>
+            <input style={field} value={form.proveedor || ''} onChange={e => set('proveedor', e.target.value)} placeholder="Ej. Sodimac, Dartel…" />
+          </div>
+          <div>
+            <span style={fieldLabel}>Link del producto (opcional)</span>
+            <input style={field} value={form.link || ''} onChange={e => set('link', e.target.value)} placeholder="https://…" />
           </div>
           <div style={{ display: 'flex', gap: '0.5rem', justifyContent: 'flex-end', marginTop: '0.25rem' }}>
             <button onClick={onClose} className="btn btn-ghost">Cancelar</button>
@@ -345,8 +355,8 @@ export default function BibliotecaPage() {
   const exportarItems = () => {
     const rows = (items.length ? items.map(i => ({
       Codigo: i.codigo || '', Descripcion: i.descripcion, Categoria: i.categoria,
-      Unidad: i.unidad, Costo: Math.round(i.costo),
-    })) : [{ Codigo: 'MAT-001', Descripcion: 'Cable THHN 2.5mm', Categoria: 'material', Unidad: 'm', Costo: 450 }]);
+      Unidad: i.unidad, Costo: Math.round(i.costo), Proveedor: i.proveedor || '', Link: i.link || '',
+    })) : [{ Codigo: 'MAT-001', Descripcion: 'Cable THHN 2.5mm', Categoria: 'material', Unidad: 'm', Costo: 450, Proveedor: 'Sodimac', Link: 'https://www.sodimac.cl/...' }]);
     descargarLibro(rows, 'Catálogo', 'Biblioteca_items.xlsx');
   };
 
@@ -381,6 +391,8 @@ export default function BibliotecaPage() {
           unidad: String(pick(r, 'Unidad', 'unidad') ?? 'un'),
           costo: cleanNumber(pick(r, 'Costo', 'Costo unitario', 'costo')),
           codigo: String(pick(r, 'Codigo', 'Código', 'codigo') ?? '').trim() || undefined,
+          proveedor: String(pick(r, 'Proveedor', 'proveedor') ?? '').trim() || undefined,
+          link: String(pick(r, 'Link', 'link', 'URL', 'Url') ?? '').trim() || undefined,
           activo: true,
         };
       }).filter((x): x is NonNullable<typeof x> => x !== null);
@@ -553,13 +565,16 @@ export default function BibliotecaPage() {
                 <div key={it.id} style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', padding: '0.7rem 1rem', borderBottom: '1px solid var(--border-soft)', borderLeft: `3px solid ${CATEGORIA_COLORS[it.categoria]}` }}>
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <p style={{ fontSize: '0.88rem', fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{it.descripcion}</p>
-                    <p style={{ fontSize: '0.7rem', color: 'var(--muted)' }}>
-                      {CATEGORIA_LABELS[it.categoria]}{it.codigo ? ` · ${it.codigo}` : ''}
+                    <p style={{ fontSize: '0.7rem', color: 'var(--muted)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      {CATEGORIA_LABELS[it.categoria]}{it.codigo ? ` · ${it.codigo}` : ''}{it.proveedor ? ` · ${it.proveedor}` : ''}
                     </p>
                   </div>
                   <span style={{ fontFamily: 'var(--font-display)', fontWeight: 700, fontSize: '0.85rem', color: 'var(--text)', textAlign: 'right' }}>
                     {formatCLP(it.costo)}<span style={{ color: 'var(--muted)', fontWeight: 400, fontSize: '0.7rem' }}>/{it.unidad}</span>
                   </span>
+                  {it.link ? (
+                    <a href={it.link} target="_blank" rel="noopener noreferrer" className="btn btn-ghost btn-xs" title="Abrir link del producto" onClick={e => e.stopPropagation()}><ExternalLink size={12} /></a>
+                  ) : null}
                   <button onClick={() => setItemModal({ open: true, item: it })} className="btn btn-ghost btn-xs" title="Editar"><Edit3 size={12} /></button>
                   <button onClick={() => eliminarItem(it.id, it.descripcion)} className="btn btn-danger btn-xs" title="Eliminar"><Trash2 size={12} /></button>
                 </div>
