@@ -27,223 +27,182 @@ const lineasTexto = (texto?: string): string[] =>
 const descTxt = (promedio: number): string =>
   promedio > 0 ? ` (desc. prom. ${Math.round(promedio)}%)` : '';
 
-// ─── Paleta INNVOLT ───────────────────────────────────────────────────────────
-const Y      = '#000000';
-const BLACK  = '#000000';
-const WHITE  = '#ffffff';
-const MUTED  = '#000000';
-const GRAY2  = '#000000';
-const GRIS   = '#aaaaaa';
+// ─── Paleta INNVOLT (sobria: negro + blanco + gris, amarillo como único acento) ─
+const INK      = '#1a1a1a';  // texto principal / bloques oscuros
+const DARK      = '#232323';  // bloques rellenos (folio, tabla, total)
+const SPARK    = '#ffc600';  // amarillo del logo — único acento
+const WHITE     = '#ffffff';
+const MUTED    = '#565656';  // texto secundario
+const FAINT     = '#8a8a8a';  // texto terciario
+const LINE      = '#e2e2e2';  // bordes/separadores suaves
+const TINT      = '#f6f6f4';  // fondo tarjetas (gris cálido muy claro)
+const TINT_ALT  = '#fbfbfa';  // fila alterna de tabla
 
 // ─── Estilos ──────────────────────────────────────────────────────────────────
 const s = StyleSheet.create({
   page: {
     backgroundColor: WHITE,
-    color: BLACK,
+    color: INK,
     fontFamily: 'Helvetica',
-    fontSize: 8,
-    paddingTop: 40,
-    paddingBottom: 60,
+    fontSize: 8.5,
+    paddingTop: 24,
+    paddingBottom: 44,
   },
+
+  // ── Barra de acento superior (negro + remate amarillo, como el logo) ──
+  accentBar: { position: 'absolute', top: 0, left: 0, right: 0, height: 4, flexDirection: 'row' },
+  accentDark: { flex: 1, backgroundColor: INK },
+  accentSpark: { width: 80, backgroundColor: SPARK },
 
   // ── Header ──
   header: {
     flexDirection: 'row',
+    justifyContent: 'space-between',
     alignItems: 'flex-start',
-    padding: '0 32 20 32',
-    borderBottomWidth: 2,
-    borderBottomColor: Y,
+    padding: '4 32 14 32',
+    borderBottomWidth: 1,
+    borderBottomColor: LINE,
   },
-  logoBlock: {
-    width: '30%',
-    justifyContent: 'center',
-  },
-  infoBlock: {
-    width: '40%',
-    paddingLeft: 15,
-    borderLeftWidth: 1,
-    borderLeftColor: Y,
-  },
-  headerRight: {
-    width: '30%',
-    alignItems: 'flex-end',
-  },
-  folioBox: {
-    borderWidth: 1,
-    borderColor: GRAY2,
-    padding: '8 12',
-    width: '100%',
-    alignItems: 'center',
-  },
-  fechaBox: {
-    borderWidth: 1,
-    borderColor: GRAY2,
-    borderTopWidth: 0,
-    padding: '4 12',
-    width: '100%',
-    alignItems: 'center',
-  },
-  logoImage: {
-    width: 150,
-    objectFit: 'contain',
-  },
-  logoName: {
-    fontSize: 22,
-    fontFamily: 'Helvetica-Bold',
-    color: BLACK,
-    letterSpacing: 1,
-  },
-  logoInfo: { fontSize: 7, color: MUTED, marginTop: 2 },
-  folioLabel: { fontSize: 7, color: BLACK, letterSpacing: 2.5, marginBottom: 4 },
-  folioNum: { fontSize: 26, fontFamily: 'Helvetica-Bold', color: BLACK },
-  fechaText: { fontSize: 7, color: MUTED, marginTop: 6 },
+  logoBlock: { flex: 1, paddingRight: 16 },
+  logoImage: { width: 148, objectFit: 'contain', marginBottom: 8 },
+  logoName: { fontSize: 20, fontFamily: 'Helvetica-Bold', color: INK, letterSpacing: 0.5, marginBottom: 8 },
+  companyName: { fontSize: 12, fontFamily: 'Helvetica-Bold', color: INK, marginBottom: 3 },
+  companyLine: { fontSize: 7.5, color: MUTED, marginBottom: 1.5, lineHeight: 1.3 },
 
-  // ── Partes ──
-  partesOuter: {
+  // Tarjeta de folio (negra)
+  folioCard: { backgroundColor: DARK, borderRadius: 6, padding: '11 18', minWidth: 158, alignItems: 'center' },
+  folioLabel: { fontSize: 7, fontFamily: 'Helvetica-Bold', color: SPARK, letterSpacing: 2.5, marginBottom: 4 },
+  folioNum: { fontSize: 22, fontFamily: 'Helvetica-Bold', color: WHITE },
+  folioDivider: { height: 1, backgroundColor: '#454545', width: '100%', marginVertical: 6 },
+  folioDate: { fontSize: 7.5, color: '#cfcfcf' },
+
+  // ── Cliente / Descripción (tarjetas) ──
+  card: {
     margin: '14 32 0 32',
-    flexDirection: 'row',
-    borderWidth: 1,
-    borderColor: GRAY2,
+    padding: '10 14',
+    backgroundColor: TINT,
+    borderRadius: 6,
+    borderLeftWidth: 3,
+    borderLeftColor: SPARK,
   },
-  parteCellLast: { flex: 1, padding: '9 12' },
-  parteLabel: { fontSize: 10, color: BLACK, letterSpacing: 2.5, marginBottom: 5 },
-  parteNombre: { fontSize: 8.5, fontFamily: 'Helvetica-Bold', color: BLACK, marginBottom: 2 },
-  parteSub: { fontSize: 7, color: MUTED, marginBottom: 1.5 },
+  cardLabel: { fontSize: 7, fontFamily: 'Helvetica-Bold', color: INK, letterSpacing: 2, marginBottom: 6 },
+  parteNombre: { fontSize: 9, fontFamily: 'Helvetica-Bold', color: INK, marginBottom: 3 },
+  parteKey: { fontSize: 6.5, color: FAINT, letterSpacing: 0.5, marginBottom: 0.5, textTransform: 'uppercase' },
+  parteVal: { fontSize: 8, color: INK, marginBottom: 4 },
 
-  // ── Descripción general ──
-  descBox: {
-    margin: '12 32 0 32',
-    padding: '8 12',
-    backgroundColor: GRIS,
-    borderLeftWidth: 2,
-    borderLeftColor: Y,
-    // Sin minHeight fijo — crece con el contenido
+  descText: { fontSize: 8, color: '#333333', lineHeight: 1.55 },
+  descBulletRow: { flexDirection: 'row', marginBottom: 2 },
+  descBullet: { fontSize: 8, color: MUTED, width: 10 },
+
+  // ── Título de sección de página (p. ej. "Detalle") ──
+  pageTitle: {
+    fontSize: 8, fontFamily: 'Helvetica-Bold', color: INK, letterSpacing: 2,
+    marginBottom: 8, paddingBottom: 5, borderBottomWidth: 1.5, borderBottomColor: INK,
   },
-  descLabel: { fontSize: 6, color: MUTED, letterSpacing: 2, marginBottom: 4 },
-  descText: { fontSize: 7.5, color: BLACK, lineHeight: 1.5 },
 
   // ── Tabla ──
-  content: { padding: '12 32 0 32' },
+  content: { padding: '2 32 0 32' },
   tableHeader: {
     flexDirection: 'row',
-    backgroundColor: Y,
-    padding: '5 8',
+    backgroundColor: DARK,
+    padding: '6 8',
+    borderTopLeftRadius: 5,
+    borderTopRightRadius: 5,
   },
-  tableHeaderText: {
-    fontSize: 6.5,
-    fontFamily: 'Helvetica-Bold',
-    color: WHITE,
-    letterSpacing: 1,
-  },
+  tableHeaderText: { fontSize: 6.5, fontFamily: 'Helvetica-Bold', color: WHITE, letterSpacing: 0.8 },
   tableRow: {
     flexDirection: 'row',
-    padding: '6 8',
+    padding: '7 8',
     borderBottomWidth: 1,
-    borderBottomColor: GRAY2,
+    borderBottomColor: LINE,
   },
-  tableRowAlt: { backgroundColor: '#dddddd' },
-  tableCell: { fontSize: 7.5, color: '#000000' },
-  tableCellMuted: { fontSize: 7, color: MUTED },
-  catBadge: { fontSize: 5.5, color: Y, letterSpacing: 1.5, marginTop: 1 },
+  tableRowAlt: { backgroundColor: TINT_ALT },
+  tableCell: { fontSize: 8, color: INK },
+  tableCellMuted: { fontSize: 7.5, color: MUTED },
+  catBadge: { fontSize: 5.5, fontFamily: 'Helvetica-Bold', color: FAINT, letterSpacing: 1, marginTop: 2 },
 
   colNum: { width: 18, textAlign: 'center' },
   colServicio: { flex: 1 },
-  colDesc: { width: 110 },
+  colDesc: { width: 96 },
   colQty: { width: 36, textAlign: 'center' },
-  colValor: { width: 62, textAlign: 'right' },
+  colValor: { width: 64, textAlign: 'right' },
   colTotal: { width: 68, textAlign: 'right' },
 
   // ── Totales ──
-  totalesBox: { marginTop: 10, flexDirection: 'row', justifyContent: 'flex-end' },
-  totalesInner: { width: 230 },
+  totalesBox: { marginTop: 12, flexDirection: 'row', justifyContent: 'flex-end' },
+  totalesInner: { width: 240, borderWidth: 1, borderColor: LINE, borderRadius: 6, overflow: 'hidden' },
   totalesRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    padding: '4 10',
+    padding: '5 12',
     borderBottomWidth: 1,
-    borderBottomColor: GRAY2,
+    borderBottomColor: LINE,
   },
-  totalesLabel: { fontSize: 7, color: BLACK },
-  totalesValue: { fontSize: 7.5, color: BLACK, fontFamily: 'Helvetica-Bold' },
+  totalesLabel: { fontSize: 7.5, color: MUTED },
+  totalesValue: { fontSize: 8, color: INK, fontFamily: 'Helvetica-Bold' },
   totalFinalRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    padding: '7 10',
-    backgroundColor: '#000000',
+    alignItems: 'center',
+    padding: '9 12',
+    backgroundColor: DARK,
+    borderTopWidth: 2,
+    borderTopColor: SPARK,
   },
-  totalFinalLabel: { fontSize: 8, fontFamily: 'Helvetica-Bold', color: WHITE, letterSpacing: 1 },
-  totalFinalValue: { fontSize: 13, fontFamily: 'Helvetica-Bold', color: WHITE },
+  totalFinalLabel: { fontSize: 9, fontFamily: 'Helvetica-Bold', color: WHITE, letterSpacing: 1 },
+  totalFinalValue: { fontSize: 14, fontFamily: 'Helvetica-Bold', color: WHITE },
 
   // ── Importante ──
   importanteBox: {
-    margin: '14 32 0 32',
-    borderWidth: 1,
-    borderColor: GRAY2,
-    padding: '9 12',
-    backgroundColor: GRIS,
+    margin: '16 32 0 32',
+    borderRadius: 6,
+    padding: '10 14',
+    backgroundColor: TINT,
+    borderLeftWidth: 3,
+    borderLeftColor: SPARK,
   },
   importanteLabel: {
     fontSize: 7,
     fontFamily: 'Helvetica-Bold',
-    color: BLACK,
-    letterSpacing: 1.5,
+    color: INK,
+    letterSpacing: 2,
     marginBottom: 5,
-    borderBottomWidth: 1,
-    borderBottomColor: GRAY2,
-    paddingBottom: 4,
   },
-  importanteText: { fontSize: 7, color: MUTED, lineHeight: 1.6 },
+  importanteText: { fontSize: 7.5, color: MUTED, lineHeight: 1.6 },
 
   // ── Secciones cláusulas ──
-  seccionBox: { margin: '10 32 0 32' },
+  seccionBox: { margin: '14 32 0 32' },
   seccionTitulo: {
-    fontSize: 9,
+    fontSize: 9.5,
     fontFamily: 'Helvetica-Bold',
-    color: BLACK,
+    color: INK,
     letterSpacing: 0.5,
-    textAlign: 'center',
-    marginBottom: 8,
-    borderBottomWidth: 1,
-    borderBottomColor: Y,
+    marginBottom: 9,
     paddingBottom: 5,
+    borderBottomWidth: 1.5,
+    borderBottomColor: INK,
   },
   seccionSubtitulo: {
-    fontSize: 7.5,
+    fontSize: 8,
     fontFamily: 'Helvetica-Bold',
-    color: Y,
-    marginTop: 8,
+    color: INK,
+    marginTop: 9,
     marginBottom: 4,
   },
-  clausulaRow: { flexDirection: 'row', marginBottom: 3 },
-  clausulaLetra: { fontSize: 7, color: Y, width: 14 },
-  clausulaTexto: { fontSize: 7, color: MUTED, flex: 1, lineHeight: 1.6 },
+  clausulaRow: { flexDirection: 'row', marginBottom: 3.5 },
+  clausulaLetra: { fontSize: 7.5, fontFamily: 'Helvetica-Bold', color: MUTED, width: 14 },
+  clausulaTexto: { fontSize: 7.5, color: '#333333', flex: 1, lineHeight: 1.55 },
 
   // ── Firma ──
-  // La firma va al final de la última página usando flex en la Page
   firmaContainer: {
-    margin: '20 32 16 32',
+    margin: '24 32 18 32',
     flexDirection: 'row',
     justifyContent: 'space-between',
   },
-  firmaCol: {
-    width: 220,
-    alignItems: 'center',
-  },
-  firmaLinea: {
-    width: '100%',
-    borderTopWidth: 1,
-    borderTopColor: Y,
-    marginBottom: 8,
-  },
-  firmaNombreText: {
-    color: BLACK,
-    fontSize: 8,
-    fontFamily: 'Helvetica-Bold',
-  },
-  firmaMutedText: {
-    color: MUTED,
-    fontSize: 7,
-  },
+  firmaCol: { width: 220, alignItems: 'center' },
+  firmaLinea: { width: '100%', borderTopWidth: 1, borderTopColor: INK, marginBottom: 8 },
+  firmaNombreText: { color: INK, fontSize: 8.5, fontFamily: 'Helvetica-Bold' },
+  firmaMutedText: { color: MUTED, fontSize: 7 },
 
   // ── Footer ──
   footer: {
@@ -254,13 +213,15 @@ const s = StyleSheet.create({
     backgroundColor: WHITE,
     padding: '8 32',
     borderTopWidth: 1,
-    borderTopColor: GRAY2,
+    borderTopColor: LINE,
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
   },
-  footerLeft: { fontSize: 6.5, color: MUTED },
-  footerRight: { fontSize: 6.5, color: MUTED },
+  footerBrand: { flexDirection: 'row', alignItems: 'center', gap: 5 },
+  footerDot: { width: 5, height: 5, borderRadius: 2.5, backgroundColor: SPARK },
+  footerLeft: { fontSize: 6.5, color: MUTED, fontFamily: 'Helvetica-Bold' },
+  footerRight: { fontSize: 6.5, color: FAINT },
 });
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -273,6 +234,34 @@ const today = () =>
   new Date().toLocaleDateString('es-CL', {
     day: '2-digit', month: '2-digit', year: 'numeric',
   });
+
+/** Divide un texto en segmentos según **negrita** (marcadores estilo markdown). */
+const parseInline = (text: string): { t: string; b: boolean }[] => {
+  const parts: { t: string; b: boolean }[] = [];
+  const re = /\*\*([^*]+)\*\*/g;
+  let last = 0;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(text)) !== null) {
+    if (m.index > last) parts.push({ t: text.slice(last, m.index), b: false });
+    parts.push({ t: m[1], b: true });
+    last = m.index + m[0].length;
+  }
+  if (last < text.length) parts.push({ t: text.slice(last), b: false });
+  return parts.length ? parts : [{ t: text, b: false }];
+};
+
+/** Texto con soporte de **negrita** para el PDF (Text con Text anidados). */
+function RichText({ children, style }: { children: string; style?: React.ComponentProps<typeof View>['style'] }) {
+  return (
+    <Text style={style}>
+      {parseInline(children).map((p, i) =>
+        p.b
+          ? <Text key={i} style={{ fontFamily: 'Helvetica-Bold' }}>{p.t}</Text>
+          : <Text key={i}>{p.t}</Text>,
+      )}
+    </Text>
+  );
+}
 
 // ─── Tipos ───────────────────────────────────────────────────────────────────
 export interface EmpresaInfo {
@@ -421,6 +410,12 @@ export default function PresupuestoPDF({
       ══════════════════════════════════════════════════════════════════════ */}
       <Page size="A4" style={s.page}>
 
+        {/* ── Barra de acento superior ── */}
+        <View style={s.accentBar} fixed>
+          <View style={s.accentDark} />
+          <View style={s.accentSpark} />
+        </View>
+
         {/* ── HEADER ── */}
         <View style={s.header}>
           <View style={s.logoBlock}>
@@ -430,87 +425,104 @@ export default function PresupuestoPDF({
             ) : (
               <Text style={s.logoName}>{empresa.nombre.toUpperCase()}</Text>
             )}
+            <Text style={s.companyName}>{empresa.nombre}</Text>
+            {empresa.rut && <Text style={s.companyLine}>RUT: {empresa.rut}</Text>}
+            {empresa.giro && <Text style={s.companyLine}>Giro: {empresa.giro}</Text>}
+            {empresa.direccion && <Text style={s.companyLine}>{empresa.direccion}</Text>}
+            <Text style={s.companyLine}>{empresa.telefono}  ·  {empresa.email}</Text>
+            {empresa.website && <Text style={s.companyLine}>{empresa.website}</Text>}
           </View>
 
-          <View style={s.infoBlock}>
-            <Text style={[s.logoName, { fontSize: 14, marginBottom: 4 }]}>{empresa.nombre}</Text>
-            <Text style={s.logoInfo}>Correo: {empresa.email}</Text>
-            <Text style={s.logoInfo}>Teléfono: {empresa.telefono}</Text>
-            {empresa.direccion && <Text style={s.logoInfo}>Dirección: {empresa.direccion}</Text>}
-            {empresa.giro && <Text style={s.logoInfo}>Giro: {empresa.giro}</Text>}
-            <Text style={s.logoInfo}>RUT: {empresa.rut}</Text>
-            {empresa.website && <Text style={s.logoInfo}>{empresa.website}</Text>}
-          </View>
-
-          <View style={s.headerRight}>
-            <View style={s.folioBox}>
-              <Text style={s.folioLabel}>N° COTIZACIÓN</Text>
-              <Text style={s.folioNum}>{folio}</Text>
-            </View>
-            <View style={s.fechaBox}>
-              <Text style={[s.fechaText, { marginTop: 0 }]}>Fecha: {today()}</Text>
-            </View>
+          <View style={s.folioCard}>
+            <Text style={s.folioLabel}>COTIZACIÓN</Text>
+            <Text style={s.folioNum}>{folio}</Text>
+            <View style={s.folioDivider} />
+            <Text style={s.folioDate}>{today()}</Text>
           </View>
         </View>
 
-        {/* ── PARTES (Cliente) ── */}
-        <View style={s.partesOuter}>
-          <View style={s.parteCellLast}>
-            <Text style={s.parteLabel}>CLIENTE</Text>
-            <View style={{ flexDirection: 'row', marginTop: 6 }}>
-              <View style={{ flex: 1 }}>
-                <Text style={s.parteSub}>Nombre</Text>
-                <Text style={s.parteNombre}>{cliente.nombre_cliente}</Text>
-                <Text style={s.parteSub}>Empresa</Text>
-                <Text style={s.parteSub}>{cliente.empresa || '-'}</Text>
-                <Text style={s.parteSub}>RUT</Text>
-                <Text style={s.parteSub}>{cliente.rut || '-'}</Text>
-              </View>
-              <View style={{ flex: 1 }}>
-                <Text style={s.parteSub}>Teléfono</Text>
-                <Text style={s.parteSub}>{cliente.telefono || '-'}</Text>
-                <Text style={s.parteSub}>Correo</Text>
-                <Text style={s.parteSub}>{cliente.email || '-'}</Text>
-                <Text style={s.parteSub}>Dirección</Text>
-                <Text style={s.parteSub}>{cliente.direccion || '-'}</Text>
-              </View>
+        {/* ── CLIENTE ── */}
+        <View style={s.card}>
+          <Text style={s.cardLabel}>PREPARADO PARA</Text>
+          <Text style={s.parteNombre}>{cliente.nombre_cliente}</Text>
+          <View style={{ flexDirection: 'row', marginTop: 4 }}>
+            <View style={{ flex: 1 }}>
+              {cliente.empresa && (<><Text style={s.parteKey}>Empresa</Text><Text style={s.parteVal}>{cliente.empresa}</Text></>)}
+              <Text style={s.parteKey}>RUT</Text><Text style={s.parteVal}>{cliente.rut || '-'}</Text>
+              <Text style={s.parteKey}>Teléfono</Text><Text style={s.parteVal}>{cliente.telefono || '-'}</Text>
+            </View>
+            <View style={{ flex: 1.2 }}>
+              <Text style={s.parteKey}>Correo</Text><Text style={s.parteVal}>{cliente.email || '-'}</Text>
+              <Text style={s.parteKey}>Dirección</Text><Text style={s.parteVal}>{cliente.direccion || '-'}</Text>
             </View>
           </View>
         </View>
 
         {/* ── DESCRIPCIÓN GENERAL ──
-            Se divide en párrafos individuales con wrap={false} por párrafo.
-            Así ningún párrafo se corta a mitad, y el bloque puede paginar limpiamente.
-            El título + primer párrafo van juntos (minPresenceAhead) para no quedar solos. */}
-        {descripcionGeneral && (() => {
-          // Dividir por saltos de línea reales o doble salto
-          const parrafos = descripcionGeneral
-            .split(/\n/)
-            .map(p => p.trim())
-            .filter(p => p.length > 0);
-
-          return (
-            <View style={s.descBox}>
-              {/* Título + primer párrafo siempre juntos */}
-              <View wrap={false}>
-                <Text style={s.descLabel}>DESCRIPCIÓN DEL TRABAJO</Text>
-                {parrafos.length > 0 && (
-                  <Text style={[s.descText, { marginBottom: 4 }]}>{parrafos[0]}</Text>
-                )}
-              </View>
-              {/* Resto de párrafos — cada uno atómico */}
-              {parrafos.slice(1).map((parrafo, i) => (
-                <Text
-                  key={i}
-                  style={[s.descText, { marginBottom: 4 }]}
-                  wrap={false}
-                >
-                  {parrafo}
-                </Text>
-              ))}
+            Respeta los saltos de línea y líneas en blanco tal como se escriben,
+            reconoce viñetas (-, •, *) y **negrita**. Cada línea es atómica (wrap=false). */}
+        {descripcionGeneral && descripcionGeneral.trim() && (
+          <View style={s.card}>
+            <View wrap={false}>
+              <Text style={s.cardLabel}>DESCRIPCIÓN DEL TRABAJO</Text>
             </View>
-          );
-        })()}
+            {descripcionGeneral.split('\n').map((linea, i) => {
+              const t = linea.replace(/\s+$/, '');
+              // Línea en blanco → espacio (mantiene la separación de párrafos)
+              if (t.trim() === '') return <View key={i} style={{ height: 5 }} />;
+              // Viñeta
+              if (/^\s*[-•*]\s+/.test(t)) {
+                return (
+                  <View key={i} style={s.descBulletRow} wrap={false}>
+                    <Text style={s.descBullet}>•</Text>
+                    <RichText style={[s.descText, { flex: 1 }]}>{t.replace(/^\s*[-•*]\s+/, '')}</RichText>
+                  </View>
+                );
+              }
+              // Párrafo normal (con negrita)
+              return (
+                <RichText key={i} style={[s.descText, { marginBottom: 2 }]}>{t}</RichText>
+              );
+            })}
+          </View>
+        )}
+
+        {/* ── IMPORTANTE (completa la página 1) ── */}
+        <View style={s.importanteBox} wrap={false}>
+          <Text style={s.importanteLabel}>IMPORTANTE</Text>
+          <Text style={s.importanteText}>{textoImportante}</Text>
+        </View>
+
+        {/* ── FOOTER página 1 ── */}
+        <View style={s.footer} fixed>
+          <View style={s.footerBrand}>
+            <View style={s.footerDot} />
+            <Text style={s.footerLeft}>{empresa.nombre}</Text>
+          </View>
+          <Text
+            style={s.footerRight}
+            render={({ pageNumber, totalPages }) =>
+              `${folio} · Página ${pageNumber}/${totalPages}`
+            }
+          />
+        </View>
+
+      </Page>
+
+      {/* ══════════════════════════════════════════════════════════════════════
+          PÁGINA 2 — Detalle de ítems + Totales
+      ══════════════════════════════════════════════════════════════════════ */}
+      <Page size="A4" style={s.page}>
+
+        {/* ── Barra de acento superior ── */}
+        <View style={s.accentBar} fixed>
+          <View style={s.accentDark} />
+          <View style={s.accentSpark} />
+        </View>
+
+        <View style={{ padding: '4 32 0 32' }}>
+          <Text style={s.pageTitle}>DETALLE DE LA COTIZACIÓN</Text>
+        </View>
 
         {/* ── TABLA DE ÍTEMS ──
             El truco clave: envolver header + primera fila en wrap={false}
@@ -601,7 +613,10 @@ export default function PresupuestoPDF({
 
         {/* ── FOOTER página 1 ── */}
         <View style={s.footer} fixed>
-          <Text style={s.footerLeft}>{empresa.nombre}</Text>
+          <View style={s.footerBrand}>
+            <View style={s.footerDot} />
+            <Text style={s.footerLeft}>{empresa.nombre}</Text>
+          </View>
           <Text
             style={s.footerRight}
             render={({ pageNumber, totalPages }) =>
@@ -628,14 +643,14 @@ export default function PresupuestoPDF({
           },
         ]}
       >
-        {/* Contenido superior: Importante + Cláusulas */}
-        <View>
+        {/* ── Barra de acento superior ── */}
+        <View style={s.accentBar} fixed>
+          <View style={s.accentDark} />
+          <View style={s.accentSpark} />
+        </View>
 
-          {/* ── IMPORTANTE ── */}
-          <View style={s.importanteBox} wrap={false}>
-            <Text style={s.importanteLabel}>IMPORTANTE</Text>
-            <Text style={s.importanteText}>{textoImportante}</Text>
-          </View>
+        {/* Contenido superior: Aclaraciones + Condiciones */}
+        <View>
 
           {/* ── ACLARACIONES ── */}
           <View style={s.seccionBox}>
@@ -706,7 +721,7 @@ export default function PresupuestoPDF({
                   {lineasTexto(garantia).map((t, i) => (
                     <View key={`gar-${i}`} style={s.clausulaRow} wrap={false}>
                       <Text style={s.clausulaLetra}>•</Text>
-                      <Text style={s.clausulaTexto}>{t}</Text>
+                      <RichText style={s.clausulaTexto}>{t}</RichText>
                     </View>
                   ))}
                 </>
@@ -718,7 +733,7 @@ export default function PresupuestoPDF({
                   {lineasTexto(condicionesComerciales).map((t, i) => (
                     <View key={`con-${i}`} style={s.clausulaRow} wrap={false}>
                       <Text style={s.clausulaLetra}>•</Text>
-                      <Text style={s.clausulaTexto}>{t}</Text>
+                      <RichText style={s.clausulaTexto}>{t}</RichText>
                     </View>
                   ))}
                 </>
@@ -750,7 +765,10 @@ export default function PresupuestoPDF({
 
         {/* ── FOOTER página final ── */}
         <View style={s.footer} fixed>
-          <Text style={s.footerLeft}>{empresa.nombre}</Text>
+          <View style={s.footerBrand}>
+            <View style={s.footerDot} />
+            <Text style={s.footerLeft}>{empresa.nombre}</Text>
+          </View>
           <Text
             style={s.footerRight}
             render={({ pageNumber, totalPages }) =>

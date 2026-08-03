@@ -135,7 +135,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     <div style={{ height: '100svh', display: 'flex', overflow: 'hidden', background: 'var(--bg)' }}>
 
       {/* ── SIDEBAR DESKTOP ── */}
-      <aside className="sidebar-desktop" style={{ width: collapsed ? 64 : 'var(--sidebar-w)', flexShrink: 0, background: 'var(--bg2)', borderRight: '1px solid var(--border2)', flexDirection: 'column', position: 'relative', overflow: 'hidden', transition: 'width 0.18s ease' }}>
+      <aside className="sidebar-desktop" style={{ width: collapsed ? 64 : 'var(--sidebar-w)', flexShrink: 0, background: 'var(--bg2)', borderRight: '1px solid var(--border2)', flexDirection: 'column', position: 'relative', overflow: 'hidden', transition: 'width 0.18s ease', paddingTop: 'env(safe-area-inset-top, 0px)' }}>
         <div style={{ position: 'relative', zIndex: 1, display: 'flex', flexDirection: 'column', height: '100%' }}>
           <Sidebar compact={collapsed} />
         </div>
@@ -145,8 +145,8 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       {mobileOpen && (
         <div style={{ position: 'fixed', inset: 0, zIndex: 200 }}>
           <div onClick={() => setMobileOpen(false)} style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.85)' }} />
-          <aside style={{ position: 'absolute', left: 0, top: 0, bottom: 0, width: 260, background: 'var(--bg2)', borderRight: '1px solid var(--border2)', display: 'flex', flexDirection: 'column' }}>
-            <button onClick={() => setMobileOpen(false)} style={{ position: 'absolute', top: '1rem', right: '1rem', background: 'none', border: 'none', cursor: 'pointer', color: 'var(--muted)', zIndex: 2 }}>
+          <aside style={{ position: 'absolute', left: 0, top: 0, bottom: 0, width: 260, background: 'var(--bg2)', borderRight: '1px solid var(--border2)', display: 'flex', flexDirection: 'column', paddingTop: 'env(safe-area-inset-top, 0px)', paddingBottom: 'env(safe-area-inset-bottom, 0px)' }}>
+            <button onClick={() => setMobileOpen(false)} style={{ position: 'absolute', top: 'calc(1rem + env(safe-area-inset-top, 0px))', right: '1rem', background: 'none', border: 'none', cursor: 'pointer', color: 'var(--muted)', zIndex: 2 }}>
               <X size={18} />
             </button>
             <div style={{ position: 'relative', zIndex: 1, display: 'flex', flexDirection: 'column', height: '100%' }}>
@@ -158,12 +158,15 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
       {/* ── MAIN AREA ── */}
       <div ref={mainRef} style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0, overflowY: 'auto' }} onScroll={e => setScrolled((e.currentTarget as HTMLElement).scrollTop > 10)}>
-        {/* Topbar */}
+        {/* Topbar — deja hueco para el notch/Dynamic Island en la PWA de iPhone */}
         <header style={{
-          position: 'sticky', top: 0, zIndex: 40, height: 'var(--topbar-h)', flexShrink: 0,
+          position: 'sticky', top: 0, zIndex: 40, flexShrink: 0,
+          height: 'calc(var(--topbar-h) + env(safe-area-inset-top, 0px))',
+          paddingTop: 'env(safe-area-inset-top, 0px)',
           display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-          padding: '0 1.75rem',
-          background: scrolled ? 'var(--bg)' : 'transparent',
+          paddingLeft: 'max(1.75rem, env(safe-area-inset-left, 0px))',
+          paddingRight: 'max(1.75rem, env(safe-area-inset-right, 0px))',
+          background: scrolled ? 'var(--bg)' : 'var(--bg)',
           backdropFilter: scrolled ? 'blur(20px)' : 'none',
           borderBottom: scrolled ? '1px solid var(--border2)' : '1px solid transparent',
           transition: 'all 0.3s',
@@ -195,7 +198,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         </header>
 
         {/* Page content */}
-        <main style={{ flex: 1, padding: 'var(--page-px)', paddingBottom: 'var(--page-pb)' }}>
+        <main style={{ flex: 1, padding: 'var(--page-px)', paddingBottom: 'calc(var(--page-pb) + env(safe-area-inset-bottom, 0px))' }}>
           {children}
         </main>
       </div>
