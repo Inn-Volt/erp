@@ -503,6 +503,10 @@ function CotizadorContent() {
   const [ocultarCostos,          setOcultarCostos]          = useState(false);
   const [garantia,               setGarantia]               = useState(GARANTIA_DEFAULT);
   const [condicionesComerciales, setCondicionesComerciales] = useState(CONDICIONES_DEFAULT);
+  // Textos por defecto tomados de Configuración (si existen). Se usan al crear
+  // una cotización nueva y al limpiar el formulario.
+  const [defGarantia,            setDefGarantia]            = useState(GARANTIA_DEFAULT);
+  const [defCondiciones,         setDefCondiciones]         = useState(CONDICIONES_DEFAULT);
   const [showPDFModal,           setShowPDFModal]           = useState(false);
   const [supuestos,              setSupuestos]              = useState<Supuestos>({ ...SUPUESTOS_DEFAULT });
   const [showHHModal,            setShowHHModal]            = useState(false);
@@ -862,8 +866,8 @@ const [empresaEditing, setEmpresaEditing] = useState<EmpresaInfo | null>(null);
     setFolioGenerado(null);
     setDescuentoPorcentajeMO(0);
     setOcultarSuministros(false);
-    setGarantia(GARANTIA_DEFAULT);
-    setCondicionesComerciales(CONDICIONES_DEFAULT);
+    setGarantia(defGarantia);
+    setCondicionesComerciales(defCondiciones);
     setSupuestos({ ...SUPUESTOS_DEFAULT });
     obtenerUltimoFolio();
     router.push('/cotizador');
