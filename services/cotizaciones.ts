@@ -70,15 +70,18 @@ export const cotizacionesService = {
     const { data, error } = await supabase.rpc('get_kpis');
     if (!error && data) return data as KpiData;
 
-    // Fallback: aggregate client-side
+    // Fallback: aggregate client-side.
+    // Se usa total_clp (total convertido a CLP) para no mezclar monedas; si no
+    // existe (cotizaciones antiguas o en CLP), cae a total.
     const { data: rows } = await supabase
       .from('cotizaciones')
-      .select('total, estado');
+      .select('total, total_clp, estado');
     const all = rows || [];
+    const montoCLP = (r: { total?: number; total_clp?: number | null }) => r.total_clp ?? r.total ?? 0;
     return {
       total_cotizaciones: all.length,
-      venta_acumulada: all.filter(r => r.estado !== 'Rechazado').reduce((a, r) => a + (r.total || 0), 0),
-      pendiente_pipeline: all.filter(r => r.estado === 'Pendiente').reduce((a, r) => a + (r.total || 0), 0),
+      venta_acumulada: all.filter(r => r.estado !== 'Rechazado').reduce((a, r) => a + montoCLP(r), 0),
+      pendiente_pipeline: all.filter(r => r.estado === 'Pendiente').reduce((a, r) => a + montoCLP(r), 0),
       aceptadas: all.filter(r => ['Aceptado', 'Realizado', 'Entregado'].includes(r.estado)).length,
     };
   },

@@ -76,6 +76,9 @@ export const SUPUESTOS_DEFAULT: Supuestos = {
 
 export type EstadoCotizacion = 'Pendiente' | 'Aceptado' | 'Realizado' | 'Rechazado' | 'Entregado';
 
+/** Moneda de la cotización. UF permite decimales; CLP se redondea a peso entero. */
+export type Moneda = 'CLP' | 'UF';
+
 export interface Cotizacion {
   id: string;
   folio: number;
@@ -86,6 +89,12 @@ export interface Cotizacion {
   supuestos?: Supuestos;
   /** Empresa emisora; sin esto el PDF se generaba siempre con la primera. */
   empresa_id?: string | null;
+  /** Moneda de la cotización (por defecto CLP). */
+  moneda?: Moneda;
+  /** Valor de la UF en CLP al momento de cotizar (solo informativo, si moneda = UF). */
+  valor_uf?: number | null;
+  /** Total convertido a CLP (para KPIs/dashboard sin mezclar monedas). */
+  total_clp?: number | null;
   subtotal: number;
   iva: number;
   total: number;

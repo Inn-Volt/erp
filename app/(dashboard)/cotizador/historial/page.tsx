@@ -11,8 +11,8 @@ import { saveAs } from 'file-saver';
 
 import { cotizacionesService } from '@/services/cotizaciones';
 import { useToast } from '@/hooks/useToast';
-import { formatCLP, formatFolio, formatDate, calcularTotals, normalizarItem } from '@/utils';
-import type { Cotizacion, EstadoCotizacion } from '@/types';
+import { formatCLP, formatMoneda, formatFolio, formatDate, calcularTotals, normalizarItem } from '@/utils';
+import type { Cotizacion, EstadoCotizacion, Moneda } from '@/types';
 import { ESTADO_COLORS, ESTADOS_TODOS, SUPUESTOS_DEFAULT } from '@/types';
 import PresupuestoPDF from '@/components/pdf/PresupuestoPDF';
 import { supabase } from '@/lib/supabase';
@@ -135,6 +135,8 @@ const [empresas, setEmpresas] = useState<EmpresaInfo[]>([]);
           condicionesComerciales={cot.condiciones_comerciales || ''}
           ocultarSuministros={cot.ocultar_suministros || false}
           empresa={empresaCot}
+          moneda={(cot.moneda as Moneda) || 'CLP'}
+          valorUF={cot.valor_uf || 0}
         />
       ).toBlob();
       saveAs(blob, `Cotizacion_${formatFolio(cot.folio)}_${cot.clientes.nombre_cliente}.pdf`);
@@ -180,7 +182,7 @@ const [empresas, setEmpresas] = useState<EmpresaInfo[]>([]);
   // Resumen rápido
   const resumen = useMemo(() => ({
     total: filtered.length,
-    montoTotal: filtered.reduce((a, c) => a + (c.total || 0), 0),
+    montoTotal: filtered.reduce((a, c) => a + (c.total_clp ?? c.total ?? 0), 0),
     aceptadas: filtered.filter(c => ['Aceptado', 'Realizado', 'Entregado'].includes(c.estado)).length,
   }), [filtered]);
 
@@ -364,7 +366,7 @@ const [empresas, setEmpresas] = useState<EmpresaInfo[]>([]);
                       </div>
                     </td>
                     <td style={{ textAlign: 'right', fontFamily: 'var(--font-display)', fontWeight: 700, fontSize: '0.9rem', whiteSpace: 'nowrap' }}>
-                      {formatCLP(cot.total)}
+                      {formatMoneda(cot.total, (cot.moneda as Moneda) || 'CLP')}
                     </td>
                     <td>
                       <div style={{ display: 'flex', gap: '0.3rem', justifyContent: 'center' }}>

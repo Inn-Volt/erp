@@ -135,10 +135,12 @@ RETURNS JSON LANGUAGE plpgsql SECURITY DEFINER AS $$
 DECLARE
   result JSON;
 BEGIN
+  -- Se usa COALESCE(total_clp, total): las cotizaciones en UF guardan total_clp
+  -- (total convertido a pesos) para no mezclar monedas en los KPIs.
   SELECT json_build_object(
     'total_cotizaciones', COUNT(*),
-    'venta_acumulada',    COALESCE(SUM(total) FILTER (WHERE estado != 'Rechazado'), 0),
-    'pendiente_pipeline', COALESCE(SUM(total) FILTER (WHERE estado = 'Pendiente'), 0),
+    'venta_acumulada',    COALESCE(SUM(COALESCE(total_clp, total)) FILTER (WHERE estado != 'Rechazado'), 0),
+    'pendiente_pipeline', COALESCE(SUM(COALESCE(total_clp, total)) FILTER (WHERE estado = 'Pendiente'), 0),
     'aceptadas',          COUNT(*) FILTER (WHERE estado IN ('Aceptado','Realizado','Entregado'))
   )
   INTO result
@@ -374,6 +376,17 @@ ALTER TABLE public.cotizaciones
   ADD COLUMN IF NOT EXISTS empresa_id UUID REFERENCES public.empresas(id) ON DELETE SET NULL;
 
 CREATE INDEX IF NOT EXISTS idx_cotizaciones_empresa ON public.cotizaciones(empresa_id);
+
+-- Moneda de la cotización (CLP por defecto) + soporte UF.
+--   moneda    : 'CLP' | 'UF'
+--   valor_uf  : valor de la UF en CLP al momento de cotizar (solo si moneda = UF)
+--   total_clp : total convertido a CLP, para KPIs/dashboard sin mezclar monedas
+ALTER TABLE public.cotizaciones
+  ADD COLUMN IF NOT EXISTS moneda TEXT DEFAULT 'CLP';
+ALTER TABLE public.cotizaciones
+  ADD COLUMN IF NOT EXISTS valor_uf NUMERIC;
+ALTER TABLE public.cotizaciones
+  ADD COLUMN IF NOT EXISTS total_clp NUMERIC;
 
 -- La tabla `empresas` pudo crearse antes sin columnas de fecha, pero el trigger
 -- trg_empresas_updated escribe NEW.updated_at → "record new has no field

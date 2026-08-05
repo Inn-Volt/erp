@@ -20,11 +20,11 @@ import { clientesService } from '@/services/clientes';
 import { cotizacionesService } from '@/services/cotizaciones';
 import { useToast } from '@/hooks/useToast';
 import {
-  formatCLP, formatFolio, cleanNumber, calcularTotals, calcularItem,
+  formatCLP, formatMoneda, redondearMoneda, formatFolio, cleanNumber, calcularTotals, calcularItem,
   newItem, normalizarItem, precioDesdeMargen,
   margenDesdePrecio, itemsToExcelRows, parseCategoria,
 } from '@/utils';
-import type { CotizacionItem, Cliente, CategoriaItem, Supuestos } from '@/types';
+import type { CotizacionItem, Cliente, CategoriaItem, Supuestos, Moneda } from '@/types';
 import {
   CATEGORIA_LABELS, CATEGORIAS_ORDEN, CATEGORIA_COLORS,
   SUPUESTOS_DEFAULT, UNIDADES,
@@ -207,15 +207,16 @@ function EmpresaSelector({
 function PDFModal({
   folio, cliente, items, totals, descuentoPorcentajeMO,
   descripcionGeneral, garantia, condicionesComerciales,
-  ocultarSuministros, empresa, onClose,
+  ocultarSuministros, empresa, moneda, valorUF, onClose,
 }: {
   folio: number; cliente: any; items: CotizacionItem[];
   totals: ReturnType<typeof calcularTotals>; descuentoPorcentajeMO: number;
   descripcionGeneral: string; garantia: string; condicionesComerciales: string;
-  ocultarSuministros: boolean; empresa: EmpresaInfo; onClose: () => void;
+  ocultarSuministros: boolean; empresa: EmpresaInfo; moneda: Moneda; valorUF: number; onClose: () => void;
 }) {
   const [gen, setGen] = useState(false);
   const folioStr = formatFolio(folio);
+  const fmt = (v: number) => formatMoneda(v, moneda);
 
   const download = async (tipo: 'cliente' | 'interno') => {
     setGen(true);
@@ -228,7 +229,7 @@ function PDFModal({
             descripcionGeneral={descripcionGeneral} garantia={garantia}
             condicionesComerciales={condicionesComerciales}
             ocultarSuministros={ocultarSuministros}
-            empresa={empresa}
+            empresa={empresa} moneda={moneda} valorUF={valorUF}
           />
         ).toBlob();
         saveAs(blob, `Cotizacion_${folioStr}_${cliente.nombre_cliente}.pdf`);
@@ -260,7 +261,7 @@ function PDFModal({
             <div>
               <p style={{ fontFamily: 'var(--font-display)', fontWeight: 900, fontSize: '1rem', color: 'var(--y)' }}>{folioStr}</p>
               <p style={{ fontSize: '0.82rem', color: 'var(--muted)', marginTop: '0.15rem' }}>{cliente.nombre_cliente}</p>
-              <p style={{ fontFamily: 'var(--font-display)', fontWeight: 900, fontSize: '1.2rem', color: 'var(--text)', marginTop: '0.25rem' }}>{formatCLP(totals.total)}</p>
+              <p style={{ fontFamily: 'var(--font-display)', fontWeight: 900, fontSize: '1.2rem', color: 'var(--text)', marginTop: '0.25rem' }}>{fmt(totals.total)}</p>
             </div>
             <div style={{ width: 36, height: 36, background: 'rgba(74,222,128,0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
               <Check size={18} color="var(--success)" />
@@ -295,35 +296,38 @@ function PDFModal({
 }
 
 // ─── Item Row ─────────────────────────────────────────────────────────────────
-function ItemRow({ item, index, onUpdate, onDelete, onDuplicate, onMoveUp, onMoveDown, isFirst, isLast, ocultarCostos }: {
+function ItemRow({ item, index, onUpdate, onDelete, onDuplicate, onMoveUp, onMoveDown, isFirst, isLast, ocultarCostos, moneda }: {
   item: CotizacionItem; index: number;
   onUpdate: (i: number, u: Partial<CotizacionItem>) => void;
   onDelete: (i: number) => void;
   onDuplicate: (i: number) => void;
   onMoveUp: (i: number) => void;
   onMoveDown: (i: number) => void;
-  isFirst: boolean; isLast: boolean; ocultarCostos: boolean;
+  isFirst: boolean; isLast: boolean; ocultarCostos: boolean; moneda: Moneda;
 }) {
   const CatIcon = CAT_ICONS[item.categoria];
   const [isEditingCosto, setIsEditingCosto] = useState(false);
   const [isEditingPrecio, setIsEditingPrecio] = useState(false);
   const calc = useMemo(() => calcularItem(item), [item]);
+  /** Formatea según la moneda de la cotización (CLP o UF). */
+  const fmt = (v: number) => formatMoneda(v, moneda);
 
   // Cadena del Excel: costo → (1+imprevistos) → ÷(1−margen) → ×(1+IVA)
+  // El redondeo respeta la moneda: CLP a peso entero, UF a 2 decimales.
   const handleCostoChange = (v: string) => {
     const costo = cleanNumber(v);
     const precio = precioDesdeMargen(costo, item.margen, item.imprevistos);
-    onUpdate(index, { costo, precio: Math.round(precio) });
+    onUpdate(index, { costo, precio: redondearMoneda(precio, moneda) });
   };
   const handleImprevistosChange = (v: string) => {
     const imprevistos = parseFloat(v) || 0;
     const precio = precioDesdeMargen(item.costo || 0, item.margen, imprevistos);
-    onUpdate(index, { imprevistos, precio: Math.round(precio) });
+    onUpdate(index, { imprevistos, precio: redondearMoneda(precio, moneda) });
   };
   const handleMargenChange = (v: string) => {
     const margen = parseFloat(v) || 0;
     const precio = precioDesdeMargen(item.costo || 0, margen, item.imprevistos);
-    onUpdate(index, { margen, precio: Math.round(precio) });
+    onUpdate(index, { margen, precio: redondearMoneda(precio, moneda) });
   };
   const handlePrecioChange = (v: string) => {
     const precio = cleanNumber(v);
@@ -370,7 +374,7 @@ function ItemRow({ item, index, onUpdate, onDelete, onDuplicate, onMoveUp, onMov
           {!ocultarCostos && (
             <div className="input-field-wrapper">
               <span className="mobile-label">Costo Unit.</span>
-              <input type={isEditingCosto ? 'number' : 'text'} className="no-spin-arrows input-row-focus" value={isEditingCosto ? (item.costo || '') : formatCLP(item.costo || 0)} onChange={e => handleCostoChange(e.target.value)} onFocus={() => setIsEditingCosto(true)} onBlur={() => setIsEditingCosto(false)} placeholder="$ 0" style={{ ...inputStyle, color: 'var(--muted)', fontSize: '0.8rem' }} />
+              <input type={isEditingCosto ? 'number' : 'text'} className="no-spin-arrows input-row-focus" value={isEditingCosto ? (item.costo || '') : fmt(item.costo || 0)} onChange={e => handleCostoChange(e.target.value)} onFocus={() => setIsEditingCosto(true)} onBlur={() => setIsEditingCosto(false)} placeholder="$ 0" style={{ ...inputStyle, color: 'var(--muted)', fontSize: '0.8rem' }} />
             </div>
           )}
           {!ocultarCostos && (
@@ -393,7 +397,7 @@ function ItemRow({ item, index, onUpdate, onDelete, onDuplicate, onMoveUp, onMov
           )}
           <div className="input-field-wrapper">
             <span className="mobile-label">Precio Venta</span>
-            <input type={isEditingPrecio ? 'number' : 'text'} className="no-spin-arrows input-row-focus" value={isEditingPrecio ? (item.precio || '') : formatCLP(item.precio || 0)} onChange={e => handlePrecioChange(e.target.value)} onFocus={() => setIsEditingPrecio(true)} onBlur={() => setIsEditingPrecio(false)} placeholder="$ 0" style={{ ...inputStyle, color: 'var(--y)', fontWeight: '700' }} />
+            <input type={isEditingPrecio ? 'number' : 'text'} className="no-spin-arrows input-row-focus" value={isEditingPrecio ? (item.precio || '') : fmt(item.precio || 0)} onChange={e => handlePrecioChange(e.target.value)} onFocus={() => setIsEditingPrecio(true)} onBlur={() => setIsEditingPrecio(false)} placeholder="$ 0" style={{ ...inputStyle, color: 'var(--y)', fontWeight: '700' }} />
           </div>
           <div className="input-field-wrapper min-w-55">
             <span className="mobile-label">Desc.</span>
@@ -412,10 +416,10 @@ function ItemRow({ item, index, onUpdate, onDelete, onDuplicate, onMoveUp, onMov
           <div className="input-field-wrapper cell-subtotal">
             <span className="mobile-label">Subtotal</span>
             <span style={{ fontFamily: 'var(--font-display)', fontWeight: 700, fontSize: '0.9rem', color: 'var(--text)', textAlign: 'right', display: 'block', padding: '0.45rem 0' }}>
-              {formatCLP(calc.precioVenta)}
+              {fmt(calc.precioVenta)}
             </span>
             {(item.descuento || 0) > 0 && (
-              <span style={{ fontSize: '0.6rem', color: 'var(--danger)', textAlign: 'right', display: 'block' }}>−{formatCLP(calc.montoDescuento)}</span>
+              <span style={{ fontSize: '0.6rem', color: 'var(--danger)', textAlign: 'right', display: 'block' }}>−{fmt(calc.montoDescuento)}</span>
             )}
           </div>
         </div>
@@ -455,15 +459,15 @@ function ItemRow({ item, index, onUpdate, onDelete, onDuplicate, onMoveUp, onMov
             fontSize: '0.6rem', color: 'var(--muted)', fontFamily: 'monospace',
             display: 'flex', gap: '0.35rem', alignItems: 'center', flexWrap: 'wrap',
           }}>
-            <span title="Costo total">{formatCLP(calc.costoTotal)}</span>
+            <span title="Costo total">{fmt(calc.costoTotal)}</span>
             <span style={{ opacity: 0.4 }}>→</span>
-            <span title="Costo con imprevistos" style={{ color: 'var(--orange)' }}>{formatCLP(calc.costoConImprev)}</span>
+            <span title="Costo con imprevistos" style={{ color: 'var(--orange)' }}>{fmt(calc.costoConImprev)}</span>
             <span style={{ opacity: 0.4 }}>→</span>
-            <span title="Precio de venta neto" style={{ color: 'var(--y)' }}>{formatCLP(calc.precioVenta)}</span>
+            <span title="Precio de venta neto" style={{ color: 'var(--y)' }}>{fmt(calc.precioVenta)}</span>
             {item.iva > 0 && (
               <>
                 <span style={{ opacity: 0.4 }}>→</span>
-                <span title={`Con IVA ${item.iva}%`} style={{ color: 'var(--info)' }}>{formatCLP(calc.precioConIva)}</span>
+                <span title={`Con IVA ${item.iva}%`} style={{ color: 'var(--info)' }}>{fmt(calc.precioConIva)}</span>
               </>
             )}
           </span>
@@ -505,6 +509,9 @@ function CotizadorContent() {
   const [showBiblioteca,         setShowBiblioteca]         = useState(false);
   const [showDescripcion,        setShowDescripcion]        = useState(false);
   const [showOpciones,           setShowOpciones]           = useState(false);
+  const [moneda,                 setMoneda]                 = useState<Moneda>('CLP');
+  const [valorUF,                setValorUF]                = useState(0);
+  const [cargandoUF,             setCargandoUF]             = useState(false);
 
 // ── Estado empresa ──
 const [empresas, setEmpresas] = useState<EmpresaInfo[]>([]);
@@ -525,12 +532,34 @@ const [empresaEditing, setEmpresaEditing] = useState<EmpresaInfo | null>(null);
     const [dataClientes] = await Promise.all([
       clientesService.getAll(),
       loadEmpresas(),
+      cargarDefaultsConfig(),
     ]);
     setClientes(dataClientes);
     if (clienteParam) {
       const c = dataClientes.find((x: Cliente) => x.id === clienteParam);
       if (c) { setClienteSeleccionado(c); setSearchCliente(c.nombre_cliente); }
     }
+  }
+
+  /**
+   * Trae los textos por defecto de la página Configuración y, SOLO para
+   * cotizaciones nuevas (no al editar/clonar), los usa como garantía y
+   * condiciones iniciales. Así lo que se edita en Configuración sí tiene efecto.
+   */
+  async function cargarDefaultsConfig() {
+    try {
+      const { data } = await supabase
+        .from('configuracion_empresa')
+        .select('garantia_default, condiciones_default')
+        .limit(1).single();
+      if (!data) return;
+      if (data.garantia_default)     setDefGarantia(data.garantia_default);
+      if (data.condiciones_default)  setDefCondiciones(data.condiciones_default);
+      if (!editId && !cloneId) {
+        if (data.garantia_default)    setGarantia(data.garantia_default);
+        if (data.condiciones_default) setCondicionesComerciales(data.condiciones_default);
+      }
+    } catch { /* sin config: se usan los textos por defecto del código */ }
   }
 
   async function loadEmpresas(): Promise<EmpresaInfo[]> {
@@ -573,6 +602,8 @@ const [empresaEditing, setEmpresaEditing] = useState<EmpresaInfo | null>(null);
       if (cot.condiciones_servicio)    setGarantia(cot.condiciones_servicio);
       if (cot.condiciones_comerciales) setCondicionesComerciales(cot.condiciones_comerciales);
       setOcultarSuministros(cot.ocultar_suministros ?? false);
+      setMoneda((cot.moneda as Moneda) || 'CLP');
+      setValorUF(cot.valor_uf || 0);
       // Restaurar la empresa emisora original (si la cotización la guardó)
       if (cot.empresa_id) {
         const lista = await loadEmpresas();
@@ -586,6 +617,25 @@ const [empresaEditing, setEmpresaEditing] = useState<EmpresaInfo | null>(null);
   }
 
   const totals = useMemo(() => calcularTotals(items, descuentoPorcentajeMO), [items, descuentoPorcentajeMO]);
+
+  /** Formatea un monto en la moneda seleccionada (CLP o UF). */
+  const fmt = useCallback((v: number) => formatMoneda(v, moneda), [moneda]);
+
+  /** Trae el valor de la UF de hoy desde mindicador.cl (API pública, sin key). */
+  const traerUF = useCallback(async () => {
+    setCargandoUF(true);
+    try {
+      const res = await fetch('https://mindicador.cl/api/uf');
+      const data = await res.json();
+      const val = Math.round((data?.serie?.[0]?.valor || 0));
+      if (val > 0) { setValorUF(val); success(`UF de hoy: ${formatCLP(val)}`); }
+      else warning('No se pudo obtener la UF; ingrésala manualmente.');
+    } catch {
+      warning('No se pudo obtener la UF; ingrésala manualmente.');
+    } finally {
+      setCargandoUF(false);
+    }
+  }, [success, warning]);
 
   const addItem = useCallback((categoria: CategoriaItem = 'material') => {
     setItems(prev => [newItem({ categoria }, supuestos), ...prev]);
@@ -775,6 +825,10 @@ const [empresaEditing, setEmpresaEditing] = useState<EmpresaInfo | null>(null);
       subtotal: totals.netoGeneral,
       iva: totals.ivaGeneral,
       total: totals.total,
+      // Para KPIs/dashboard sin mezclar monedas: total convertido a CLP.
+      total_clp: moneda === 'UF' ? Math.round(totals.total * (valorUF || 0)) : totals.total,
+      moneda,
+      valor_uf: moneda === 'UF' ? (valorUF || null) : null,
       descuento_global: descuentoPorcentajeMO,
       descripcion_general: descripcionGeneral,
       condiciones_servicio: garantia,
@@ -889,7 +943,7 @@ const [empresaEditing, setEmpresaEditing] = useState<EmpresaInfo | null>(null);
           descripcionGeneral={descripcionGeneral}
           garantia={garantia} condicionesComerciales={condicionesComerciales}
           ocultarSuministros={ocultarSuministros}
-          empresa={empresaPDF}
+          empresa={empresaPDF} moneda={moneda} valorUF={valorUF}
           onClose={() => setShowPDFModal(false)}
         />
       )}
@@ -1060,6 +1114,31 @@ const [empresaEditing, setEmpresaEditing] = useState<EmpresaInfo | null>(null);
           <button onClick={() => setShowOpciones(true)} style={btnGhost}>
             <Settings2 size={13} /> Opciones
           </button>
+
+          {/* ── Moneda (CLP / UF) ── */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginLeft: 'auto', flexWrap: 'wrap' }}>
+            <span style={{ fontFamily: 'var(--font-display)', fontWeight: 700, fontSize: '0.58rem', letterSpacing: '0.15em', textTransform: 'uppercase', color: 'var(--muted)' }}>Moneda</span>
+            <div style={{ display: 'flex', border: '1px solid var(--border2)', borderRadius: 'var(--r-sm)', overflow: 'hidden' }}>
+              {(['CLP', 'UF'] as Moneda[]).map(m => (
+                <button key={m} onClick={() => setMoneda(m)} style={{
+                  background: moneda === m ? 'var(--y-brand)' : 'transparent',
+                  color: moneda === m ? 'var(--on-accent)' : 'var(--muted)',
+                  border: 'none', cursor: 'pointer', padding: '0 0.75rem', height: 32,
+                  fontFamily: 'var(--font-display)', fontWeight: 700, fontSize: '0.66rem', letterSpacing: '0.08em',
+                }}>{m}</button>
+              ))}
+            </div>
+            {moneda === 'UF' && (
+              <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                <span style={{ fontSize: '0.62rem', color: 'var(--muted)' }}>UF = $</span>
+                <input type="number" min="0" step="1" value={valorUF || ''} onChange={e => setValorUF(parseFloat(e.target.value) || 0)} placeholder="0" title="Valor de la UF en pesos (para la equivalencia en CLP)"
+                  style={{ width: 82, height: 32, background: 'var(--input-bg)', border: '1px solid var(--input-border)', color: 'var(--text)', borderRadius: 'var(--r-sm)', padding: '0 0.5rem', fontSize: '0.8rem', textAlign: 'right' }} />
+                <button onClick={traerUF} disabled={cargandoUF} title="Traer valor UF de hoy" style={{ ...btnGhost, height: 32, padding: '0 0.6rem', fontSize: '0.58rem' }}>
+                  {cargandoUF ? <Loader2 size={11} className="iv-spin" /> : <RefreshCcw size={11} />} Hoy
+                </button>
+              </div>
+            )}
+          </div>
         </div>
 
         {/* ── ÁREA ÍTEMS ── */}
@@ -1144,7 +1223,7 @@ const [empresaEditing, setEmpresaEditing] = useState<EmpresaInfo | null>(null);
                   onUpdate={updateItem} onDelete={deleteItem} onDuplicate={duplicateItem}
                   onMoveUp={i => moveItem(i, 'up')} onMoveDown={i => moveItem(i, 'down')}
                   isFirst={idx === 0} isLast={idx === items.length - 1}
-                  ocultarCostos={ocultarCostos}
+                  ocultarCostos={ocultarCostos} moneda={moneda}
                 />
               ))}
             </div>
@@ -1174,20 +1253,20 @@ const [empresaEditing, setEmpresaEditing] = useState<EmpresaInfo | null>(null);
                             <span style={{ color: 'var(--muted)', fontWeight: 400 }}>({c.cantidadItems})</span>
                           </span>
                           <span style={{ fontFamily: 'var(--font-display)', fontWeight: 700, fontSize: '0.85rem', color: 'var(--text)' }}>
-                            {formatCLP(c.neto)}
+                            {fmt(c.neto)}
                           </span>
                         </div>
                         {c.montoDescuento > 0 && (
                           <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.62rem', color: 'var(--danger)' }}>
                             <span>descuento prom. {Math.round(c.descuentoPromedio * 10) / 10}%</span>
-                            <span>− {formatCLP(c.montoDescuento)}</span>
+                            <span>− {fmt(c.montoDescuento)}</span>
                           </div>
                         )}
                         {!ocultarCostos && (
                           <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.62rem', color: 'var(--muted)', fontFamily: 'monospace' }}>
-                            <span>costo {formatCLP(c.costoTotal)}</span>
-                            <span style={{ color: 'var(--orange)' }}>+imp {formatCLP(c.costoConImprev)}</span>
-                            <span style={{ color: 'var(--success)' }}>util {formatCLP(c.utilidad)}</span>
+                            <span>costo {fmt(c.costoTotal)}</span>
+                            <span style={{ color: 'var(--orange)' }}>+imp {fmt(c.costoConImprev)}</span>
+                            <span style={{ color: 'var(--success)' }}>util {fmt(c.utilidad)}</span>
                           </div>
                         )}
                       </div>
@@ -1197,7 +1276,7 @@ const [empresaEditing, setEmpresaEditing] = useState<EmpresaInfo | null>(null);
                   {descuentoPorcentajeMO > 0 && (
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '0.35rem 0.7rem', background: 'rgba(248,113,113,0.06)', borderRadius: 'var(--r-sm)' }}>
                       <span style={{ fontSize: '0.72rem', color: 'var(--danger)' }}>Descuento MO ({descuentoPorcentajeMO}%)</span>
-                      <span style={{ fontFamily: 'var(--font-display)', fontWeight: 700, fontSize: '0.8rem', color: 'var(--danger)' }}>− {formatCLP(totals.montoDescuentoMO)}</span>
+                      <span style={{ fontFamily: 'var(--font-display)', fontWeight: 700, fontSize: '0.8rem', color: 'var(--danger)' }}>− {fmt(totals.montoDescuentoMO)}</span>
                     </div>
                   )}
                 </div>
@@ -1207,31 +1286,31 @@ const [empresaEditing, setEmpresaEditing] = useState<EmpresaInfo | null>(null);
                     <>
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                         <span style={{ fontSize: '0.65rem', color: 'var(--muted)', fontFamily: 'var(--font-display)', letterSpacing: '0.1em', textTransform: 'uppercase' }}>Costo Directo</span>
-                        <span style={{ fontFamily: 'var(--font-display)', fontWeight: 700, fontSize: '0.85rem', color: 'var(--muted)' }}>{formatCLP(totals.costoTotal)}</span>
+                        <span style={{ fontFamily: 'var(--font-display)', fontWeight: 700, fontSize: '0.85rem', color: 'var(--muted)' }}>{fmt(totals.costoTotal)}</span>
                       </div>
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                         <span style={{ fontSize: '0.65rem', color: 'var(--orange)', fontFamily: 'var(--font-display)', letterSpacing: '0.1em', textTransform: 'uppercase' }}>+ Imprevistos</span>
-                        <span style={{ fontFamily: 'var(--font-display)', fontWeight: 700, fontSize: '0.85rem', color: 'var(--orange)' }}>{formatCLP(totals.montoImprevistos)}</span>
+                        <span style={{ fontFamily: 'var(--font-display)', fontWeight: 700, fontSize: '0.85rem', color: 'var(--orange)' }}>{fmt(totals.montoImprevistos)}</span>
                       </div>
                     </>
                   )}
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                     <span style={{ fontSize: '0.65rem', color: 'var(--muted)', fontFamily: 'var(--font-display)', letterSpacing: '0.1em', textTransform: 'uppercase' }}>Total Neto</span>
-                    <span style={{ fontFamily: 'var(--font-display)', fontWeight: 700, fontSize: '1rem', color: 'var(--text)' }}>{formatCLP(totals.netoGeneral)}</span>
+                    <span style={{ fontFamily: 'var(--font-display)', fontWeight: 700, fontSize: '1rem', color: 'var(--text)' }}>{fmt(totals.netoGeneral)}</span>
                   </div>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                     <span style={{ fontSize: '0.65rem', color: 'var(--muted)', fontFamily: 'var(--font-display)', letterSpacing: '0.1em', textTransform: 'uppercase' }}>IVA</span>
-                    <span style={{ fontFamily: 'var(--font-display)', fontWeight: 700, fontSize: '0.95rem', color: 'var(--muted)' }}>{formatCLP(totals.ivaGeneral)}</span>
+                    <span style={{ fontFamily: 'var(--font-display)', fontWeight: 700, fontSize: '0.95rem', color: 'var(--muted)' }}>{fmt(totals.ivaGeneral)}</span>
                   </div>
                   <div style={{ padding: '0.6rem 0.75rem', background: 'var(--bg3)', borderTop: '2px solid var(--y-brand)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderRadius: 'var(--r-sm)' }}>
                     <span style={{ fontSize: '0.65rem', color: 'var(--muted)', fontFamily: 'var(--font-display)', letterSpacing: '0.15em', textTransform: 'uppercase' }}>TOTAL FINAL</span>
-                    <span style={{ fontFamily: 'var(--font-display)', fontWeight: 900, fontSize: '1.4rem', color: 'var(--y)' }}>{formatCLP(totals.total)}</span>
+                    <span style={{ fontFamily: 'var(--font-display)', fontWeight: 900, fontSize: '1.4rem', color: 'var(--y)' }}>{fmt(totals.total)}</span>
                   </div>
                   {!ocultarCostos && totals.utilidadEstimada > 0 && (
                     <div style={{ padding: '0.4rem 0.6rem', background: 'rgba(74,222,128,0.05)', border: '1px solid rgba(74,222,128,0.12)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderRadius: 'var(--r-sm)' }}>
                       <span style={{ fontSize: '0.6rem', color: 'var(--success)', fontFamily: 'var(--font-display)', letterSpacing: '0.1em', textTransform: 'uppercase' }}>Utilidad Estimada</span>
                       <span style={{ fontFamily: 'var(--font-display)', fontWeight: 900, fontSize: '0.95rem', color: 'var(--success)' }}>
-                        {formatCLP(totals.utilidadEstimada)} <span style={{ fontSize: '0.68rem', opacity: 0.8, fontWeight: 'normal' }}>({Math.round(totals.margenPromedio)}%)</span>
+                        {fmt(totals.utilidadEstimada)} <span style={{ fontSize: '0.68rem', opacity: 0.8, fontWeight: 'normal' }}>({Math.round(totals.margenPromedio)}%)</span>
                       </span>
                     </div>
                   )}

@@ -1,5 +1,5 @@
 import type {
-  CotizacionItem, CategoriaItem, Supuestos, CatalogoItem, RecetaConComponentes,
+  CotizacionItem, CategoriaItem, Supuestos, CatalogoItem, RecetaConComponentes, Moneda,
 } from '@/types';
 import { SUPUESTOS_DEFAULT, CATEGORIAS_ORDEN } from '@/types';
 
@@ -7,6 +7,18 @@ import { SUPUESTOS_DEFAULT, CATEGORIAS_ORDEN } from '@/types';
 
 export const formatCLP = (v: number) =>
   new Intl.NumberFormat('es-CL', { style: 'currency', currency: 'CLP', minimumFractionDigits: 0 }).format(Math.round(v) || 0);
+
+/** UF con 2 decimales (formato chileno): 12.5 → "UF 12,50". */
+export const formatUF = (v: number) =>
+  `UF ${new Intl.NumberFormat('es-CL', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(v || 0)}`;
+
+/** Formatea un monto según la moneda de la cotización (CLP por defecto). */
+export const formatMoneda = (v: number, moneda: Moneda = 'CLP') =>
+  moneda === 'UF' ? formatUF(v) : formatCLP(v);
+
+/** Redondeo según moneda: CLP a peso entero; UF a 2 decimales. */
+export const redondearMoneda = (v: number, moneda: Moneda = 'CLP') =>
+  moneda === 'UF' ? Math.round((v || 0) * 100) / 100 : Math.round(v || 0);
 
 /** Número con separador de miles chileno (60000 → "60.000"). */
 export const formatMiles = (v: number) =>

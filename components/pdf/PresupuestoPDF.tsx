@@ -230,6 +230,13 @@ const fmtCLP = (n: number) =>
     style: 'currency', currency: 'CLP', minimumFractionDigits: 0,
   }).format(n || 0);
 
+const fmtUFn = (n: number) =>
+  `UF ${new Intl.NumberFormat('es-CL', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(n || 0)}`;
+
+type Moneda = 'CLP' | 'UF';
+/** Devuelve un formateador según la moneda de la cotización. */
+const fmtMoneda = (moneda: Moneda) => (n: number) => (moneda === 'UF' ? fmtUFn(n) : fmtCLP(n));
+
 const today = () =>
   new Date().toLocaleDateString('es-CL', {
     day: '2-digit', month: '2-digit', year: 'numeric',
@@ -292,6 +299,10 @@ interface Props {
   condicionesComerciales: string;
   ocultarSuministros: boolean;
   empresa: EmpresaInfo;
+  /** Moneda de la cotización (por defecto CLP). */
+  moneda?: Moneda;
+  /** Valor de la UF en CLP, para la línea de equivalencia (solo si moneda = UF). */
+  valorUF?: number;
 }
 
 // ─── Cláusulas ───────────────────────────────────────────────────────────────
@@ -331,10 +342,12 @@ function TablaFila({
   item,
   idx,
   catLabel,
+  fmt,
 }: {
   item: CotizacionItem;
   idx: number;
   catLabel: Record<string, string>;
+  fmt: (n: number) => string;
 }) {
   const subtotal = item.cantidad * item.precio;
   return (
@@ -349,8 +362,8 @@ function TablaFila({
       </View>
       <Text style={[s.tableCellMuted, s.colDesc]}>{item.unidad}</Text>
       <Text style={[s.tableCell, s.colQty]}>{item.cantidad}</Text>
-      <Text style={[s.tableCell, s.colValor]}>{fmtCLP(item.precio)}</Text>
-      <Text style={[s.tableCell, s.colTotal]}>{fmtCLP(subtotal)}</Text>
+      <Text style={[s.tableCell, s.colValor]}>{fmt(item.precio)}</Text>
+      <Text style={[s.tableCell, s.colTotal]}>{fmt(subtotal)}</Text>
     </View>
   );
 }
@@ -359,8 +372,12 @@ function TablaFila({
 export default function PresupuestoPDF({
   cliente, items, totals,
   folio, descripcionGeneral, garantia, condicionesComerciales,
-  ocultarSuministros, empresa,
+  ocultarSuministros, empresa, moneda = 'CLP', valorUF = 0,
 }: Props) {
+
+  // Formateador de moneda de todo el documento (CLP o UF).
+  const fmt = fmtMoneda(moneda);
+  const monedaLabel = moneda === 'UF' ? 'Unidad de Fomento (UF)' : 'Peso Chileno (CLP)';
 
   const itemsDisplay: CotizacionItem[] = ocultarSuministros
     ? [
@@ -540,13 +557,13 @@ export default function PresupuestoPDF({
               <Text style={[s.tableHeaderText, s.colTotal]}>Total</Text>
             </View>
             {itemsDisplay.length > 0 && (
-              <TablaFila item={itemsDisplay[0]} idx={0} catLabel={catLabel} />
+              <TablaFila item={itemsDisplay[0]} idx={0} catLabel={catLabel} fmt={fmt} />
             )}
           </View>
 
           {/* Resto de filas — cada una no se parte internamente */}
           {itemsDisplay.slice(1).map((item, idx) => (
-            <TablaFila key={item.id} item={item} idx={idx + 1} catLabel={catLabel} />
+            <TablaFila key={item.id} item={item} idx={idx + 1} catLabel={catLabel} fmt={fmt} />
           ))}
 
           {/* ── TOTALES — bloque completo sin corte ── */}
@@ -555,56 +572,62 @@ export default function PresupuestoPDF({
               <View style={s.totalesInner}>
                 <View style={s.totalesRow}>
                   <Text style={s.totalesLabel}>Moneda</Text>
-                  <Text style={s.totalesValue}>Peso Chileno</Text>
+                  <Text style={s.totalesValue}>{monedaLabel}</Text>
                 </View>
                 {totals.netoMateriales > 0 && (
                   <View style={s.totalesRow}>
                     <Text style={s.totalesLabel}>Neto Materiales{descTxt(totals.porCategoria.material.descuentoPromedio)}</Text>
-                    <Text style={s.totalesValue}>{fmtCLP(totals.netoMateriales)}</Text>
+                    <Text style={s.totalesValue}>{fmt(totals.netoMateriales)}</Text>
                   </View>
                 )}
                 {totals.ivaMateriales > 0 && (
                   <View style={s.totalesRow}>
                     <Text style={s.totalesLabel}>IVA Materiales</Text>
-                    <Text style={s.totalesValue}>{fmtCLP(totals.ivaMateriales)}</Text>
+                    <Text style={s.totalesValue}>{fmt(totals.ivaMateriales)}</Text>
                   </View>
                 )}
                 {totals.netoMO > 0 && (
                   <View style={s.totalesRow}>
                     <Text style={s.totalesLabel}>Mano de Obra{descTxt(totals.porCategoria.mano_obra.descuentoPromedio)}</Text>
-                    <Text style={s.totalesValue}>{fmtCLP(totals.netoMO)}</Text>
+                    <Text style={s.totalesValue}>{fmt(totals.netoMO)}</Text>
                   </View>
                 )}
                 {totals.netoServicios > 0 && (
                   <View style={s.totalesRow}>
                     <Text style={s.totalesLabel}>Servicios{descTxt(totals.porCategoria.servicio.descuentoPromedio)}</Text>
-                    <Text style={s.totalesValue}>{fmtCLP(totals.netoServicios)}</Text>
+                    <Text style={s.totalesValue}>{fmt(totals.netoServicios)}</Text>
                   </View>
                 )}
                 {totals.netoOperacion > 0 && (
                   <View style={s.totalesRow}>
                     <Text style={s.totalesLabel}>Operación y Extras{descTxt(totals.porCategoria.operacion.descuentoPromedio)}</Text>
-                    <Text style={s.totalesValue}>{fmtCLP(totals.netoOperacion)}</Text>
+                    <Text style={s.totalesValue}>{fmt(totals.netoOperacion)}</Text>
                   </View>
                 )}
                 {totals.montoDescuentoTotal > 0 && (
                   <View style={s.totalesRow}>
                     <Text style={s.totalesLabel}>Descuento aplicado</Text>
-                    <Text style={s.totalesValue}>- {fmtCLP(totals.montoDescuentoTotal)}</Text>
+                    <Text style={s.totalesValue}>- {fmt(totals.montoDescuentoTotal)}</Text>
                   </View>
                 )}
                 <View style={s.totalesRow}>
                   <Text style={s.totalesLabel}>Neto</Text>
-                  <Text style={s.totalesValue}>{fmtCLP(totals.netoGeneral)}</Text>
+                  <Text style={s.totalesValue}>{fmt(totals.netoGeneral)}</Text>
                 </View>
                 <View style={s.totalesRow}>
                   <Text style={s.totalesLabel}>IVA</Text>
-                  <Text style={s.totalesValue}>{fmtCLP(totals.ivaGeneral)}</Text>
+                  <Text style={s.totalesValue}>{fmt(totals.ivaGeneral)}</Text>
                 </View>
                 <View style={s.totalFinalRow}>
                   <Text style={s.totalFinalLabel}>TOTAL</Text>
-                  <Text style={s.totalFinalValue}>{fmtCLP(totals.total)}</Text>
+                  <Text style={s.totalFinalValue}>{fmt(totals.total)}</Text>
                 </View>
+                {moneda === 'UF' && valorUF > 0 && (
+                  <View style={s.totalesRow}>
+                    <Text style={s.totalesLabel}>Equivalente en CLP (UF {fmtCLP(valorUF)})</Text>
+                    <Text style={s.totalesValue}>{fmtCLP(totals.total * valorUF)}</Text>
+                  </View>
+                )}
               </View>
             </View>
           </View>
