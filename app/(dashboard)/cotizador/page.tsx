@@ -483,7 +483,7 @@ function ItemRow({ item, index, onUpdate, onDelete, onDuplicate, onMoveUp, onMov
 // ─── Tarjeta de Partida de Proyecto ───────────────────────────────────────────
 function PartidaCard({
   partida, itemsPartida, indexOf,
-  onUpdatePartida, onDeletePartida, onSetMargen, onAddItem, onBuscar,
+  onUpdatePartida, onDeletePartida, onSetMargen, onAddItem, onBuscar, onCalcHH,
   updateItem, deleteItem, duplicateItem, moveItem,
   moneda, ocultarCostos, fmt,
 }: {
@@ -495,6 +495,7 @@ function PartidaCard({
   onSetMargen: (id: string, cfg: { margen: number; imprevistos: number; iva: number }) => void;
   onAddItem: (id: string, categoria: CategoriaItem) => void;
   onBuscar: (id: string) => void;
+  onCalcHH: (id: string) => void;
   updateItem: (i: number, u: Partial<CotizacionItem>) => void;
   deleteItem: (i: number) => void;
   duplicateItem: (i: number) => void;
@@ -584,8 +585,9 @@ function PartidaCard({
       </div>
 
       {/* Acciones para agregar a la partida */}
-      <div style={{ display: 'flex', gap: '4px', flexWrap: 'wrap', marginTop: '0.4rem' }}>
-        {(['material', 'mano_obra', 'servicio'] as CategoriaItem[]).map(cat => {
+      <div style={{ display: 'flex', gap: '4px', flexWrap: 'wrap', marginTop: '0.4rem', alignItems: 'center' }}>
+        <span style={{ fontSize: '0.5rem', color: 'var(--faint)', textTransform: 'uppercase', letterSpacing: '0.12em', fontWeight: 700, marginRight: '0.1rem' }}>Agregar</span>
+        {CATEGORIAS_ORDEN.map(cat => {
           const CatIcon = CAT_ICONS[cat];
           return (
             <button key={cat} onClick={() => onAddItem(partida.id, cat)} style={{ ...btnGhost, height: 28, fontSize: '0.56rem', padding: '0 0.5rem', color: CAT_COLORS[cat], borderColor: `${CAT_COLORS[cat]}33` }}>
@@ -593,7 +595,8 @@ function PartidaCard({
             </button>
           );
         })}
-        <button onClick={() => onBuscar(partida.id)} style={{ ...btnGhost, height: 28, fontSize: '0.56rem', padding: '0 0.5rem' }}><Library size={11} /> Biblioteca</button>
+        <button onClick={() => onCalcHH(partida.id)} title="Calcular mano de obra por horas hombre" style={{ ...btnGhost, height: 28, fontSize: '0.56rem', padding: '0 0.5rem', color: 'var(--success)' }}><Calculator size={10} /> HH</button>
+        <button onClick={() => onBuscar(partida.id)} style={{ ...btnGhost, height: 28, fontSize: '0.56rem', padding: '0 0.5rem', color: 'var(--y)' }}><Library size={11} /> Biblioteca</button>
       </div>
 
       {/* Panel interno / resumen de la partida */}
@@ -657,6 +660,8 @@ function CotizadorContent() {
   const [mostrarDetalle,         setMostrarDetalle]         = useState(false);
   // Si al abrir la biblioteca hay una partida destino, lo insertado se le asocia.
   const [partidaDestino,         setPartidaDestino]         = useState<string | null>(null);
+  // Partida destino al calcular HH (si viene desde una partida).
+  const [hhDestino,              setHhDestino]              = useState<string | null>(null);
 
 // ── Estado empresa ──
 const [empresas, setEmpresas] = useState<EmpresaInfo[]>([]);
@@ -874,15 +879,20 @@ const [empresaEditing, setEmpresaEditing] = useState<EmpresaInfo | null>(null);
     setShowBiblioteca(true);
   }, []);
 
-  /** Crea un ítem de Mano de Obra a partir de la calculadora HH. */
+  /** Crea un ítem de Mano de Obra a partir de la calculadora HH (a una partida si aplica). */
   const agregarDesdeHH = useCallback((costo: number, descripcion: string, horas: number) => {
-    setItems(prev => [
-      newItem({ categoria: 'mano_obra', descripcion, costo, cantidad: 1, unidad: 'global' }, supuestos),
-      ...prev,
-    ]);
+    const it = newItem({ categoria: 'mano_obra', descripcion, costo, cantidad: 1, unidad: 'global', ...(hhDestino ? { partidaId: hhDestino } : {}) }, supuestos);
+    setItems(prev => [it, ...prev]);
     setShowHHModal(false);
+    setHhDestino(null);
     success(`Mano de obra agregada — ${horas} h por persona`);
-  }, [supuestos, success]);
+  }, [supuestos, success, hhDestino]);
+
+  /** Abre la calculadora HH para agregar dentro de una partida. */
+  const calcHHParaPartida = useCallback((pid: string) => {
+    setHhDestino(pid);
+    setShowHHModal(true);
+  }, []);
 
   const updateItem = useCallback((index: number, updates: Partial<CotizacionItem>) => {
     setItems(prev => prev.map((item, i) => i === index ? { ...item, ...updates } : item));
@@ -1181,7 +1191,7 @@ const [empresaEditing, setEmpresaEditing] = useState<EmpresaInfo | null>(null);
       {showHHModal && (
         <CalculadoraHH
           onConfirm={agregarDesdeHH}
-          onClose={() => setShowHHModal(false)}
+          onClose={() => { setShowHHModal(false); setHhDestino(null); }}
         />
       )}
 
@@ -1381,37 +1391,42 @@ const [empresaEditing, setEmpresaEditing] = useState<EmpresaInfo | null>(null);
           {/* Toolbar ítems */}
           <div style={{ background: 'var(--bg2)', border: '1px solid var(--border2)', borderTop: '2px solid var(--y-brand)', padding: '0.75rem', display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap', borderRadius: 'var(--r)' }}>
             <span style={{ fontFamily: 'var(--font-display)', fontWeight: 700, fontSize: '0.6rem', letterSpacing: '0.2em', textTransform: 'uppercase', color: 'var(--y)' }}>
-              ÍTEMS ({items.length})
+              Presupuesto
             </span>
-            <div style={{ display: 'flex', gap: '4px', flexWrap: 'wrap' }}>
+
+            {/* ── Acción principal: por partida ── */}
+            <button
+              onClick={addPartida}
+              title="Crear una partida de proyecto (agrupa materiales/MO/servicios en una línea comercial)"
+              style={{ background: 'var(--y-brand)', color: 'var(--on-accent)', border: 'none', cursor: 'pointer', height: 32, borderRadius: 'var(--r-sm)', padding: '0 0.85rem', fontFamily: 'var(--font-display)', fontWeight: 700, fontSize: '0.64rem', letterSpacing: '0.08em', textTransform: 'uppercase', display: 'inline-flex', alignItems: 'center', gap: '0.35rem' }}
+            >
+              <Plus size={13} /><Package size={13} /> Nueva partida
+            </button>
+            <button
+              onClick={() => { setPartidaDestino(null); setShowBiblioteca(true); }}
+              title="Insertar recetas (como partida) o ítems desde la biblioteca"
+              style={{ ...btnGhost, height: 32, fontSize: '0.62rem', padding: '0 0.7rem', color: 'var(--y)', borderColor: 'var(--border)' }}
+            >
+              <Library size={12} /> Biblioteca
+            </button>
+
+            {/* ── Secundario: ítems sueltos (fuera de partida) ── */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: '4px', flexWrap: 'wrap', paddingLeft: '0.5rem', marginLeft: '0.15rem', borderLeft: '1px solid var(--border2)' }}>
+              <span style={{ fontSize: '0.5rem', color: 'var(--faint)', textTransform: 'uppercase', letterSpacing: '0.14em', fontWeight: 700 }}>Sueltos</span>
               {CATEGORIAS_ORDEN.map(cat => {
                 const CatIcon = CAT_ICONS[cat];
                 return (
-                  <button key={cat} onClick={() => addItem(cat)} style={{ ...btnGhost, height: 28, fontSize: '0.58rem', padding: '0 0.5rem', color: CAT_COLORS[cat], borderColor: `${CAT_COLORS[cat]}33` }}>
-                    <Plus size={10} /><CatIcon size={10} /> {CATEGORIA_LABELS[cat]}
+                  <button key={cat} onClick={() => addItem(cat)} title={`Agregar ${CATEGORIA_LABELS[cat]} suelto`} style={{ ...btnGhost, height: 26, fontSize: '0.55rem', padding: '0 0.45rem', color: CAT_COLORS[cat], borderColor: `${CAT_COLORS[cat]}33` }}>
+                    <Plus size={9} /><CatIcon size={9} /> {CATEGORIA_LABELS[cat]}
                   </button>
                 );
               })}
               <button
-                onClick={() => setShowHHModal(true)}
-                title="Calcular mano de obra por horas hombre"
-                style={{ ...btnGhost, height: 28, fontSize: '0.58rem', padding: '0 0.5rem', color: 'var(--success)', borderColor: 'var(--border2)' }}
+                onClick={() => { setHhDestino(null); setShowHHModal(true); }}
+                title="Calcular mano de obra por horas hombre (ítem suelto)"
+                style={{ ...btnGhost, height: 26, fontSize: '0.55rem', padding: '0 0.45rem', color: 'var(--success)', borderColor: 'var(--border2)' }}
               >
-                <Calculator size={10} /> Calcular HH
-              </button>
-              <button
-                onClick={() => { setPartidaDestino(null); setShowBiblioteca(true); }}
-                title="Insertar ítems o recetas (partidas) desde la biblioteca"
-                style={{ ...btnGhost, height: 28, fontSize: '0.58rem', padding: '0 0.5rem', color: 'var(--y)', borderColor: 'var(--border)' }}
-              >
-                <Library size={10} /> Biblioteca
-              </button>
-              <button
-                onClick={addPartida}
-                title="Crear una partida de proyecto (agrupa materiales/MO en una línea comercial)"
-                style={{ ...btnGhost, height: 28, fontSize: '0.58rem', padding: '0 0.5rem', color: 'var(--y-brand)', borderColor: 'var(--y-brand)' }}
-              >
-                <Plus size={10} /><Package size={10} /> Nueva partida
+                <Calculator size={9} /> HH
               </button>
             </div>
             <div style={{ marginLeft: 'auto', display: 'flex', gap: '4px' }}>
@@ -1426,7 +1441,7 @@ const [empresaEditing, setEmpresaEditing] = useState<EmpresaInfo | null>(null);
             <PartidaCard
               key={p.id} partida={p} itemsPartida={itemsDe(p.id)} indexOf={indexOf}
               onUpdatePartida={updatePartida} onDeletePartida={deletePartida} onSetMargen={setMargenPartida}
-              onAddItem={addItemAPartida} onBuscar={buscarParaPartida}
+              onAddItem={addItemAPartida} onBuscar={buscarParaPartida} onCalcHH={calcHHParaPartida}
               updateItem={updateItem} deleteItem={deleteItem} duplicateItem={duplicateItem} moveItem={moveItem}
               moneda={moneda} ocultarCostos={ocultarCostos} fmt={fmt}
             />
@@ -1451,20 +1466,27 @@ const [empresaEditing, setEmpresaEditing] = useState<EmpresaInfo | null>(null);
             </div>
           )}
 
-          {/* Estado vacío (sin partidas ni ítems) */}
+          {/* Estado vacío (sin partidas ni ítems) — el flujo principal es por partida */}
           {items.length === 0 && partidas.length === 0 && (
             <div style={{ background: 'var(--bg2)', border: '1px solid var(--border2)', padding: '2.5rem 1rem', textAlign: 'center', borderRadius: 'var(--r)' }}>
-              <Package size={36} style={{ margin: '0 auto 0.75rem', opacity: 0.2, display: 'block' }} />
-              <p style={{ color: 'var(--muted)', marginBottom: '1.25rem', fontSize: '0.82rem' }}>Sin ítems ni partidas. Crea una partida de proyecto o agrega ítems sueltos.</p>
-              <div style={{ display: 'flex', gap: '6px', justifyContent: 'center', flexWrap: 'wrap' }}>
-                <button onClick={addPartida} style={{ ...btnGhost, height: 36, color: 'var(--y-brand)', borderColor: 'var(--y-brand)' }}>
-                  <Plus size={12} /><Package size={12} /> Nueva partida
+              <Package size={40} style={{ margin: '0 auto 0.75rem', opacity: 0.25, display: 'block', color: 'var(--y-brand)' }} />
+              <p style={{ color: 'var(--text)', marginBottom: '0.35rem', fontSize: '0.9rem', fontWeight: 600 }}>Empieza por una partida de proyecto</p>
+              <p style={{ color: 'var(--muted)', marginBottom: '1.25rem', fontSize: '0.78rem' }}>Agrupa materiales, mano de obra y servicios en una línea comercial. También puedes agregar ítems sueltos.</p>
+              <div style={{ display: 'flex', gap: '8px', justifyContent: 'center', alignItems: 'center', flexWrap: 'wrap' }}>
+                <button onClick={addPartida} style={{ background: 'var(--y-brand)', color: 'var(--on-accent)', border: 'none', cursor: 'pointer', height: 40, borderRadius: 'var(--r-sm)', padding: '0 1.1rem', fontFamily: 'var(--font-display)', fontWeight: 700, fontSize: '0.72rem', letterSpacing: '0.06em', textTransform: 'uppercase', display: 'inline-flex', alignItems: 'center', gap: '0.4rem' }}>
+                  <Plus size={14} /><Package size={14} /> Nueva partida
                 </button>
-                {(['material', 'mano_obra', 'servicio'] as CategoriaItem[]).map(cat => {
+                <button onClick={() => { setPartidaDestino(null); setShowBiblioteca(true); }} style={{ ...btnGhost, height: 40, color: 'var(--y)', borderColor: 'var(--border)' }}>
+                  <Library size={13} /> Desde biblioteca
+                </button>
+              </div>
+              <div style={{ display: 'flex', gap: '6px', justifyContent: 'center', flexWrap: 'wrap', marginTop: '0.9rem' }}>
+                <span style={{ fontSize: '0.55rem', color: 'var(--faint)', textTransform: 'uppercase', letterSpacing: '0.12em', alignSelf: 'center', fontWeight: 700 }}>o suelto:</span>
+                {CATEGORIAS_ORDEN.map(cat => {
                   const CatIcon = CAT_ICONS[cat];
                   return (
-                    <button key={cat} onClick={() => addItem(cat)} style={{ ...btnGhost, height: 36, color: CAT_COLORS[cat], borderColor: `${CAT_COLORS[cat]}33` }}>
-                      <Plus size={12} /><CatIcon size={12} /> {CATEGORIA_LABELS[cat]}
+                    <button key={cat} onClick={() => addItem(cat)} style={{ ...btnGhost, height: 30, fontSize: '0.58rem', padding: '0 0.55rem', color: CAT_COLORS[cat], borderColor: `${CAT_COLORS[cat]}33` }}>
+                      <Plus size={11} /><CatIcon size={11} /> {CATEGORIA_LABELS[cat]}
                     </button>
                   );
                 })}
