@@ -2,7 +2,7 @@ import React from 'react';
 import {
   Document, Page, Text, View, StyleSheet, Image,
 } from '@react-pdf/renderer';
-import type { CotizacionItem, Cliente } from '@/types';
+import type { CotizacionItem, Cliente, Partida } from '@/types';
 import type { Totals } from '@/utils';
 
 /** Logo con tinta oscura: es el que contrasta sobre el papel blanco del PDF. */
@@ -303,6 +303,10 @@ interface Props {
   moneda?: Moneda;
   /** Valor de la UF en CLP, para la línea de equivalencia (solo si moneda = UF). */
   valorUF?: number;
+  /** Partidas de proyecto (agrupación comercial). Vacío = tabla clásica por ítems. */
+  partidas?: Partida[];
+  /** Si true, dentro de cada partida se listan sus materiales. */
+  mostrarDetalle?: boolean;
 }
 
 // ─── Cláusulas ───────────────────────────────────────────────────────────────
@@ -368,33 +372,81 @@ function TablaFila({
   );
 }
 
+/** Subtotal bruto de una línea (precio × cantidad), igual que muestra TablaFila. */
+const brutoItem = (it: CotizacionItem) => (it.precio || 0) * (it.cantidad || 0);
+
+/** Fila comercial de una Partida de Proyecto (lo que ve el cliente). */
+function FilaPartida({ partida, bruto, idx, fmt }: {
+  partida: Partida; bruto: number; idx: number; fmt: (n: number) => string;
+}) {
+  const unit = partida.cantidad > 0 ? bruto / partida.cantidad : bruto;
+  return (
+    <View style={[s.tableRow, idx % 2 === 1 ? s.tableRowAlt : {}]} wrap={false}>
+      <Text style={[s.tableCell, s.colNum]}>{idx + 1}</Text>
+      <View style={s.colServicio}>
+        <Text style={[s.tableCell, { fontFamily: 'Helvetica-Bold' }]}>{partida.nombre || 'Partida'}</Text>
+        {partida.descripcion ? (
+          <Text style={[s.tableCellMuted, { marginTop: 2, lineHeight: 1.4 }]}>{partida.descripcion}</Text>
+        ) : null}
+      </View>
+      <Text style={[s.tableCellMuted, s.colDesc]}>{partida.unidad}</Text>
+      <Text style={[s.tableCell, s.colQty]}>{partida.cantidad}</Text>
+      <Text style={[s.tableCell, s.colValor]}>{fmt(unit)}</Text>
+      <Text style={[s.tableCell, s.colTotal]}>{fmt(bruto)}</Text>
+    </View>
+  );
+}
+
+/** Sub-fila de detalle: un material dentro de una partida (solo con "mostrar detalle"). */
+function FilaDetalle({ item }: { item: CotizacionItem }) {
+  return (
+    <View style={[s.tableRow, { borderBottomWidth: 0, paddingTop: 2, paddingBottom: 2 }]} wrap={false}>
+      <Text style={[s.tableCellMuted, s.colNum]}> </Text>
+      <View style={s.colServicio}>
+        <Text style={[s.tableCellMuted, { paddingLeft: 10 }]}>· {item.descripcion}</Text>
+      </View>
+      <Text style={[s.tableCellMuted, s.colDesc]}>{item.unidad}</Text>
+      <Text style={[s.tableCellMuted, s.colQty]}>{item.cantidad}</Text>
+      <Text style={[s.tableCellMuted, s.colValor]}> </Text>
+      <Text style={[s.tableCellMuted, s.colTotal]}> </Text>
+    </View>
+  );
+}
+
 // ─── Componente ───────────────────────────────────────────────────────────────
 export default function PresupuestoPDF({
   cliente, items, totals,
   folio, descripcionGeneral, garantia, condicionesComerciales,
   ocultarSuministros, empresa, moneda = 'CLP', valorUF = 0,
+  partidas = [], mostrarDetalle = false,
 }: Props) {
 
   // Formateador de moneda de todo el documento (CLP o UF).
   const fmt = fmtMoneda(moneda);
   const monedaLabel = moneda === 'UF' ? 'Unidad de Fomento (UF)' : 'Peso Chileno (CLP)';
 
-  const itemsDisplay: CotizacionItem[] = ocultarSuministros
+  // Ítems sueltos (fuera de partidas) — a estos aplica "agrupar suministros".
+  const sueltos = items.filter(i => !i.partidaId);
+  const matSueltos = sueltos.filter(i => i.categoria === 'material');
+  const netoMatSueltos = matSueltos.reduce((sum, i) => sum + brutoItem(i), 0);
+  const ivaMatSueltos = matSueltos.reduce((sum, i) => sum + brutoItem(i) * (i.iva || 0) / 100, 0);
+
+  const sueltosDisplay: CotizacionItem[] = ocultarSuministros
     ? [
-        ...items.filter(i => i.categoria !== 'material'),
-        ...(items.some(i => i.categoria === 'material')
+        ...sueltos.filter(i => i.categoria !== 'material'),
+        ...(matSueltos.length > 0
           ? [{
               id: 'suministros',
               descripcion: 'Suministros y materiales',
               categoria: 'material' as const,
               cantidad: 1, unidad: 'global',
               costo: 0, imprevistos: 0, margen: 0,
-              precio: totals.netoMateriales + totals.ivaMateriales,
+              precio: netoMatSueltos + ivaMatSueltos,
               iva: 0,
             }]
           : []),
       ]
-    : items;
+    : sueltos;
 
   const catLabel: Record<string, string> = {
     material:  'MATERIAL',
@@ -402,6 +454,22 @@ export default function PresupuestoPDF({
     servicio:  'SERVICIO',
     operacion: 'OPERACIÓN',
   };
+
+  // Filas de la tabla: primero las partidas (con detalle opcional), luego los
+  // ítems sueltos. La numeración # es correlativa entre ambos.
+  const filas: React.ReactElement[] = [];
+  let numFila = 0;
+  for (const p of partidas) {
+    const its = items.filter(i => i.partidaId === p.id);
+    const bruto = its.reduce((sum, i) => sum + brutoItem(i), 0);
+    filas.push(<FilaPartida key={`p-${p.id}`} partida={p} bruto={bruto} idx={numFila++} fmt={fmt} />);
+    if (mostrarDetalle) {
+      for (const it of its) filas.push(<FilaDetalle key={`d-${it.id}`} item={it} />);
+    }
+  }
+  for (const it of sueltosDisplay) {
+    filas.push(<TablaFila key={`s-${it.id}`} item={it} idx={numFila++} catLabel={catLabel} fmt={fmt} />);
+  }
 
   // El PDF se imprime sobre papel blanco: si la empresa no tiene logo propio,
   // se usa el de InnVolt con tinta oscura (la variante "claro").
@@ -546,7 +614,7 @@ export default function PresupuestoPDF({
             para que nunca el header quede solo al final de una página. */}
         <View style={s.content}>
 
-          {/* Header + primera fila — siempre juntos */}
+          {/* Header + primera fila — siempre juntos (evita header huérfano) */}
           <View wrap={false}>
             <View style={s.tableHeader}>
               <Text style={[s.tableHeaderText, s.colNum]}>#</Text>
@@ -556,15 +624,11 @@ export default function PresupuestoPDF({
               <Text style={[s.tableHeaderText, s.colValor]}>Valor</Text>
               <Text style={[s.tableHeaderText, s.colTotal]}>Total</Text>
             </View>
-            {itemsDisplay.length > 0 && (
-              <TablaFila item={itemsDisplay[0]} idx={0} catLabel={catLabel} fmt={fmt} />
-            )}
+            {filas.length > 0 && filas[0]}
           </View>
 
-          {/* Resto de filas — cada una no se parte internamente */}
-          {itemsDisplay.slice(1).map((item, idx) => (
-            <TablaFila key={item.id} item={item} idx={idx + 1} catLabel={catLabel} fmt={fmt} />
-          ))}
+          {/* Resto de filas */}
+          {filas.slice(1)}
 
           {/* ── TOTALES — bloque completo sin corte ── */}
           <View wrap={false} style={{ marginBottom: 20 }}>

@@ -137,6 +137,8 @@ const [empresas, setEmpresas] = useState<EmpresaInfo[]>([]);
           empresa={empresaCot}
           moneda={(cot.moneda as Moneda) || 'CLP'}
           valorUF={cot.valor_uf || 0}
+          partidas={cot.partidas || []}
+          mostrarDetalle={cot.mostrar_detalle || false}
         />
       ).toBlob();
       saveAs(blob, `Cotizacion_${formatFolio(cot.folio)}_${cot.clientes.nombre_cliente}.pdf`);

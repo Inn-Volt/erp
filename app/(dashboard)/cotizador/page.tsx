@@ -21,10 +21,11 @@ import { cotizacionesService } from '@/services/cotizaciones';
 import { useToast } from '@/hooks/useToast';
 import {
   formatCLP, formatMoneda, redondearMoneda, formatFolio, cleanNumber, calcularTotals, calcularItem,
-  newItem, normalizarItem, precioDesdeMargen,
+  newItem, newId, normalizarItem, precioDesdeMargen,
   margenDesdePrecio, itemsToExcelRows, parseCategoria,
+  calcularPartida, partidaDesdeReceta,
 } from '@/utils';
-import type { CotizacionItem, Cliente, CategoriaItem, Supuestos, Moneda } from '@/types';
+import type { CotizacionItem, Cliente, CategoriaItem, Supuestos, Moneda, Partida, RecetaConComponentes } from '@/types';
 import {
   CATEGORIA_LABELS, CATEGORIAS_ORDEN, CATEGORIA_COLORS,
   SUPUESTOS_DEFAULT, UNIDADES,
@@ -207,12 +208,13 @@ function EmpresaSelector({
 function PDFModal({
   folio, cliente, items, totals, descuentoPorcentajeMO,
   descripcionGeneral, garantia, condicionesComerciales,
-  ocultarSuministros, empresa, moneda, valorUF, onClose,
+  ocultarSuministros, empresa, moneda, valorUF, partidas, mostrarDetalle, onClose,
 }: {
   folio: number; cliente: any; items: CotizacionItem[];
   totals: ReturnType<typeof calcularTotals>; descuentoPorcentajeMO: number;
   descripcionGeneral: string; garantia: string; condicionesComerciales: string;
-  ocultarSuministros: boolean; empresa: EmpresaInfo; moneda: Moneda; valorUF: number; onClose: () => void;
+  ocultarSuministros: boolean; empresa: EmpresaInfo; moneda: Moneda; valorUF: number;
+  partidas: Partida[]; mostrarDetalle: boolean; onClose: () => void;
 }) {
   const [gen, setGen] = useState(false);
   const folioStr = formatFolio(folio);
@@ -230,6 +232,7 @@ function PDFModal({
             condicionesComerciales={condicionesComerciales}
             ocultarSuministros={ocultarSuministros}
             empresa={empresa} moneda={moneda} valorUF={valorUF}
+            partidas={partidas} mostrarDetalle={mostrarDetalle}
           />
         ).toBlob();
         saveAs(blob, `Cotizacion_${folioStr}_${cliente.nombre_cliente}.pdf`);
@@ -477,6 +480,140 @@ function ItemRow({ item, index, onUpdate, onDelete, onDuplicate, onMoveUp, onMov
   );
 }
 
+// ─── Tarjeta de Partida de Proyecto ───────────────────────────────────────────
+function PartidaCard({
+  partida, itemsPartida, indexOf,
+  onUpdatePartida, onDeletePartida, onSetMargen, onAddItem, onBuscar,
+  updateItem, deleteItem, duplicateItem, moveItem,
+  moneda, ocultarCostos, fmt,
+}: {
+  partida: Partida;
+  itemsPartida: CotizacionItem[];
+  indexOf: (id: string) => number;
+  onUpdatePartida: (id: string, patch: Partial<Partida>) => void;
+  onDeletePartida: (id: string) => void;
+  onSetMargen: (id: string, cfg: { margen: number; imprevistos: number; iva: number }) => void;
+  onAddItem: (id: string, categoria: CategoriaItem) => void;
+  onBuscar: (id: string) => void;
+  updateItem: (i: number, u: Partial<CotizacionItem>) => void;
+  deleteItem: (i: number) => void;
+  duplicateItem: (i: number) => void;
+  moveItem: (i: number, dir: 'up' | 'down') => void;
+  moneda: Moneda;
+  ocultarCostos: boolean;
+  fmt: (v: number) => string;
+}) {
+  const calc = useMemo(() => calcularPartida(itemsPartida), [itemsPartida]);
+  const modo = partida.modoPrecio || 'items';
+  const inp: React.CSSProperties = { background: 'var(--input-bg)', border: '1px solid var(--input-border)', color: 'var(--text)', borderRadius: 'var(--r-sm)', padding: '0.4rem 0.5rem', outline: 'none', fontSize: '0.85rem' };
+
+  return (
+    <div style={{ background: 'var(--bg2)', border: '1px solid var(--border2)', borderLeft: '3px solid var(--y-brand)', borderRadius: 'var(--r)', padding: '0.85rem', marginBottom: '8px' }}>
+      {/* Encabezado */}
+      <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'flex-start', marginBottom: '0.6rem', flexWrap: 'wrap' }}>
+        <div style={{ flex: 1, minWidth: 180 }}>
+          <span style={{ fontFamily: 'var(--font-display)', fontWeight: 700, fontSize: '0.55rem', letterSpacing: '0.18em', textTransform: 'uppercase', color: 'var(--y)' }}>Partida de proyecto</span>
+          <input value={partida.nombre} onChange={e => onUpdatePartida(partida.id, { nombre: e.target.value })} placeholder="Nombre comercial (ej. Habilitación de tableros)"
+            style={{ ...inp, width: '100%', fontWeight: 700, fontSize: '0.95rem', marginTop: '0.2rem' }} />
+        </div>
+        <div style={{ display: 'flex', alignItems: 'flex-end', gap: '0.4rem' }}>
+          <div>
+            <span style={{ display: 'block', fontSize: '0.55rem', color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: '0.15rem' }}>Cantidad</span>
+            <input type="number" min="0" step="1" value={partida.cantidad || ''} onChange={e => onUpdatePartida(partida.id, { cantidad: parseFloat(e.target.value) || 0 })}
+              className="no-spin-arrows" style={{ ...inp, width: 70, textAlign: 'center', fontWeight: 700 }} />
+          </div>
+          <div>
+            <span style={{ display: 'block', fontSize: '0.55rem', color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: '0.15rem' }}>Unidad</span>
+            <select value={partida.unidad} onChange={e => onUpdatePartida(partida.id, { unidad: e.target.value })} style={{ ...inp, cursor: 'pointer' }}>
+              {['local', 'un', 'global', 'm²', 'depto', 'piso', 'mes'].map(u => <option key={u} value={u}>{u}</option>)}
+            </select>
+          </div>
+          <button onClick={() => onDeletePartida(partida.id)} title="Eliminar partida (y sus materiales)" style={{ background: 'none', border: '1px solid var(--border2)', borderRadius: 'var(--r-sm)', color: 'var(--danger)', cursor: 'pointer', padding: '0.4rem', height: 34 }}><Trash2 size={13} /></button>
+        </div>
+      </div>
+
+      {/* Descripción comercial (lo que ve el cliente) */}
+      <textarea value={partida.descripcion || ''} onChange={e => onUpdatePartida(partida.id, { descripcion: e.target.value })} rows={2}
+        placeholder="Descripción comercial: suministro, montaje, alcance… (lo que ve el cliente)"
+        style={{ ...inp, width: '100%', resize: 'vertical', lineHeight: 1.45, marginBottom: '0.6rem' }} />
+
+      {/* Modo de precio (interno) */}
+      {!ocultarCostos && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.6rem', flexWrap: 'wrap' }}>
+          <span style={{ fontSize: '0.6rem', color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.1em' }}>Precio</span>
+          <div style={{ display: 'flex', border: '1px solid var(--border2)', borderRadius: 'var(--r-sm)', overflow: 'hidden' }}>
+            {(['items', 'margen'] as const).map(m => (
+              <button key={m}
+                onClick={() => m === 'margen'
+                  ? onSetMargen(partida.id, { margen: partida.margen ?? 30, imprevistos: partida.imprevistos ?? 0, iva: partida.iva ?? 19 })
+                  : onUpdatePartida(partida.id, { modoPrecio: 'items' })}
+                style={{ background: modo === m ? 'var(--y-brand)' : 'transparent', color: modo === m ? 'var(--on-accent)' : 'var(--muted)', border: 'none', cursor: 'pointer', padding: '0.3rem 0.6rem', fontSize: '0.6rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+                {m === 'items' ? 'Por ítem' : 'Margen único'}
+              </button>
+            ))}
+          </div>
+          {modo === 'margen' && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+              {([['margen', 'Margen', 'var(--purple)'], ['imprevistos', 'Imprev.', 'var(--orange)'], ['iva', 'IVA', 'var(--info)']] as const).map(([k, lbl, col]) => (
+                <label key={k} style={{ display: 'flex', alignItems: 'center', gap: 2, fontSize: '0.6rem', color: col }}>
+                  {lbl}
+                  <input type="number" min="0" max="100" value={partida[k] ?? 0}
+                    onChange={e => {
+                      const v = parseFloat(e.target.value) || 0;
+                      const cfg = { margen: partida.margen ?? 30, imprevistos: partida.imprevistos ?? 0, iva: partida.iva ?? 19 };
+                      onSetMargen(partida.id, { ...cfg, [k]: v });
+                    }}
+                    className="no-spin-arrows" style={{ ...inp, width: 46, padding: '0.25rem', textAlign: 'center', color: col }} />%
+                </label>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Ítems internos de la partida */}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '1px' }}>
+        {itemsPartida.length === 0 ? (
+          <p style={{ fontSize: '0.75rem', color: 'var(--muted)', padding: '0.4rem 0' }}>Sin materiales aún. Agrégalos desde la biblioteca o con los botones de abajo.</p>
+        ) : itemsPartida.map(it => (
+          <ItemRow key={it.id} item={it} index={indexOf(it.id)}
+            onUpdate={updateItem} onDelete={deleteItem} onDuplicate={duplicateItem}
+            onMoveUp={i => moveItem(i, 'up')} onMoveDown={i => moveItem(i, 'down')}
+            isFirst={false} isLast={false} ocultarCostos={ocultarCostos} moneda={moneda} />
+        ))}
+      </div>
+
+      {/* Acciones para agregar a la partida */}
+      <div style={{ display: 'flex', gap: '4px', flexWrap: 'wrap', marginTop: '0.4rem' }}>
+        {(['material', 'mano_obra', 'servicio'] as CategoriaItem[]).map(cat => {
+          const CatIcon = CAT_ICONS[cat];
+          return (
+            <button key={cat} onClick={() => onAddItem(partida.id, cat)} style={{ ...btnGhost, height: 28, fontSize: '0.56rem', padding: '0 0.5rem', color: CAT_COLORS[cat], borderColor: `${CAT_COLORS[cat]}33` }}>
+              <Plus size={10} /><CatIcon size={10} /> {CATEGORIA_LABELS[cat]}
+            </button>
+          );
+        })}
+        <button onClick={() => onBuscar(partida.id)} style={{ ...btnGhost, height: 28, fontSize: '0.56rem', padding: '0 0.5rem' }}><Library size={11} /> Biblioteca</button>
+      </div>
+
+      {/* Panel interno / resumen de la partida */}
+      <div style={{ marginTop: '0.6rem', paddingTop: '0.5rem', borderTop: '1px dashed var(--border2)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.5rem' }}>
+        {!ocultarCostos ? (
+          <span style={{ fontSize: '0.62rem', color: 'var(--muted)', fontFamily: 'monospace', display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+            <span>mat {fmt(calc.costoMateriales)}</span>
+            <span style={{ color: 'var(--info)' }}>MO {fmt(calc.costoManoObra)}</span>
+            <span>otros {fmt(calc.costoOtros)}</span>
+            <span style={{ color: 'var(--success)' }}>util {fmt(calc.utilidad)} ({Math.round(calc.margenEfectivo)}%)</span>
+          </span>
+        ) : <span />}
+        <span style={{ fontFamily: 'var(--font-display)', fontWeight: 700, fontSize: '0.95rem', color: 'var(--y)' }}>
+          {fmt(calc.neto)} <span style={{ fontSize: '0.6rem', color: 'var(--muted)', fontWeight: 400 }}>neto{calc.iva > 0 ? ` + IVA ${fmt(calc.iva)}` : ''}</span>
+        </span>
+      </div>
+    </div>
+  );
+}
+
 // ─── Contenido principal ──────────────────────────────────────────────────────
 function CotizadorContent() {
   const searchParams = useSearchParams();
@@ -516,6 +653,10 @@ function CotizadorContent() {
   const [moneda,                 setMoneda]                 = useState<Moneda>('CLP');
   const [valorUF,                setValorUF]                = useState(0);
   const [cargandoUF,             setCargandoUF]             = useState(false);
+  const [partidas,               setPartidas]               = useState<Partida[]>([]);
+  const [mostrarDetalle,         setMostrarDetalle]         = useState(false);
+  // Si al abrir la biblioteca hay una partida destino, lo insertado se le asocia.
+  const [partidaDestino,         setPartidaDestino]         = useState<string | null>(null);
 
 // ── Estado empresa ──
 const [empresas, setEmpresas] = useState<EmpresaInfo[]>([]);
@@ -608,6 +749,8 @@ const [empresaEditing, setEmpresaEditing] = useState<EmpresaInfo | null>(null);
       setOcultarSuministros(cot.ocultar_suministros ?? false);
       setMoneda((cot.moneda as Moneda) || 'CLP');
       setValorUF(cot.valor_uf || 0);
+      setPartidas(cot.partidas || []);
+      setMostrarDetalle(cot.mostrar_detalle ?? false);
       // Restaurar la empresa emisora original (si la cotización la guardó)
       if (cot.empresa_id) {
         const lista = await loadEmpresas();
@@ -624,6 +767,16 @@ const [empresaEditing, setEmpresaEditing] = useState<EmpresaInfo | null>(null);
 
   /** Formatea un monto en la moneda seleccionada (CLP o UF). */
   const fmt = useCallback((v: number) => formatMoneda(v, moneda), [moneda]);
+
+  // ── Agrupación por partidas (los ítems viven en el arreglo plano `items`) ──
+  const idxById = useMemo(() => {
+    const m = new Map<string, number>();
+    items.forEach((it, i) => m.set(it.id, i));
+    return m;
+  }, [items]);
+  const indexOf = useCallback((id: string) => idxById.get(id) ?? -1, [idxById]);
+  const itemsSueltos = useMemo(() => items.filter(i => !i.partidaId), [items]);
+  const itemsDe = useCallback((pid: string) => items.filter(i => i.partidaId === pid), [items]);
 
   /** Trae el valor de la UF de hoy desde mindicador.cl (API pública, sin key). */
   const traerUF = useCallback(async () => {
@@ -645,13 +798,81 @@ const [empresaEditing, setEmpresaEditing] = useState<EmpresaInfo | null>(null);
     setItems(prev => [newItem({ categoria }, supuestos), ...prev]);
   }, [supuestos]);
 
-  /** Inserta ítems provenientes de la biblioteca (ítem suelto o receta expandida). */
+  /** Inserta ítems del catálogo (a una partida destino si hay, o sueltos). */
   const insertarDesdeBiblioteca = useCallback((nuevos: CotizacionItem[], mensaje: string) => {
     if (nuevos.length === 0) return;
-    setItems(prev => [...nuevos, ...prev]);
+    const conPartida = partidaDestino ? nuevos.map(i => ({ ...i, partidaId: partidaDestino })) : nuevos;
+    setItems(prev => [...conPartida, ...prev]);
     setShowBiblioteca(false);
+    setPartidaDestino(null);
     success(mensaje);
-  }, [success]);
+  }, [success, partidaDestino]);
+
+  /** Inserta una receta: como partida nueva, o dentro de la partida destino. */
+  const insertarReceta = useCallback((receta: RecetaConComponentes, cantidad: number) => {
+    if (partidaDestino) {
+      const { items: nuevos } = partidaDesdeReceta(receta, cantidad, supuestos);
+      const conPartida = nuevos.map(i => ({ ...i, partidaId: partidaDestino }));
+      setItems(prev => [...conPartida, ...prev]);
+      success(`${nuevos.length} materiales agregados a la partida`);
+    } else {
+      const { partida, items: nuevos } = partidaDesdeReceta(receta, cantidad, supuestos);
+      setPartidas(prev => [...prev, partida]);
+      setItems(prev => [...nuevos, ...prev]);
+      success(`Partida "${partida.nombre}" × ${cantidad} agregada (${nuevos.length} materiales internos)`);
+    }
+    setShowBiblioteca(false);
+    setPartidaDestino(null);
+  }, [partidaDestino, supuestos, success]);
+
+  // ── Handlers de PARTIDAS ──
+  const addPartida = useCallback(() => {
+    setPartidas(prev => [...prev, { id: newId(), nombre: '', descripcion: '', cantidad: 1, unidad: 'un', modoPrecio: 'items' }]);
+  }, []);
+
+  /** Actualiza campos de la partida; si cambia la cantidad, recalcula sus ítems. */
+  const updatePartida = useCallback((id: string, patch: Partial<Partida>) => {
+    setPartidas(prev => prev.map(p => p.id === id ? { ...p, ...patch } : p));
+    if (patch.cantidad != null) {
+      setItems(prev => prev.map(it =>
+        it.partidaId === id && it.cantidadPorUnidad != null
+          ? { ...it, cantidad: (it.cantidadPorUnidad || 0) * (patch.cantidad || 0) }
+          : it));
+    }
+  }, []);
+
+  /** Modo 'margen': fija un margen/imprevistos/IVA único y lo aplica a todos los ítems. */
+  const setMargenPartida = useCallback((id: string, cfg: { margen: number; imprevistos: number; iva: number }) => {
+    setPartidas(prev => prev.map(p => p.id === id ? { ...p, modoPrecio: 'margen', ...cfg } : p));
+    setItems(prev => prev.map(it =>
+      it.partidaId === id
+        ? { ...it, imprevistos: cfg.imprevistos, margen: cfg.margen, iva: cfg.iva, precio: redondearMoneda(precioDesdeMargen(it.costo || 0, cfg.margen, cfg.imprevistos), moneda) }
+        : it));
+  }, [moneda]);
+
+  const deletePartida = useCallback((id: string) => {
+    setPartidas(prev => prev.filter(p => p.id !== id));
+    setItems(prev => prev.filter(it => it.partidaId !== id));
+  }, []);
+
+  /** Agrega un ítem vacío a una partida (heredando su margen si es modo 'margen'). */
+  const addItemAPartida = useCallback((pid: string, categoria: CategoriaItem = 'material') => {
+    // Importante: NO anidar setItems dentro de setPartidas — en React Strict Mode
+    // los updaters corren dos veces y duplicarían el ítem. Leemos la partida del
+    // closure (está en deps) y hacemos una sola actualización de items.
+    const p = partidas.find(x => x.id === pid);
+    const base = newItem({ categoria, partidaId: pid }, supuestos);
+    const it = (p?.modoPrecio === 'margen')
+      ? { ...base, margen: p.margen ?? base.margen, imprevistos: p.imprevistos ?? base.imprevistos, iva: p.iva ?? base.iva }
+      : base;
+    setItems(prevI => [it, ...prevI]);
+  }, [supuestos, partidas]);
+
+  /** Abre la biblioteca para insertar dentro de una partida. */
+  const buscarParaPartida = useCallback((pid: string) => {
+    setPartidaDestino(pid);
+    setShowBiblioteca(true);
+  }, []);
 
   /** Crea un ítem de Mano de Obra a partir de la calculadora HH. */
   const agregarDesdeHH = useCallback((costo: number, descripcion: string, horas: number) => {
@@ -825,6 +1046,8 @@ const [empresaEditing, setEmpresaEditing] = useState<EmpresaInfo | null>(null);
       cliente_id: clienteSeleccionado.id,
       empresa_id: empresaSelec.id ?? null,
       items,
+      partidas,
+      mostrar_detalle: mostrarDetalle,
       supuestos,
       subtotal: totals.netoGeneral,
       iva: totals.ivaGeneral,
@@ -860,6 +1083,8 @@ const [empresaEditing, setEmpresaEditing] = useState<EmpresaInfo | null>(null);
 
   const nuevoPresupuesto = () => {
     setItems([]);
+    setPartidas([]);
+    setMostrarDetalle(false);
     setClienteSeleccionado(null);
     setSearchCliente('');
     setDescripcionGeneral('');
@@ -948,6 +1173,7 @@ const [empresaEditing, setEmpresaEditing] = useState<EmpresaInfo | null>(null);
           garantia={garantia} condicionesComerciales={condicionesComerciales}
           ocultarSuministros={ocultarSuministros}
           empresa={empresaPDF} moneda={moneda} valorUF={valorUF}
+          partidas={partidas} mostrarDetalle={mostrarDetalle}
           onClose={() => setShowPDFModal(false)}
         />
       )}
@@ -963,7 +1189,9 @@ const [empresaEditing, setEmpresaEditing] = useState<EmpresaInfo | null>(null);
         <BuscadorBiblioteca
           supuestos={supuestos}
           onInsertar={insertarDesdeBiblioteca}
-          onClose={() => setShowBiblioteca(false)}
+          onInsertarReceta={insertarReceta}
+          partidaDestino={partidaDestino ? (partidas.find(p => p.id === partidaDestino)?.nombre || 'Partida sin nombre') : null}
+          onClose={() => { setShowBiblioteca(false); setPartidaDestino(null); }}
         />
       )}
 
@@ -986,9 +1214,11 @@ const [empresaEditing, setEmpresaEditing] = useState<EmpresaInfo | null>(null);
         <OpcionesModal
           ocultarSuministros={ocultarSuministros}
           ocultarCostos={ocultarCostos}
+          mostrarDetalle={mostrarDetalle}
           onToggle={(campo) => {
             if (campo === 'ocultarSuministros') setOcultarSuministros(v => !v);
-            else setOcultarCostos(v => !v);
+            else if (campo === 'ocultarCostos') setOcultarCostos(v => !v);
+            else setMostrarDetalle(v => !v);
           }}
           onClose={() => setShowOpciones(false)}
         />
@@ -1170,11 +1400,18 @@ const [empresaEditing, setEmpresaEditing] = useState<EmpresaInfo | null>(null);
                 <Calculator size={10} /> Calcular HH
               </button>
               <button
-                onClick={() => setShowBiblioteca(true)}
-                title="Insertar ítems o recetas desde la biblioteca"
+                onClick={() => { setPartidaDestino(null); setShowBiblioteca(true); }}
+                title="Insertar ítems o recetas (partidas) desde la biblioteca"
                 style={{ ...btnGhost, height: 28, fontSize: '0.58rem', padding: '0 0.5rem', color: 'var(--y)', borderColor: 'var(--border)' }}
               >
                 <Library size={10} /> Biblioteca
+              </button>
+              <button
+                onClick={addPartida}
+                title="Crear una partida de proyecto (agrupa materiales/MO en una línea comercial)"
+                style={{ ...btnGhost, height: 28, fontSize: '0.58rem', padding: '0 0.5rem', color: 'var(--y-brand)', borderColor: 'var(--y-brand)' }}
+              >
+                <Plus size={10} /><Package size={10} /> Nueva partida
               </button>
             </div>
             <div style={{ marginLeft: 'auto', display: 'flex', gap: '4px' }}>
@@ -1184,8 +1421,19 @@ const [empresaEditing, setEmpresaEditing] = useState<EmpresaInfo | null>(null);
             </div>
           </div>
 
-          {/* Header columnas desktop */}
-          {items.length > 0 && (
+          {/* Partidas de proyecto (agrupación comercial) */}
+          {partidas.map(p => (
+            <PartidaCard
+              key={p.id} partida={p} itemsPartida={itemsDe(p.id)} indexOf={indexOf}
+              onUpdatePartida={updatePartida} onDeletePartida={deletePartida} onSetMargen={setMargenPartida}
+              onAddItem={addItemAPartida} onBuscar={buscarParaPartida}
+              updateItem={updateItem} deleteItem={deleteItem} duplicateItem={duplicateItem} moveItem={moveItem}
+              moneda={moneda} ocultarCostos={ocultarCostos} fmt={fmt}
+            />
+          ))}
+
+          {/* Header columnas desktop (solo para ítems sueltos) */}
+          {itemsSueltos.length > 0 && (
             <div className="desktop-header-columns">
               <span style={{ fontFamily: 'var(--font-display)', fontWeight: 700, fontSize: '0.55rem', letterSpacing: '0.15em', color: 'var(--muted)' }}>DESCRIPCIÓN</span>
               <div style={{ display: 'flex', width: '100%', gap: '6px' }}>
@@ -1203,12 +1451,15 @@ const [empresaEditing, setEmpresaEditing] = useState<EmpresaInfo | null>(null);
             </div>
           )}
 
-          {/* Lista de ítems */}
-          {items.length === 0 ? (
+          {/* Estado vacío (sin partidas ni ítems) */}
+          {items.length === 0 && partidas.length === 0 && (
             <div style={{ background: 'var(--bg2)', border: '1px solid var(--border2)', padding: '2.5rem 1rem', textAlign: 'center', borderRadius: 'var(--r)' }}>
               <Package size={36} style={{ margin: '0 auto 0.75rem', opacity: 0.2, display: 'block' }} />
-              <p style={{ color: 'var(--muted)', marginBottom: '1.25rem', fontSize: '0.82rem' }}>Sin ítems en el presupuesto actual.</p>
+              <p style={{ color: 'var(--muted)', marginBottom: '1.25rem', fontSize: '0.82rem' }}>Sin ítems ni partidas. Crea una partida de proyecto o agrega ítems sueltos.</p>
               <div style={{ display: 'flex', gap: '6px', justifyContent: 'center', flexWrap: 'wrap' }}>
+                <button onClick={addPartida} style={{ ...btnGhost, height: 36, color: 'var(--y-brand)', borderColor: 'var(--y-brand)' }}>
+                  <Plus size={12} /><Package size={12} /> Nueva partida
+                </button>
                 {(['material', 'mano_obra', 'servicio'] as CategoriaItem[]).map(cat => {
                   const CatIcon = CAT_ICONS[cat];
                   return (
@@ -1219,23 +1470,31 @@ const [empresaEditing, setEmpresaEditing] = useState<EmpresaInfo | null>(null);
                 })}
               </div>
             </div>
-          ) : (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '1px' }}>
-              {items.map((item, idx) => (
-                <ItemRow
-                  key={item.id} item={item} index={idx}
-                  onUpdate={updateItem} onDelete={deleteItem} onDuplicate={duplicateItem}
-                  onMoveUp={i => moveItem(i, 'up')} onMoveDown={i => moveItem(i, 'down')}
-                  isFirst={idx === 0} isLast={idx === items.length - 1}
-                  ocultarCostos={ocultarCostos} moneda={moneda}
-                />
-              ))}
-            </div>
           )}
 
-          {items.length > 0 && (
+          {/* Ítems sueltos (fuera de partidas) — comportamiento clásico */}
+          {itemsSueltos.length > 0 && (
+            <>
+              {partidas.length > 0 && (
+                <span style={{ fontFamily: 'var(--font-display)', fontWeight: 700, fontSize: '0.55rem', letterSpacing: '0.18em', textTransform: 'uppercase', color: 'var(--muted)', marginTop: '0.3rem' }}>Ítems sueltos</span>
+              )}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '1px' }}>
+                {itemsSueltos.map((item, i) => (
+                  <ItemRow
+                    key={item.id} item={item} index={indexOf(item.id)}
+                    onUpdate={updateItem} onDelete={deleteItem} onDuplicate={duplicateItem}
+                    onMoveUp={j => moveItem(j, 'up')} onMoveDown={j => moveItem(j, 'down')}
+                    isFirst={i === 0} isLast={i === itemsSueltos.length - 1}
+                    ocultarCostos={ocultarCostos} moneda={moneda}
+                  />
+                ))}
+              </div>
+            </>
+          )}
+
+          {(items.length > 0 || partidas.length > 0) && (
             <button onClick={() => addItem('material')} style={{ ...btnGhost, width: '100%', justifyContent: 'center', height: 38, borderStyle: 'dashed', marginTop: '2px', borderRadius: 'var(--r)' }}>
-              <Plus size={13} /> Agregar nuevo ítem
+              <Plus size={13} /> Agregar ítem suelto
             </button>
           )}
 

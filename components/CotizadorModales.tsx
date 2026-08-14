@@ -194,17 +194,22 @@ function PreviewBloque({ titulo, items }: { titulo: string; items: string[] }) {
 
 // ══════════════════════════════════════════════════════════════════════════════
 export function OpcionesModal({
-  ocultarSuministros, ocultarCostos, onToggle, onClose,
+  ocultarSuministros, ocultarCostos, mostrarDetalle, onToggle, onClose,
 }: {
-  ocultarSuministros: boolean; ocultarCostos: boolean;
-  onToggle: (campo: 'ocultarSuministros' | 'ocultarCostos') => void;
+  ocultarSuministros: boolean; ocultarCostos: boolean; mostrarDetalle: boolean;
+  onToggle: (campo: 'ocultarSuministros' | 'ocultarCostos' | 'mostrarDetalle') => void;
   onClose: () => void;
 }) {
   const filas = [
     {
+      campo: 'mostrarDetalle' as const, val: mostrarDetalle,
+      label: 'Mostrar detalle técnico de materiales',
+      hint: 'En el PDF, dentro de cada partida se listan sus materiales. Desactivado, el cliente ve solo las partidas comerciales.',
+    },
+    {
       campo: 'ocultarSuministros' as const, val: ocultarSuministros,
-      label: 'Agrupar suministros en el PDF',
-      hint: 'Los materiales se muestran como una sola línea "Suministros y materiales".',
+      label: 'Agrupar suministros sueltos en el PDF',
+      hint: 'Los materiales que NO están en una partida se muestran como una sola línea "Suministros y materiales".',
     },
     {
       campo: 'ocultarCostos' as const, val: ocultarCostos,

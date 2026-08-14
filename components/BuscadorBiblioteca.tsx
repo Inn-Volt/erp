@@ -12,17 +12,21 @@
 import { useState, useEffect, useMemo } from 'react';
 import { X, Search, Package, Layers, Plus, Loader2 } from 'lucide-react';
 import { catalogoService, recetasService } from '@/services/catalogo';
-import { itemDesdeCatalogo, expandirReceta, costoReceta, formatCLP } from '@/utils';
+import { itemDesdeCatalogo, costoReceta, formatCLP } from '@/utils';
 import type { CatalogoItem, RecetaConComponentes, CotizacionItem, Supuestos } from '@/types';
 import { CATEGORIA_COLORS, CATEGORIA_LABELS } from '@/types';
 
 interface Props {
   supuestos: Supuestos;
   onInsertar: (items: CotizacionItem[], mensaje: string) => void;
+  /** Inserta una receta (el cotizador la convierte en partida de proyecto). */
+  onInsertarReceta: (receta: RecetaConComponentes, cantidad: number) => void;
+  /** Nombre de la partida destino, si se abrió desde una partida (solo informativo). */
+  partidaDestino?: string | null;
   onClose: () => void;
 }
 
-export default function BuscadorBiblioteca({ supuestos, onInsertar, onClose }: Props) {
+export default function BuscadorBiblioteca({ supuestos, onInsertar, onInsertarReceta, partidaDestino, onClose }: Props) {
   const [tab, setTab] = useState<'items' | 'recetas'>('recetas');
   const [items, setItems] = useState<CatalogoItem[]>([]);
   const [recetas, setRecetas] = useState<RecetaConComponentes[]>([]);
@@ -64,8 +68,7 @@ export default function BuscadorBiblioteca({ supuestos, onInsertar, onClose }: P
   };
   const insertarReceta = (r: RecetaConComponentes) => {
     const n = Math.max(1, cant[r.id] || 1);
-    const nuevos = expandirReceta(r, n, supuestos);
-    onInsertar(nuevos, `${r.nombre} × ${n} — ${nuevos.length} ítems agregados`);
+    onInsertarReceta(r, n);
   };
 
   const tabBtn = (activo: boolean): React.CSSProperties => ({
@@ -95,6 +98,12 @@ export default function BuscadorBiblioteca({ supuestos, onInsertar, onClose }: P
               style={{ width: '100%', background: 'var(--input-bg)', border: '1px solid var(--input-border)', color: 'var(--text)', padding: '0.4rem 0.5rem 0.4rem 1.8rem', borderRadius: 'var(--r-sm)', outline: 'none', fontSize: '0.82rem' }} />
           </div>
         </div>
+
+        {partidaDestino && (
+          <div style={{ padding: '0.5rem 1.3rem', background: 'var(--y-soft)', fontSize: '0.72rem', color: 'var(--text)', borderBottom: '1px solid var(--border2)' }}>
+            Insertando dentro de la partida: <strong>{partidaDestino}</strong>
+          </div>
+        )}
 
         {/* Lista */}
         <div style={{ overflowY: 'auto', padding: '0.6rem 1.3rem 1.2rem', flex: 1 }}>

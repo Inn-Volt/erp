@@ -388,6 +388,15 @@ ALTER TABLE public.cotizaciones
 ALTER TABLE public.cotizaciones
   ADD COLUMN IF NOT EXISTS total_clp NUMERIC;
 
+-- Partidas de proyecto (agrupación comercial de ítems). Los ítems ya viven en
+-- la columna JSONB `items` y llevan su `partidaId`; aquí se guardan los
+-- encabezados comerciales. Ausente/vacío = cotización clásica por ítems.
+--   mostrar_detalle : si el PDF muestra el detalle de materiales por partida.
+ALTER TABLE public.cotizaciones
+  ADD COLUMN IF NOT EXISTS partidas JSONB DEFAULT '[]'::JSONB;
+ALTER TABLE public.cotizaciones
+  ADD COLUMN IF NOT EXISTS mostrar_detalle BOOLEAN DEFAULT FALSE;
+
 -- La tabla `empresas` pudo crearse antes sin columnas de fecha, pero el trigger
 -- trg_empresas_updated escribe NEW.updated_at → "record new has no field
 -- updated_at" al guardar. Se garantizan aquí ambas columnas.

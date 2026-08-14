@@ -43,6 +43,12 @@ export interface CotizacionItem {
   iva: number;            // % IVA aplicado a este ítem (ej. 19 = 19%)
   descuento?: number;     // % descuento sobre el precio de venta de esta línea
 
+  // ── Partidas de proyecto (agrupación comercial, opcional) ──
+  /** Partida a la que pertenece este ítem. Sin esto es un "ítem suelto" (comportamiento clásico). */
+  partidaId?: string;
+  /** Cantidad por 1 unidad de la partida — permite recalcular la cantidad al cambiar la cantidad de la partida. */
+  cantidadPorUnidad?: number;
+
   // ── Compatibilidad con cotizaciones antiguas ──
   /** @deprecated Reemplazado por `iva` (%). Se normaliza al cargar. */
   iva_incluido?: boolean;
@@ -74,6 +80,30 @@ export const SUPUESTOS_DEFAULT: Supuestos = {
   servicio:  { margen: 15, imprevistos: 20, iva: 19 },
 };
 
+/**
+ * Partida de proyecto: agrupa varios ítems (materiales, mano de obra, servicios)
+ * en UNA línea comercial para el cliente, conservando el detalle interno.
+ * Los ítems asociados llevan su `partidaId`. La partida es solo agrupación:
+ * el costeo sigue siendo por ítem (calcularItem/calcularTotals no cambian).
+ */
+export interface Partida {
+  id: string;
+  nombre: string;
+  descripcion?: string;
+  cantidad: number;       // ej. 56 (locales)
+  unidad: string;         // ej. 'local', 'un', 'global'
+  orden?: number;
+  /**
+   * Cómo se fija el precio de venta de la partida:
+   *  · 'items'  → cada ítem conserva su propio margen; el precio = suma de ítems.
+   *  · 'margen' → todos los ítems comparten margen/imprevistos/IVA de la partida.
+   */
+  modoPrecio?: 'items' | 'margen';
+  margen?: number;        // % — solo en modo 'margen'
+  imprevistos?: number;   // % — solo en modo 'margen'
+  iva?: number;           // % — solo en modo 'margen'
+}
+
 export type EstadoCotizacion = 'Pendiente' | 'Aceptado' | 'Realizado' | 'Rechazado' | 'Entregado';
 
 /** Moneda de la cotización. UF permite decimales; CLP se redondea a peso entero. */
@@ -85,6 +115,10 @@ export interface Cotizacion {
   cliente_id: string;
   clientes?: Cliente;
   items: CotizacionItem[];
+  /** Partidas de proyecto (agrupación comercial). Vacío/ausente = cotización clásica por ítems. */
+  partidas?: Partida[];
+  /** Si true, el PDF muestra el detalle de materiales dentro de cada partida (por defecto false). */
+  mostrar_detalle?: boolean;
   /** Supuestos globales usados al cotizar (margen/imprevistos/IVA por categoría). */
   supuestos?: Supuestos;
   /** Empresa emisora; sin esto el PDF se generaba siempre con la primera. */

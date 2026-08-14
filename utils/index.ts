@@ -1,5 +1,5 @@
 import type {
-  CotizacionItem, CategoriaItem, Supuestos, CatalogoItem, RecetaConComponentes, Moneda,
+  CotizacionItem, CategoriaItem, Supuestos, CatalogoItem, RecetaConComponentes, Moneda, Partida,
 } from '@/types';
 import { SUPUESTOS_DEFAULT, CATEGORIAS_ORDEN } from '@/types';
 
@@ -513,4 +513,114 @@ export function expandirReceta(
 /** Costo interno total de una receta (para mostrarlo en la biblioteca). */
 export function costoReceta(receta: RecetaConComponentes): number {
   return (receta.componentes || []).reduce((s, c) => s + (c.costo || 0) * (c.cantidad || 0), 0);
+}
+
+// ─── Partidas de proyecto ─────────────────────────────────────────────────────
+
+export interface PartidaCalculo {
+  costoMateriales: number;
+  costoManoObra: number;
+  costoOtros: number;       // servicio + operación
+  costoTotal: number;       // costos directos (sin imprevistos)
+  costoConImprev: number;
+  neto: number;             // precio de venta neto (suma de líneas, tras descuento)
+  iva: number;
+  total: number;            // neto + IVA
+  utilidad: number;
+  margenEfectivo: number;   // %
+  cantidadItems: number;
+}
+
+/**
+ * Desglose interno y precio de una partida a partir de sus ítems.
+ * Reutiliza `calcularItem`, así que el precio de la partida siempre coincide con
+ * la suma de sus líneas (y con lo que reporta `calcularTotals`).
+ */
+export function calcularPartida(items: CotizacionItem[]): PartidaCalculo {
+  let costoMateriales = 0, costoManoObra = 0, costoOtros = 0;
+  let costoTotal = 0, costoConImprev = 0, neto = 0, iva = 0;
+  for (const it of items) {
+    const c = calcularItem(it);
+    costoTotal += c.costoTotal;
+    costoConImprev += c.costoConImprev;
+    neto += c.precioVenta;
+    iva += c.montoIva;
+    if (it.categoria === 'material') costoMateriales += c.costoTotal;
+    else if (it.categoria === 'mano_obra') costoManoObra += c.costoTotal;
+    else costoOtros += c.costoTotal;
+  }
+  const utilidad = neto - costoConImprev;
+  return {
+    costoMateriales, costoManoObra, costoOtros, costoTotal, costoConImprev,
+    neto, iva, total: neto + iva, utilidad,
+    margenEfectivo: neto > 0 ? (utilidad / neto) * 100 : 0,
+    cantidadItems: items.length,
+  };
+}
+
+/**
+ * Aplica un margen/imprevistos/IVA ÚNICO a todos los ítems de una partida
+ * (modo 'margen'): reescribe su precio unitario. Así la suma de ítems coincide
+ * con el precio de la partida y `calcularTotals` sigue siendo correcto.
+ */
+export function aplicarMargenPartida(
+  items: CotizacionItem[],
+  cfg: { margen: number; imprevistos: number; iva: number },
+  moneda: Moneda = 'CLP',
+): CotizacionItem[] {
+  return items.map(it => ({
+    ...it,
+    imprevistos: cfg.imprevistos,
+    margen: cfg.margen,
+    iva: cfg.iva,
+    precio: redondearMoneda(precioDesdeMargen(it.costo || 0, cfg.margen, cfg.imprevistos), moneda),
+  }));
+}
+
+/**
+ * Recalcula la cantidad de los ítems de una partida al cambiar su cantidad.
+ * Solo afecta ítems con `cantidadPorUnidad` (los que vinieron de una receta o a
+ * los que se les definió una razón por unidad). El precio unitario no cambia.
+ */
+export function recalcCantidadesPartida(items: CotizacionItem[], nuevaCantidad: number): CotizacionItem[] {
+  const n = nuevaCantidad > 0 ? nuevaCantidad : 0;
+  return items.map(it =>
+    it.cantidadPorUnidad != null
+      ? { ...it, cantidad: (it.cantidadPorUnidad || 0) * n }
+      : it,
+  );
+}
+
+/**
+ * Crea una partida a partir de una receta + sus ítems asociados (con `partidaId`
+ * y `cantidadPorUnidad` para permitir recálculos al cambiar la cantidad).
+ */
+export function partidaDesdeReceta(
+  receta: RecetaConComponentes,
+  cantidad = 1,
+  supuestos: Supuestos = SUPUESTOS_DEFAULT,
+): { partida: Partida; items: CotizacionItem[] } {
+  const n = cantidad > 0 ? cantidad : 1;
+  const partidaId = newId();
+  const partida: Partida = {
+    id: partidaId,
+    nombre: receta.nombre,
+    descripcion: receta.descripcion || '',
+    cantidad: n,
+    unidad: receta.unidad || 'un',
+    modoPrecio: 'items',
+  };
+  const items = (receta.componentes || [])
+    .slice()
+    .sort((a, b) => (a.orden ?? 0) - (b.orden ?? 0))
+    .map(c => newItem({
+      descripcion: c.descripcion,
+      categoria:   c.categoria,
+      unidad:      c.unidad,
+      costo:       c.costo,
+      cantidad:    (c.cantidad || 0) * n,
+      partidaId,
+      cantidadPorUnidad: c.cantidad || 0,
+    }, supuestos));
+  return { partida, items };
 }
