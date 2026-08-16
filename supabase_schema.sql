@@ -296,6 +296,10 @@ CREATE TABLE IF NOT EXISTS public.catalogo_items (
 -- Por si la tabla ya existía sin estas columnas:
 ALTER TABLE public.catalogo_items ADD COLUMN IF NOT EXISTS proveedor TEXT;
 ALTER TABLE public.catalogo_items ADD COLUMN IF NOT EXISTS link TEXT;
+-- Familia de producto (ej. "Conductores y Cables"), tomada de la pestaña del
+-- Google Sheet al sincronizar. La `categoria` (material/mano_obra/servicio/
+-- operacion) se deriva del nombre de la pestaña.
+ALTER TABLE public.catalogo_items ADD COLUMN IF NOT EXISTS familia TEXT;
 
 CREATE INDEX IF NOT EXISTS idx_catalogo_categoria ON public.catalogo_items(categoria);
 CREATE INDEX IF NOT EXISTS idx_catalogo_activo    ON public.catalogo_items(activo);

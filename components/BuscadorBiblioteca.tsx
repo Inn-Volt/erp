@@ -32,7 +32,10 @@ export default function BuscadorBiblioteca({ supuestos, onInsertar, onInsertarRe
   const [recetas, setRecetas] = useState<RecetaConComponentes[]>([]);
   const [loading, setLoading] = useState(true);
   const [busca, setBusca] = useState('');
+  const [familiaSel, setFamiliaSel] = useState<string>('__todas__');
   const [cant, setCant] = useState<Record<string, number>>({});
+
+  const TOPE = 60; // ítems renderizados como máximo (hay miles)
 
   useEffect(() => {
     (async () => {
@@ -53,10 +56,26 @@ export default function BuscadorBiblioteca({ supuestos, onInsertar, onInsertarRe
     })();
   }, []);
 
+  // Familias (categorías de producto) con conteo, para filtrar rápido.
+  const familias = useMemo(() => {
+    const m = new Map<string, number>();
+    for (const i of items) { const f = i.familia || 'Sin categoría'; m.set(f, (m.get(f) || 0) + 1); }
+    return [...m.entries()].sort((a, b) => a[0].localeCompare(b[0]));
+  }, [items]);
+
   const itemsF = useMemo(() => {
     const q = busca.trim().toLowerCase();
-    return items.filter(i => !q || i.descripcion.toLowerCase().includes(q) || (i.codigo || '').toLowerCase().includes(q));
-  }, [items, busca]);
+    if (q) {
+      // Buscar en TODO (ignora la categoría seleccionada).
+      return items.filter(i =>
+        i.descripcion.toLowerCase().includes(q) ||
+        (i.codigo || '').toLowerCase().includes(q) ||
+        (i.familia || '').toLowerCase().includes(q),
+      );
+    }
+    if (familiaSel === '__todas__') return items;
+    return items.filter(i => (i.familia || 'Sin categoría') === familiaSel);
+  }, [items, busca, familiaSel]);
 
   const recetasF = useMemo(() => {
     const q = busca.trim().toLowerCase();
@@ -79,6 +98,12 @@ export default function BuscadorBiblioteca({ supuestos, onInsertar, onInsertarRe
     borderRadius: 'var(--r-sm)', display: 'inline-flex', alignItems: 'center', gap: '0.35rem',
   });
 
+  const chip = (activo: boolean): React.CSSProperties => ({
+    padding: '0.22rem 0.5rem', background: activo ? 'var(--y-soft)' : 'var(--bg3)',
+    color: activo ? 'var(--y)' : 'var(--muted)', border: `1px solid ${activo ? 'var(--y)' : 'var(--border2)'}`,
+    cursor: 'pointer', fontSize: '0.58rem', fontWeight: 600, whiteSpace: 'nowrap', borderRadius: 'var(--r-sm)',
+  });
+
   return (
     <div className="modal-overlay" onClick={e => { if (e.target === e.currentTarget) onClose(); }} style={{ zIndex: 200 }}>
       <div className="modal-box" style={{ maxWidth: 560, width: '95%', maxHeight: '90vh', display: 'flex', flexDirection: 'column' }}>
@@ -98,6 +123,16 @@ export default function BuscadorBiblioteca({ supuestos, onInsertar, onInsertarRe
               style={{ width: '100%', background: 'var(--input-bg)', border: '1px solid var(--input-border)', color: 'var(--text)', padding: '0.4rem 0.5rem 0.4rem 1.8rem', borderRadius: 'var(--r-sm)', outline: 'none', fontSize: '0.82rem' }} />
           </div>
         </div>
+
+        {/* Chips de categoría (solo Ítems). Al buscar, busca en todo. */}
+        {tab === 'items' && familias.length > 0 && (
+          <div style={{ padding: '0.5rem 1.3rem', display: 'flex', gap: 4, flexWrap: 'wrap', borderBottom: '1px solid var(--border2)', maxHeight: 84, overflowY: 'auto' }}>
+            <button style={chip(familiaSel === '__todas__')} onClick={() => setFamiliaSel('__todas__')}>Todas ({items.length})</button>
+            {familias.map(([f, n]) => (
+              <button key={f} style={chip(familiaSel === f)} onClick={() => setFamiliaSel(f)}>{f} ({n})</button>
+            ))}
+          </div>
+        )}
 
         {partidaDestino && (
           <div style={{ padding: '0.5rem 1.3rem', background: 'var(--y-soft)', fontSize: '0.72rem', color: 'var(--text)', borderBottom: '1px solid var(--border2)' }}>
@@ -129,16 +164,23 @@ export default function BuscadorBiblioteca({ supuestos, onInsertar, onInsertarRe
             ))
           ) : (
             itemsF.length === 0 ? (
-              <Vacio texto={items.length === 0 ? 'Catálogo vacío. Agrega ítems en Biblioteca.' : 'Sin resultados'} />
-            ) : itemsF.map(it => (
+              <Vacio texto={items.length === 0 ? 'Catálogo vacío. Sincroniza con Google Sheets en Biblioteca.' : 'Sin resultados'} />
+            ) : (<>
+              {itemsF.slice(0, TOPE).map(it => (
               <div key={it.id} style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', padding: '0.55rem 0', borderBottom: '1px solid var(--border-soft)', borderLeft: `3px solid ${CATEGORIA_COLORS[it.categoria]}`, paddingLeft: '0.5rem' }}>
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <p style={{ fontSize: '0.85rem', fontWeight: 500, color: 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{it.descripcion}</p>
-                  <p style={{ fontSize: '0.68rem', color: 'var(--muted)' }}>{CATEGORIA_LABELS[it.categoria]} · {formatCLP(it.costo)}/{it.unidad}</p>
+                  <p style={{ fontSize: '0.68rem', color: 'var(--muted)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{it.familia || CATEGORIA_LABELS[it.categoria]} · {formatCLP(it.costo)}/{it.unidad}</p>
                 </div>
                 <button onClick={() => insertarItem(it)} className="btn btn-ghost btn-xs"><Plus size={11} /> Insertar</button>
               </div>
-            ))
+              ))}
+              {itemsF.length > TOPE && (
+                <div style={{ textAlign: 'center', padding: '0.6rem', color: 'var(--muted)', fontSize: '0.68rem' }}>
+                  Mostrando {TOPE} de {itemsF.length}. Escribe para buscar o elige una categoría.
+                </div>
+              )}
+            </>)
           )}
         </div>
       </div>

@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import {
   Plus, Search, Trash2, Edit3, X, Loader2, Package, Layers, Save,
-  FileUp, FileDown, ExternalLink,
+  FileUp, FileDown, ExternalLink, RefreshCw,
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { catalogoService, recetasService } from '@/services/catalogo';
@@ -289,6 +289,7 @@ export default function BibliotecaPage() {
   const [recetas, setRecetas] = useState<RecetaConComponentes[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
+  const [familiaSel, setFamiliaSel] = useState<string>('__todas__');
 
   const [itemModal, setItemModal] = useState<{ open: boolean; item: Partial<CatalogoItem> | null }>({ open: false, item: null });
   const [recetaModal, setRecetaModal] = useState<{ open: boolean; receta: RecetaConComponentes | null }>({ open: false, receta: null });
@@ -311,6 +312,46 @@ export default function BibliotecaPage() {
   }, [toastError]);
 
   useEffect(() => { load(); }, [load]);
+
+  // ── Sincronización con Google Sheets ──
+  const [sincronizando, setSincronizando] = useState(false);
+  const [ultimaSync, setUltimaSync] = useState<string | null>(null);
+
+  const sincronizarSheet = useCallback(async (silent = false) => {
+    setSincronizando(true);
+    try {
+      const res = await fetch('/api/sync-catalogo');
+      const data = await res.json();
+      if (!res.ok || data.error) throw new Error(data.error || 'No se pudo leer el Google Sheet');
+      const { creados, actualizados, borrados } = await catalogoService.syncCatalogo(data.items);
+      // Recetas desde el Sheet (si hay pestaña "Recetas"); necesita el catálogo ya sincronizado.
+      const rec = await recetasService.syncRecetas(data.recetas || []);
+      const ts = new Date().toISOString();
+      try { localStorage.setItem('innvolt-sync-catalogo', ts); } catch {}
+      setUltimaSync(ts);
+      const recTxt = (rec.creados + rec.actualizados) > 0
+        ? ` · Recetas: ${rec.creados + rec.actualizados}` + (rec.omitidos ? ` (${rec.omitidos} comp. sin código)` : '')
+        : '';
+      if (!silent || creados > 0 || actualizados > 0 || borrados > 0 || (rec.creados + rec.actualizados) > 0) {
+        success(`Google Sheets: ${creados} nuevos, ${actualizados} actualizados, ${borrados} borrados${recTxt}`);
+      }
+      await load();
+    } catch (e) {
+      if (!silent) toastError('Sincronización: ' + (e instanceof Error ? e.message : 'error'));
+    } finally {
+      setSincronizando(false);
+    }
+  }, [success, toastError, load]);
+
+  // Auto-sincroniza al abrir la Biblioteca (máx. 1 vez cada 5 min para no recargar de más).
+  useEffect(() => {
+    let last: string | null = null;
+    try { last = localStorage.getItem('innvolt-sync-catalogo'); } catch {}
+    setUltimaSync(last);
+    const stale = !last || (Date.now() - new Date(last).getTime()) > 5 * 60 * 1000;
+    if (stale) sincronizarSheet(true);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const eliminarItem = async (id: string, desc: string) => {
     if (!confirm(`¿Eliminar "${desc}" del catálogo?`)) return;
@@ -484,10 +525,31 @@ export default function BibliotecaPage() {
     if (fileRef.current) fileRef.current.value = '';
   };
 
+  // Familias (categorías de producto, desde el Sheet) con su conteo.
+  const familias = useMemo(() => {
+    const m = new Map<string, number>();
+    for (const i of items) { const f = i.familia || 'Sin categoría'; m.set(f, (m.get(f) || 0) + 1); }
+    return [...m.entries()].sort((a, b) => a[0].localeCompare(b[0]));
+  }, [items]);
+
   const itemsFiltrados = useMemo(() => {
     const q = search.trim().toLowerCase();
-    return items.filter(i => !q || i.descripcion.toLowerCase().includes(q) || (i.codigo || '').toLowerCase().includes(q));
-  }, [items, search]);
+    // Al buscar: busca en TODO (ignora la categoría seleccionada).
+    if (q) {
+      return items.filter(i =>
+        i.descripcion.toLowerCase().includes(q) ||
+        (i.codigo || '').toLowerCase().includes(q) ||
+        (i.familia || '').toLowerCase().includes(q),
+      );
+    }
+    // Sin búsqueda: filtra por la categoría/familia seleccionada.
+    if (familiaSel === '__todas__') return items;
+    return items.filter(i => (i.familia || 'Sin categoría') === familiaSel);
+  }, [items, search, familiaSel]);
+
+  // Límite de render (hay miles de ítems): se muestran los primeros N.
+  const LIMITE_RENDER = 400;
+  const itemsMostrados = itemsFiltrados.slice(0, LIMITE_RENDER);
 
   const recetasFiltradas = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -500,6 +562,13 @@ export default function BibliotecaPage() {
     cursor: 'pointer', fontFamily: 'var(--font-display)', fontWeight: 700,
     fontSize: '0.68rem', letterSpacing: '0.12em', textTransform: 'uppercase',
     borderRadius: 'var(--r-sm)', display: 'inline-flex', alignItems: 'center', gap: '0.4rem',
+  });
+
+  const catChip = (activo: boolean): React.CSSProperties => ({
+    padding: '0.28rem 0.6rem', background: activo ? 'var(--y-soft)' : 'var(--bg3)',
+    color: activo ? 'var(--y)' : 'var(--muted)', border: `1px solid ${activo ? 'var(--y)' : 'var(--border2)'}`,
+    cursor: 'pointer', fontSize: '0.62rem', fontWeight: 600, whiteSpace: 'nowrap',
+    borderRadius: 'var(--r-sm)',
   });
 
   return (
@@ -521,7 +590,15 @@ export default function BibliotecaPage() {
             BIBLIO<span style={{ color: 'var(--y)' }}>TECA</span>
           </h1>
         </div>
-        <div className="iv-header-actions">
+        <div className="iv-header-actions" style={{ alignItems: 'center' }}>
+          {ultimaSync && (
+            <span style={{ fontSize: '0.62rem', color: 'var(--muted)', whiteSpace: 'nowrap' }} title={`Última sincronización: ${new Date(ultimaSync).toLocaleString('es-CL')}`}>
+              Sync: {new Date(ultimaSync).toLocaleTimeString('es-CL', { hour: '2-digit', minute: '2-digit' })}
+            </span>
+          )}
+          <button onClick={() => sincronizarSheet(false)} disabled={sincronizando} className="btn btn-ghost btn-sm" title="Traer el catálogo actualizado desde Google Sheets" style={{ color: 'var(--y)', borderColor: 'var(--border)' }}>
+            {sincronizando ? <Loader2 size={13} className="iv-spin" /> : <RefreshCw size={13} />} Sincronizar
+          </button>
           <input ref={fileRef} type="file" accept=".xlsx,.xls,.csv" onChange={onFile} style={{ display: 'none' }} />
           <button onClick={() => fileRef.current?.click()} disabled={importando} className="btn btn-ghost btn-sm" title={`Importar ${tab === 'items' ? 'ítems' : 'recetas'} desde Excel`}>
             {importando ? <Loader2 size={13} className="iv-spin" /> : <FileUp size={13} />} Importar
@@ -543,9 +620,20 @@ export default function BibliotecaPage() {
         <button style={tabBtn(tab === 'recetas')} onClick={() => setTab('recetas')}><Layers size={13} /> Recetas ({recetas.length})</button>
         <div style={{ position: 'relative', flex: 1, minWidth: 200, marginLeft: 'auto' }}>
           <Search size={14} style={{ position: 'absolute', left: '0.7rem', top: '50%', transform: 'translateY(-50%)', color: 'var(--muted)' }} />
-          <input className="input" value={search} onChange={e => setSearch(e.target.value)} placeholder={tab === 'items' ? 'Buscar ítem…' : 'Buscar receta…'} style={{ paddingLeft: '2.1rem' }} />
+          <input className="input" value={search} onChange={e => setSearch(e.target.value)} placeholder={tab === 'items' ? 'Buscar en todo el catálogo…' : 'Buscar receta…'} style={{ paddingLeft: '2.1rem' }} />
         </div>
       </div>
+
+      {/* Chips de categoría (familias del Sheet). Al buscar, se busca en todo. */}
+      {tab === 'items' && familias.length > 0 && (
+        <div style={{ display: 'flex', gap: '4px', flexWrap: 'wrap', marginBottom: '1rem', alignItems: 'center' }}>
+          <button style={catChip(familiaSel === '__todas__')} onClick={() => setFamiliaSel('__todas__')}>Todas ({items.length})</button>
+          {familias.map(([f, n]) => (
+            <button key={f} style={catChip(familiaSel === f)} onClick={() => setFamiliaSel(f)}>{f} ({n})</button>
+          ))}
+          {search.trim() && <span style={{ fontSize: '0.62rem', color: 'var(--y)', marginLeft: '0.3rem' }}>· buscando en todo el catálogo</span>}
+        </div>
+      )}
 
       {loading ? (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
@@ -561,12 +649,12 @@ export default function BibliotecaPage() {
             </div>
           ) : (
             <div>
-              {itemsFiltrados.map(it => (
+              {itemsMostrados.map(it => (
                 <div key={it.id} style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', padding: '0.7rem 1rem', borderBottom: '1px solid var(--border-soft)', borderLeft: `3px solid ${CATEGORIA_COLORS[it.categoria]}` }}>
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <p style={{ fontSize: '0.88rem', fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{it.descripcion}</p>
                     <p style={{ fontSize: '0.7rem', color: 'var(--muted)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                      {CATEGORIA_LABELS[it.categoria]}{it.codigo ? ` · ${it.codigo}` : ''}{it.proveedor ? ` · ${it.proveedor}` : ''}
+                      {it.familia || CATEGORIA_LABELS[it.categoria]}{it.codigo ? ` · ${it.codigo}` : ''}{it.proveedor ? ` · ${it.proveedor}` : ''}
                     </p>
                   </div>
                   <span style={{ fontFamily: 'var(--font-display)', fontWeight: 700, fontSize: '0.85rem', color: 'var(--text)', textAlign: 'right' }}>
@@ -579,6 +667,11 @@ export default function BibliotecaPage() {
                   <button onClick={() => eliminarItem(it.id, it.descripcion)} className="btn btn-danger btn-xs" title="Eliminar"><Trash2 size={12} /></button>
                 </div>
               ))}
+              {itemsFiltrados.length > LIMITE_RENDER && (
+                <div style={{ textAlign: 'center', padding: '0.8rem', color: 'var(--muted)', fontSize: '0.72rem' }}>
+                  Mostrando {LIMITE_RENDER} de {itemsFiltrados.length}. Usa el buscador o una categoría para acotar.
+                </div>
+              )}
             </div>
           )}
         </div>
