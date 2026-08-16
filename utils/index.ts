@@ -416,6 +416,9 @@ export function normalizarItem(
     precio:      typeof raw.precio === 'number' ? raw.precio : 0,
     iva,
     descuento:   typeof raw.descuento === 'number' ? raw.descuento : 0,
+    // Preservar la pertenencia a una partida (si no, al recargar se iban a "sueltos").
+    partidaId:         raw.partidaId,
+    cantidadPorUnidad: raw.cantidadPorUnidad,
   };
 }
 

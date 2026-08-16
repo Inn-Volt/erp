@@ -94,6 +94,15 @@ const s = StyleSheet.create({
   descBulletRow: { flexDirection: 'row', marginBottom: 2 },
   descBullet: { fontSize: 8, color: MUTED, width: 10 },
 
+  // ── Resumen por partida ──
+  resRow: { flexDirection: 'row', alignItems: 'flex-start', paddingVertical: 3.5, borderBottomWidth: 1, borderBottomColor: LINE },
+  resNum: { width: 16, fontSize: 8, color: MUTED },
+  resName: { flex: 1, fontSize: 8.5, color: INK, paddingRight: 8 },
+  resVal: { width: 90, textAlign: 'right', fontSize: 8.5, fontFamily: 'Helvetica-Bold', color: INK },
+  resTotalRow: { flexDirection: 'row', paddingTop: 6, alignItems: 'center' },
+  resTotalLabel: { flex: 1, fontSize: 8.5, fontFamily: 'Helvetica-Bold', color: INK, textAlign: 'right', paddingRight: 8 },
+  resTotalVal: { width: 90, textAlign: 'right', fontSize: 10.5, fontFamily: 'Helvetica-Bold', color: INK },
+
   // ── Título de sección de página (p. ej. "Detalle") ──
   pageTitle: {
     fontSize: 8, fontFamily: 'Helvetica-Bold', color: INK, letterSpacing: 2,

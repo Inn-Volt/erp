@@ -10,7 +10,7 @@
  */
 
 import { useState, useEffect, useMemo } from 'react';
-import { X, Search, Package, Layers, Plus, Loader2 } from 'lucide-react';
+import { X, Search, Package, Layers, Plus, Loader2, ExternalLink, ShoppingCart } from 'lucide-react';
 import { catalogoService, recetasService } from '@/services/catalogo';
 import { itemDesdeCatalogo, costoReceta, formatCLP } from '@/utils';
 import type { CatalogoItem, RecetaConComponentes, CotizacionItem, Supuestos } from '@/types';
@@ -26,6 +26,9 @@ interface Props {
   onClose: () => void;
 }
 
+/** Normaliza para búsqueda: minúsculas + sin acentos (á→a, ñ→n se mantiene). */
+const norm = (s: string) => (s || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
+
 export default function BuscadorBiblioteca({ supuestos, onInsertar, onInsertarReceta, partidaDestino, onClose }: Props) {
   const [tab, setTab] = useState<'items' | 'recetas'>('recetas');
   const [items, setItems] = useState<CatalogoItem[]>([]);
@@ -34,6 +37,7 @@ export default function BuscadorBiblioteca({ supuestos, onInsertar, onInsertarRe
   const [busca, setBusca] = useState('');
   const [familiaSel, setFamiliaSel] = useState<string>('__todas__');
   const [cant, setCant] = useState<Record<string, number>>({});
+  const [cesta, setCesta] = useState<Record<string, number>>({}); // itemId → cantidad
 
   const TOPE = 60; // ítems renderizados como máximo (hay miles)
 
@@ -63,31 +67,67 @@ export default function BuscadorBiblioteca({ supuestos, onInsertar, onInsertarRe
     return [...m.entries()].sort((a, b) => a[0].localeCompare(b[0]));
   }, [items]);
 
+  // Texto de búsqueda pre-normalizado por ítem (desc + código + familia + proveedor).
+  const buscables = useMemo(
+    () => items.map(i => ({ i, hay: norm(`${i.descripcion} ${i.codigo || ''} ${i.familia || ''} ${i.proveedor || ''}`) })),
+    [items],
+  );
+
   const itemsF = useMemo(() => {
-    const q = busca.trim().toLowerCase();
+    const q = norm(busca.trim());
     if (q) {
-      // Buscar en TODO (ignora la categoría seleccionada).
-      return items.filter(i =>
-        i.descripcion.toLowerCase().includes(q) ||
-        (i.codigo || '').toLowerCase().includes(q) ||
-        (i.familia || '').toLowerCase().includes(q),
-      );
+      // Búsqueda por PALABRAS: cada palabra debe aparecer (en cualquier orden y campo).
+      const tokens = q.split(/\s+/).filter(Boolean);
+      const res = buscables.filter(({ hay }) => tokens.every(t => hay.includes(t)));
+      // Relevancia: código exacto → empieza con la búsqueda → resto.
+      const rank = (it: CatalogoItem) => {
+        const d = norm(it.descripcion), c = norm(it.codigo || '');
+        if (c === q) return 4;
+        if (d.startsWith(tokens[0]) || c.startsWith(tokens[0])) return 3;
+        if (d.includes(' ' + tokens[0])) return 2;
+        return 1;
+      };
+      return res.sort((a, b) => rank(b.i) - rank(a.i)).map(x => x.i);
     }
     if (familiaSel === '__todas__') return items;
     return items.filter(i => (i.familia || 'Sin categoría') === familiaSel);
-  }, [items, busca, familiaSel]);
+  }, [items, buscables, busca, familiaSel]);
 
   const recetasF = useMemo(() => {
     const q = busca.trim().toLowerCase();
     return recetas.filter(r => !q || r.nombre.toLowerCase().includes(q));
   }, [recetas, busca]);
 
-  const insertarItem = (it: CatalogoItem) => {
-    onInsertar([itemDesdeCatalogo(it, 1, supuestos)], `"${it.descripcion}" agregado`);
-  };
   const insertarReceta = (r: RecetaConComponentes) => {
     const n = Math.max(1, cant[r.id] || 1);
     onInsertarReceta(r, n);
+  };
+
+  // ── Cesta: seleccionar varios ítems y agregarlos de una ──
+  const itemById = useMemo(() => new Map(items.map(i => [i.id, i])), [items]);
+  const cestaEntries = Object.entries(cesta).filter(([, n]) => n > 0);
+  const cestaUnidades = cestaEntries.reduce((s, [, n]) => s + n, 0);
+  const cestaCosto = cestaEntries.reduce((s, [id, n]) => s + (itemById.get(id)?.costo || 0) * n, 0);
+
+  const addCesta = (id: string, delta = 1) => setCesta(c => {
+    const n = Math.max(0, (c[id] || 0) + delta);
+    const next = { ...c };
+    if (n <= 0) delete next[id]; else next[id] = n;
+    return next;
+  });
+  const setCestaCant = (id: string, n: number) => setCesta(c => {
+    const next = { ...c };
+    if (!n || n <= 0) delete next[id]; else next[id] = Math.floor(n);
+    return next;
+  });
+
+  const agregarCesta = () => {
+    const nuevos = cestaEntries
+      .map(([id, n]) => { const it = itemById.get(id); return it ? itemDesdeCatalogo(it, n, supuestos) : null; })
+      .filter((x): x is NonNullable<typeof x> => x !== null);
+    if (nuevos.length === 0) return;
+    setCesta({});
+    onInsertar(nuevos, `${nuevos.length} ítems agregados${partidaDestino ? ' a la partida' : ''}`);
   };
 
   const tabBtn = (activo: boolean): React.CSSProperties => ({
@@ -106,7 +146,7 @@ export default function BuscadorBiblioteca({ supuestos, onInsertar, onInsertarRe
 
   return (
     <div className="modal-overlay" onClick={e => { if (e.target === e.currentTarget) onClose(); }} style={{ zIndex: 200 }}>
-      <div className="modal-box" style={{ maxWidth: 560, width: '95%', maxHeight: '90vh', display: 'flex', flexDirection: 'column' }}>
+      <div className="modal-box" style={{ maxWidth: 680, width: '96%', maxHeight: '90vh', display: 'flex', flexDirection: 'column' }}>
         {/* Header */}
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '1rem 1.3rem', borderBottom: '1px solid var(--border2)' }}>
           <span className="section-label" style={{ margin: 0, paddingTop: 0 }}><Search size={13} /> Insertar desde biblioteca</span>
@@ -167,12 +207,34 @@ export default function BuscadorBiblioteca({ supuestos, onInsertar, onInsertarRe
               <Vacio texto={items.length === 0 ? 'Catálogo vacío. Sincroniza con Google Sheets en Biblioteca.' : 'Sin resultados'} />
             ) : (<>
               {itemsF.slice(0, TOPE).map(it => (
-              <div key={it.id} style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', padding: '0.55rem 0', borderBottom: '1px solid var(--border-soft)', borderLeft: `3px solid ${CATEGORIA_COLORS[it.categoria]}`, paddingLeft: '0.5rem' }}>
+              <div key={it.id} style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', padding: '0.6rem 0', borderBottom: '1px solid var(--border-soft)', borderLeft: `3px solid ${CATEGORIA_COLORS[it.categoria]}`, paddingLeft: '0.5rem' }}>
                 <div style={{ flex: 1, minWidth: 0 }}>
-                  <p style={{ fontSize: '0.85rem', fontWeight: 500, color: 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{it.descripcion}</p>
-                  <p style={{ fontSize: '0.68rem', color: 'var(--muted)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{it.familia || CATEGORIA_LABELS[it.categoria]} · {formatCLP(it.costo)}/{it.unidad}</p>
+                  <p title={it.descripcion} style={{ fontSize: '0.82rem', fontWeight: 600, color: 'var(--text)', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden', lineHeight: 1.25 }}>{it.descripcion}</p>
+                  <p style={{ fontSize: '0.66rem', color: 'var(--muted)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', marginTop: 1 }}>
+                    {it.codigo ? <><span style={{ color: 'var(--y)', fontWeight: 700 }}>{it.codigo}</span>{' · '}</> : null}
+                    {it.familia || CATEGORIA_LABELS[it.categoria]}
+                    {it.proveedor ? <> · <span style={{ color: 'var(--text)', fontWeight: 600 }}>{it.proveedor}</span></> : null}
+                  </p>
                 </div>
-                <button onClick={() => insertarItem(it)} className="btn btn-ghost btn-xs"><Plus size={11} /> Insertar</button>
+                <div style={{ textAlign: 'right', flexShrink: 0 }}>
+                  <p style={{ fontFamily: 'var(--font-display)', fontWeight: 700, fontSize: '0.9rem', color: 'var(--text)', margin: 0, whiteSpace: 'nowrap' }}>
+                    {formatCLP(it.costo)}<span style={{ color: 'var(--muted)', fontWeight: 400, fontSize: '0.62rem' }}> /{it.unidad}</span>
+                  </p>
+                  <span style={{ fontSize: '0.52rem', color: CATEGORIA_COLORS[it.categoria], fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase' }}>{CATEGORIA_LABELS[it.categoria]}</span>
+                </div>
+                {it.link ? (
+                  <a href={it.link} target="_blank" rel="noopener noreferrer" className="btn btn-ghost btn-xs" title="Ver producto" onClick={e => e.stopPropagation()} style={{ flexShrink: 0 }}><ExternalLink size={11} /></a>
+                ) : null}
+                {cesta[it.id] > 0 ? (
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 2, flexShrink: 0 }}>
+                    <button onClick={() => addCesta(it.id, -1)} className="btn btn-ghost btn-xs" style={{ padding: '0 0.45rem' }}>−</button>
+                    <input type="number" min="0" value={cesta[it.id]} onChange={e => setCestaCant(it.id, parseFloat(e.target.value) || 0)}
+                      className="no-spin-arrows" style={{ width: 40, textAlign: 'center', background: 'var(--input-bg)', border: '1px solid var(--y)', color: 'var(--text)', borderRadius: 'var(--r-sm)', padding: '0.2rem', fontSize: '0.78rem', outline: 'none' }} />
+                    <button onClick={() => addCesta(it.id, 1)} className="btn btn-ghost btn-xs" style={{ padding: '0 0.45rem' }}>+</button>
+                  </div>
+                ) : (
+                  <button onClick={() => addCesta(it.id, 1)} className="btn btn-primary btn-xs" style={{ flexShrink: 0 }}><Plus size={11} /> Añadir</button>
+                )}
               </div>
               ))}
               {itemsF.length > TOPE && (
@@ -183,6 +245,19 @@ export default function BuscadorBiblioteca({ supuestos, onInsertar, onInsertarRe
             </>)
           )}
         </div>
+
+        {/* Cesta: agrega varios ítems de una sola vez */}
+        {cestaEntries.length > 0 && (
+          <div style={{ borderTop: '1px solid var(--border2)', padding: '0.7rem 1.3rem', display: 'flex', alignItems: 'center', gap: '0.6rem', background: 'var(--bg2)', flexWrap: 'wrap' }}>
+            <ShoppingCart size={16} color="var(--y)" style={{ flexShrink: 0 }} />
+            <div style={{ flex: 1, minWidth: 120 }}>
+              <p style={{ margin: 0, fontSize: '0.78rem', fontWeight: 700, color: 'var(--text)' }}>{cestaEntries.length} ítems · {cestaUnidades} unid.</p>
+              <p style={{ margin: 0, fontSize: '0.66rem', color: 'var(--muted)' }}>Costo total {formatCLP(cestaCosto)}</p>
+            </div>
+            <button onClick={() => setCesta({})} className="btn btn-ghost btn-xs">Vaciar</button>
+            <button onClick={agregarCesta} className="btn btn-primary btn-sm"><Plus size={13} /> Agregar {cestaEntries.length}</button>
+          </div>
+        )}
       </div>
     </div>
   );
