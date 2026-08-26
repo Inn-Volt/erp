@@ -104,6 +104,56 @@ export interface Partida {
   iva?: number;           // % — solo en modo 'margen'
 }
 
+// ─── Cotización asistida por IA ───────────────────────────────────────────────
+// La IA (Claude) recibe una descripción del proyecto y devuelve un borrador de
+// partidas con sus componentes internos (material/MO/servicio/operación) y un
+// costo unitario estimado en CLP neto. Luego, en el cliente, cada componente se
+// intenta matchear contra la biblioteca sincronizada para usar precios reales.
+
+/** Componente crudo tal como lo devuelve el modelo (costo estimado, CLP neto). */
+export interface ComponenteIA {
+  descripcion: string;
+  categoria: CategoriaItem;
+  unidad: string;
+  cantidad: number;        // cantidad total para toda la partida
+  costoUnitario: number;   // CLP neto (sin IVA), estimado por la IA
+}
+
+/** Partida propuesta por la IA (línea comercial del cliente). */
+export interface PartidaIA {
+  nombre: string;
+  descripcion: string;
+  cantidad: number;
+  unidad: string;
+  componentes: ComponenteIA[];
+}
+
+/** Respuesta completa del endpoint de IA. */
+export interface BorradorIA {
+  resumen: string;
+  partidas: PartidaIA[];
+}
+
+/** Componente ya resuelto en el cliente: costo real de catálogo o estimado. */
+export interface ComponenteIAResuelto {
+  descripcion: string;
+  categoria: CategoriaItem;
+  unidad: string;
+  cantidad: number;
+  costo: number;       // CLP neto ya resuelto (catálogo si hubo match, si no el estimado)
+  codigo?: string;     // código de catálogo cuando hubo match
+  matched: boolean;    // true si se enlazó a un ítem real de la biblioteca
+}
+
+/** Partida resuelta lista para insertar en el cotizador. */
+export interface PartidaIAResuelta {
+  nombre: string;
+  descripcion: string;
+  cantidad: number;
+  unidad: string;
+  componentes: ComponenteIAResuelto[];
+}
+
 export type EstadoCotizacion = 'Pendiente' | 'Aceptado' | 'Realizado' | 'Rechazado' | 'Entregado';
 
 /** Moneda de la cotización. UF permite decimales; CLP se redondea a peso entero. */

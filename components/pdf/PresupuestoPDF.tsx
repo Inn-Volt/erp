@@ -581,6 +581,34 @@ export default function PresupuestoPDF({
           </View>
         )}
 
+        {/* ── RESUMEN POR PARTIDA ── */}
+        {partidas.length > 0 && (
+          <View style={s.card} wrap={false}>
+            <Text style={s.cardLabel}>RESUMEN POR PARTIDA</Text>
+            {partidas.map((p, i) => {
+              const nt = items.filter(it => it.partidaId === p.id).reduce((sm, it) => sm + brutoItem(it), 0);
+              return (
+                <View key={p.id} style={s.resRow}>
+                  <Text style={s.resNum}>{i + 1}</Text>
+                  <Text style={s.resName}>{p.nombre || 'Partida'}</Text>
+                  <Text style={s.resVal}>{fmt(nt)}</Text>
+                </View>
+              );
+            })}
+            {sueltos.length > 0 && (
+              <View style={s.resRow}>
+                <Text style={s.resNum}> </Text>
+                <Text style={s.resName}>Ítems adicionales</Text>
+                <Text style={s.resVal}>{fmt(sueltos.reduce((sm, it) => sm + brutoItem(it), 0))}</Text>
+              </View>
+            )}
+            <View style={s.resTotalRow}>
+              <Text style={s.resTotalLabel}>Subtotal neto</Text>
+              <Text style={s.resTotalVal}>{fmt(items.reduce((sm, it) => sm + brutoItem(it), 0))}</Text>
+            </View>
+          </View>
+        )}
+
         {/* ── IMPORTANTE (completa la página 1) ── */}
         <View style={s.importanteBox} wrap={false}>
           <Text style={s.importanteLabel}>IMPORTANTE</Text>
@@ -677,6 +705,12 @@ export default function PresupuestoPDF({
                     <Text style={s.totalesValue}>{fmt(totals.netoOperacion)}</Text>
                   </View>
                 )}
+                {(totals.ivaMO + totals.ivaServicios + totals.ivaOperacion) > 0 && (
+                  <View style={s.totalesRow}>
+                    <Text style={s.totalesLabel}>IVA mano de obra, servicios y operación</Text>
+                    <Text style={s.totalesValue}>{fmt(totals.ivaMO + totals.ivaServicios + totals.ivaOperacion)}</Text>
+                  </View>
+                )}
                 {totals.montoDescuentoTotal > 0 && (
                   <View style={s.totalesRow}>
                     <Text style={s.totalesLabel}>Descuento aplicado</Text>
@@ -687,10 +721,12 @@ export default function PresupuestoPDF({
                   <Text style={s.totalesLabel}>Neto</Text>
                   <Text style={s.totalesValue}>{fmt(totals.netoGeneral)}</Text>
                 </View>
-                <View style={s.totalesRow}>
-                  <Text style={s.totalesLabel}>IVA</Text>
-                  <Text style={s.totalesValue}>{fmt(totals.ivaGeneral)}</Text>
-                </View>
+                {totals.ivaMateriales > 0 && (
+                  <View style={s.totalesRow}>
+                    <Text style={s.totalesLabel}>IVA total</Text>
+                    <Text style={s.totalesValue}>{fmt(totals.ivaGeneral)}</Text>
+                  </View>
+                )}
                 <View style={s.totalFinalRow}>
                   <Text style={s.totalFinalLabel}>TOTAL</Text>
                   <Text style={s.totalFinalValue}>{fmt(totals.total)}</Text>

@@ -35,7 +35,9 @@ export default function BuscadorBiblioteca({ supuestos, onInsertar, onInsertarRe
   const [recetas, setRecetas] = useState<RecetaConComponentes[]>([]);
   const [loading, setLoading] = useState(true);
   const [busca, setBusca] = useState('');
-  const [familiaSel, setFamiliaSel] = useState<string>('__todas__');
+  // Dimensión de filtro por chips: familia (categoría de producto) o proveedor.
+  const [modoFiltro, setModoFiltro] = useState<'familia' | 'proveedor'>('familia');
+  const [grupoSel, setGrupoSel] = useState<string>('__todas__');
   const [cant, setCant] = useState<Record<string, number>>({});
   const [cesta, setCesta] = useState<Record<string, number>>({}); // itemId → cantidad
 
@@ -67,6 +69,18 @@ export default function BuscadorBiblioteca({ supuestos, onInsertar, onInsertarRe
     return [...m.entries()].sort((a, b) => a[0].localeCompare(b[0]));
   }, [items]);
 
+  // Proveedores con conteo (segunda dimensión de filtro).
+  const proveedores = useMemo(() => {
+    const m = new Map<string, number>();
+    for (const i of items) { const p = i.proveedor || 'Sin proveedor'; m.set(p, (m.get(p) || 0) + 1); }
+    return [...m.entries()].sort((a, b) => a[0].localeCompare(b[0]));
+  }, [items]);
+
+  /** Valor de agrupación del ítem según la dimensión activa. */
+  const grupoDe = (i: CatalogoItem) =>
+    modoFiltro === 'familia' ? (i.familia || 'Sin categoría') : (i.proveedor || 'Sin proveedor');
+  const grupos = modoFiltro === 'familia' ? familias : proveedores;
+
   // Texto de búsqueda pre-normalizado por ítem (desc + código + familia + proveedor).
   const buscables = useMemo(
     () => items.map(i => ({ i, hay: norm(`${i.descripcion} ${i.codigo || ''} ${i.familia || ''} ${i.proveedor || ''}`) })),
@@ -89,9 +103,10 @@ export default function BuscadorBiblioteca({ supuestos, onInsertar, onInsertarRe
       };
       return res.sort((a, b) => rank(b.i) - rank(a.i)).map(x => x.i);
     }
-    if (familiaSel === '__todas__') return items;
-    return items.filter(i => (i.familia || 'Sin categoría') === familiaSel);
-  }, [items, buscables, busca, familiaSel]);
+    if (grupoSel === '__todas__') return items;
+    return items.filter(i => grupoDe(i) === grupoSel);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [items, buscables, busca, grupoSel, modoFiltro]);
 
   const recetasF = useMemo(() => {
     const q = busca.trim().toLowerCase();
@@ -164,13 +179,33 @@ export default function BuscadorBiblioteca({ supuestos, onInsertar, onInsertarRe
           </div>
         </div>
 
-        {/* Chips de categoría (solo Ítems). Al buscar, busca en todo. */}
-        {tab === 'items' && familias.length > 0 && (
-          <div style={{ padding: '0.5rem 1.3rem', display: 'flex', gap: 4, flexWrap: 'wrap', borderBottom: '1px solid var(--border2)', maxHeight: 84, overflowY: 'auto' }}>
-            <button style={chip(familiaSel === '__todas__')} onClick={() => setFamiliaSel('__todas__')}>Todas ({items.length})</button>
-            {familias.map(([f, n]) => (
-              <button key={f} style={chip(familiaSel === f)} onClick={() => setFamiliaSel(f)}>{f} ({n})</button>
-            ))}
+        {/* Chips de filtro (solo Ítems). Al buscar por texto, busca en todo. */}
+        {tab === 'items' && grupos.length > 0 && (
+          <div style={{ padding: '0.5rem 1.3rem', borderBottom: '1px solid var(--border2)' }}>
+            {/* Selector de dimensión: Categoría o Proveedor */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.4rem' }}>
+              <span style={{ fontSize: '0.55rem', color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.12em', fontWeight: 700 }}>Filtrar por</span>
+              <div style={{ display: 'flex', border: '1px solid var(--border2)', borderRadius: 'var(--r-sm)', overflow: 'hidden' }}>
+                {(['familia', 'proveedor'] as const).map(m => (
+                  <button key={m}
+                    onClick={() => { setModoFiltro(m); setGrupoSel('__todas__'); }}
+                    style={{
+                      background: modoFiltro === m ? 'var(--y-brand)' : 'transparent',
+                      color: modoFiltro === m ? 'var(--on-accent)' : 'var(--muted)',
+                      border: 'none', cursor: 'pointer', padding: '0.22rem 0.6rem',
+                      fontSize: '0.58rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em',
+                    }}>
+                    {m === 'familia' ? 'Categoría' : 'Proveedor'}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap', maxHeight: 84, overflowY: 'auto' }}>
+              <button style={chip(grupoSel === '__todas__')} onClick={() => setGrupoSel('__todas__')}>Todos ({items.length})</button>
+              {grupos.map(([g, n]) => (
+                <button key={g} style={chip(grupoSel === g)} onClick={() => setGrupoSel(g)}>{g} ({n})</button>
+              ))}
+            </div>
           </div>
         )}
 
@@ -239,7 +274,7 @@ export default function BuscadorBiblioteca({ supuestos, onInsertar, onInsertarRe
               ))}
               {itemsF.length > TOPE && (
                 <div style={{ textAlign: 'center', padding: '0.6rem', color: 'var(--muted)', fontSize: '0.68rem' }}>
-                  Mostrando {TOPE} de {itemsF.length}. Escribe para buscar o elige una categoría.
+                  Mostrando {TOPE} de {itemsF.length}. Escribe para buscar (incluye proveedor) o filtra por categoría/proveedor.
                 </div>
               )}
             </>)

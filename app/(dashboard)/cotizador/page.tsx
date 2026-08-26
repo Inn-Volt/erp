@@ -9,7 +9,7 @@ import {
   Loader2, RefreshCcw, Check, FileUp,
   Copy, Package, Settings2, X, ArrowUp, ArrowDown,
   Building2, ChevronDown, Pencil, Handshake, HardHat, BrickWall,
-  Calculator, Truck, Library,
+  Calculator, Truck, Library, Sparkles,
 } from 'lucide-react';
 import { pdf } from '@react-pdf/renderer';
 import { saveAs } from 'file-saver';
@@ -25,7 +25,7 @@ import {
   margenDesdePrecio, itemsToExcelRows, parseCategoria,
   calcularPartida, partidaDesdeReceta,
 } from '@/utils';
-import type { CotizacionItem, Cliente, CategoriaItem, Supuestos, Moneda, Partida, RecetaConComponentes } from '@/types';
+import type { CotizacionItem, Cliente, CategoriaItem, Supuestos, Moneda, Partida, RecetaConComponentes, PartidaIAResuelta } from '@/types';
 import {
   CATEGORIA_LABELS, CATEGORIAS_ORDEN, CATEGORIA_COLORS,
   SUPUESTOS_DEFAULT, UNIDADES,
@@ -36,6 +36,7 @@ import ListadoInternoPDF from '@/components/pdf/ListadoInternoPDF';
 import EmpresaModal from '@/components/EmpresaModal';
 import CalculadoraHH from '@/components/CalculadoraHH';
 import BuscadorBiblioteca from '@/components/BuscadorBiblioteca';
+import CotizarIAModal from '@/components/CotizarIAModal';
 import { DescripcionModal, OpcionesModal } from '@/components/CotizadorModales';
 
 // ─── Estilos base ─────────────────────────────────────────────────────────────
@@ -651,6 +652,7 @@ function CotizadorContent() {
   const [supuestos,              setSupuestos]              = useState<Supuestos>({ ...SUPUESTOS_DEFAULT });
   const [showHHModal,            setShowHHModal]            = useState(false);
   const [showBiblioteca,         setShowBiblioteca]         = useState(false);
+  const [showIA,                 setShowIA]                 = useState(false);
   const [showDescripcion,        setShowDescripcion]        = useState(false);
   const [showOpciones,           setShowOpciones]           = useState(false);
   const [moneda,                 setMoneda]                 = useState<Moneda>('CLP');
@@ -829,6 +831,43 @@ const [empresaEditing, setEmpresaEditing] = useState<EmpresaInfo | null>(null);
     setShowBiblioteca(false);
     setPartidaDestino(null);
   }, [partidaDestino, supuestos, success]);
+
+  /**
+   * Inserta el borrador generado por IA: cada partida se crea como Partida de
+   * proyecto y sus componentes como ítems internos. Los costos vienen en CLP; si
+   * la cotización está en UF se convierten con el valor cargado. El precio de
+   * venta se deriva con los márgenes/imprevistos de los supuestos por categoría.
+   */
+  const insertarDesdeIA = useCallback((partidasIA: PartidaIAResuelta[]) => {
+    const nuevasPartidas: Partida[] = [];
+    const nuevosItems: CotizacionItem[] = [];
+    for (const p of partidasIA) {
+      const pid = newId();
+      const cant = p.cantidad || 1;
+      nuevasPartidas.push({ id: pid, nombre: p.nombre, descripcion: p.descripcion, cantidad: cant, unidad: p.unidad || 'un', modoPrecio: 'items' });
+      for (const c of p.componentes) {
+        // Costo en la moneda de la cotización (la IA entrega CLP).
+        const costoBase = (moneda === 'UF' && valorUF > 0) ? c.costo / valorUF : c.costo;
+        const costo = redondearMoneda(costoBase, moneda);
+        const it = newItem({
+          categoria: c.categoria,
+          descripcion: c.descripcion,
+          unidad: c.unidad || 'un',
+          cantidad: c.cantidad || 0,
+          costo,
+          partidaId: pid,
+          cantidadPorUnidad: cant > 0 ? (c.cantidad || 0) / cant : (c.cantidad || 0),
+        }, supuestos);
+        // Precio de venta neto respetando la moneda (UF con 2 decimales).
+        it.precio = redondearMoneda(precioDesdeMargen(it.costo, it.margen, it.imprevistos), moneda);
+        nuevosItems.push(it);
+      }
+    }
+    setPartidas(prev => [...prev, ...nuevasPartidas]);
+    setItems(prev => [...nuevosItems, ...prev]);
+    setShowIA(false);
+    success(`IA: ${nuevasPartidas.length} ${nuevasPartidas.length === 1 ? 'partida' : 'partidas'} y ${nuevosItems.length} ítems agregados`);
+  }, [moneda, valorUF, supuestos, success]);
 
   // ── Handlers de PARTIDAS ──
   const addPartida = useCallback(() => {
@@ -1205,6 +1244,14 @@ const [empresaEditing, setEmpresaEditing] = useState<EmpresaInfo | null>(null);
         />
       )}
 
+      {showIA && (
+        <CotizarIAModal
+          moneda={moneda}
+          onInsertar={insertarDesdeIA}
+          onClose={() => setShowIA(false)}
+        />
+      )}
+
       {showDescripcion && (
         <DescripcionModal
           descripcion={descripcionGeneral}
@@ -1403,6 +1450,13 @@ const [empresaEditing, setEmpresaEditing] = useState<EmpresaInfo | null>(null);
               <Plus size={13} /><Package size={13} /> Nueva partida
             </button>
             <button
+              onClick={() => setShowIA(true)}
+              title="Generar un borrador de partidas con IA a partir de una descripción del proyecto"
+              style={{ ...btnGhost, height: 32, fontSize: '0.62rem', padding: '0 0.7rem', color: 'var(--y)', borderColor: 'var(--border)', background: 'var(--y-soft)' }}
+            >
+              <Sparkles size={12} /> Cotizar con IA
+            </button>
+            <button
               onClick={() => { setPartidaDestino(null); setShowBiblioteca(true); }}
               title="Insertar recetas (como partida) o ítems desde la biblioteca"
               style={{ ...btnGhost, height: 32, fontSize: '0.62rem', padding: '0 0.7rem', color: 'var(--y)', borderColor: 'var(--border)' }}
@@ -1475,6 +1529,9 @@ const [empresaEditing, setEmpresaEditing] = useState<EmpresaInfo | null>(null);
               <div style={{ display: 'flex', gap: '8px', justifyContent: 'center', alignItems: 'center', flexWrap: 'wrap' }}>
                 <button onClick={addPartida} style={{ background: 'var(--y-brand)', color: 'var(--on-accent)', border: 'none', cursor: 'pointer', height: 40, borderRadius: 'var(--r-sm)', padding: '0 1.1rem', fontFamily: 'var(--font-display)', fontWeight: 700, fontSize: '0.72rem', letterSpacing: '0.06em', textTransform: 'uppercase', display: 'inline-flex', alignItems: 'center', gap: '0.4rem' }}>
                   <Plus size={14} /><Package size={14} /> Nueva partida
+                </button>
+                <button onClick={() => setShowIA(true)} style={{ ...btnGhost, height: 40, color: 'var(--y)', borderColor: 'var(--border)', background: 'var(--y-soft)' }}>
+                  <Sparkles size={13} /> Cotizar con IA
                 </button>
                 <button onClick={() => { setPartidaDestino(null); setShowBiblioteca(true); }} style={{ ...btnGhost, height: 40, color: 'var(--y)', borderColor: 'var(--border)' }}>
                   <Library size={13} /> Desde biblioteca
