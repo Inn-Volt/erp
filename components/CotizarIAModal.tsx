@@ -2,34 +2,10 @@
 
 import { useState } from 'react';
 import { Sparkles, X, Loader2, Wand2, PackagePlus, AlertTriangle } from 'lucide-react';
-import { formatCLP } from '@/utils';
+import { formatCLP, mejorMatchCatalogo } from '@/utils';
 import { catalogoService } from '@/services/catalogo';
 import { CATEGORIA_LABELS, CATEGORIA_COLORS } from '@/types';
 import type { BorradorIA, PartidaIAResuelta, CategoriaItem, Moneda } from '@/types';
-
-// ── Matcheo contra la biblioteca sincronizada ────────────────────────────────
-const norm = (s: string) => s.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
-const tokens = (s: string) => norm(s).split(/[^a-z0-9]+/).filter(t => t.length >= 3);
-
-/** Devuelve el mejor ítem del catálogo para un componente, o null si no hay match confiable. */
-function matchCatalogo(
-  desc: string, categoria: CategoriaItem,
-  catalogo: Array<{ descripcion: string; categoria: CategoriaItem; unidad: string; costo: number; codigo?: string; familia?: string }>,
-) {
-  const at = tokens(desc);
-  if (at.length === 0) return null;
-  let best: typeof catalogo[number] | null = null;
-  let bestScore = 0;
-  for (const it of catalogo) {
-    if (it.categoria !== categoria) continue;
-    const ct = new Set(tokens(`${it.descripcion} ${it.familia || ''}`));
-    let shared = 0;
-    for (const t of at) if (ct.has(t)) shared++;
-    const score = shared / at.length; // cobertura de los términos de la IA
-    if (shared >= 2 && score > bestScore) { bestScore = score; best = it; }
-  }
-  return bestScore >= 0.5 ? best : null;
-}
 
 const EJEMPLOS = [
   'Habilitación eléctrica de 3 locales comerciales: tablero por local, iluminación LED, 6 enchufes y certificación SEC.',
@@ -76,7 +52,7 @@ export default function CotizarIAModal({
         cantidad: p.cantidad,
         unidad: p.unidad,
         componentes: p.componentes.map(c => {
-          const m = catalogo.length ? matchCatalogo(c.descripcion, c.categoria, catalogo) : null;
+          const m = catalogo.length ? mejorMatchCatalogo(c.descripcion, c.categoria, catalogo) : null;
           return m
             ? { descripcion: m.descripcion, categoria: c.categoria, unidad: m.unidad || c.unidad, cantidad: c.cantidad, costo: m.costo, codigo: m.codigo, matched: true }
             : { descripcion: c.descripcion, categoria: c.categoria, unidad: c.unidad, cantidad: c.cantidad, costo: c.costoUnitario, matched: false };

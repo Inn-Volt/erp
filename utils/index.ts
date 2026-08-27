@@ -382,6 +382,34 @@ export function newItem(
   return base;
 }
 
+// ─── Matcheo de texto contra el catálogo (para IA) ───────────────────────────
+const _normMatch = (s: string) => (s || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
+const _tokensMatch = (s: string) => _normMatch(s).split(/[^a-z0-9]+/).filter(t => t.length >= 3);
+
+/**
+ * Devuelve el ítem del catálogo que mejor coincide con una descripción (misma
+ * categoría), o null si no hay match confiable. Se usa para enlazar componentes
+ * generados por IA con ítems reales de la biblioteca (precio + código vivos).
+ * Conservador: exige ≥2 términos compartidos y cubrir ≥50% de los términos.
+ */
+export function mejorMatchCatalogo<T extends { descripcion: string; categoria: string; familia?: string }>(
+  desc: string, categoria: string, catalogo: T[],
+): T | null {
+  const at = _tokensMatch(desc);
+  if (at.length === 0) return null;
+  let best: T | null = null;
+  let bestScore = 0;
+  for (const it of catalogo) {
+    if (it.categoria !== categoria) continue;
+    const ct = new Set(_tokensMatch(`${it.descripcion} ${it.familia || ''}`));
+    let shared = 0;
+    for (const t of at) if (ct.has(t)) shared++;
+    const score = shared / at.length;
+    if (shared >= 2 && score > bestScore) { bestScore = score; best = it; }
+  }
+  return bestScore >= 0.5 ? best : null;
+}
+
 /**
  * Normaliza ítems guardados con el formato antiguo (sin `imprevistos`/`iva`,
  * con `esMaterial`/`iva_incluido`) para que sigan calculando correctamente.

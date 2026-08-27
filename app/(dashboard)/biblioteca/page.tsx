@@ -3,15 +3,15 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import {
   Plus, Search, Trash2, Edit3, X, Loader2, Package, Layers, Save,
-  FileUp, FileDown, ExternalLink, RefreshCw,
+  FileUp, FileDown, ExternalLink, RefreshCw, Sparkles, Wand2,
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { catalogoService, recetasService } from '@/services/catalogo';
 import NumeroInput from '@/components/NumeroInput';
 import { useToast } from '@/hooks/useToast';
-import { formatCLP, cleanNumber, costoReceta, parseCategoria } from '@/utils';
+import { formatCLP, cleanNumber, costoReceta, parseCategoria, mejorMatchCatalogo } from '@/utils';
 import type {
-  CatalogoItem, RecetaComponente, RecetaConComponentes, CategoriaItem,
+  CatalogoItem, RecetaComponente, RecetaConComponentes, CategoriaItem, RecetaIA,
 } from '@/types';
 import {
   CATEGORIA_LABELS, CATEGORIAS_ORDEN, CATEGORIA_COLORS, UNIDADES,
@@ -148,6 +148,44 @@ function RecetaModal({ receta, catalogo, onClose, onSaved }: {
   const [busca, setBusca] = useState('');
   const [saving, setSaving] = useState(false);
 
+  // ── Generación con IA ──
+  const [iaDesc, setIaDesc] = useState('');
+  const [iaCargando, setIaCargando] = useState(false);
+  const [iaError, setIaError] = useState<string | null>(null);
+
+  const generarConIA = async () => {
+    if (iaDesc.trim().length < 4) { setIaError('Describe la receta (ej. "punto de enchufe simple").'); return; }
+    setIaCargando(true);
+    setIaError(null);
+    try {
+      const res = await fetch('/api/receta-ia', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ descripcion: iaDesc.trim() }),
+      });
+      const data = await res.json();
+      if (!res.ok) { setIaError(data?.error || 'No se pudo generar la receta.'); return; }
+      const r = data.receta as RecetaIA;
+      // Enlaza cada componente con el catálogo (precio/código vivos) si hay match confiable.
+      const nuevos: CompEdit[] = r.componentes.map(c => {
+        const m = mejorMatchCatalogo(c.descripcion, c.categoria, catalogo);
+        return m
+          ? { item_id: m.id, descripcion: m.descripcion, categoria: m.categoria, unidad: m.unidad, costo: m.costo, cantidad: c.cantidad, orden: 0 }
+          : { item_id: null, descripcion: c.descripcion, categoria: c.categoria, unidad: c.unidad, costo: c.costoEstimado, cantidad: c.cantidad, orden: 0 };
+      });
+      if (!nombre.trim()) setNombre(r.nombre || '');
+      if (r.unidad) setUnidad(r.unidad);
+      if (!descripcion.trim() && r.descripcion) setDescripcion(r.descripcion);
+      setComps(prev => [...prev, ...nuevos.map((c, i) => ({ ...c, orden: prev.length + i }))]);
+      const enlazados = nuevos.filter(c => c.item_id).length;
+      success(`IA: ${nuevos.length} componentes (${enlazados} del catálogo)`);
+      setIaDesc('');
+    } catch {
+      setIaError('Error de conexión al generar la receta.');
+    } finally {
+      setIaCargando(false);
+    }
+  };
+
   const sugerencias = useMemo(() => {
     const q = busca.trim().toLowerCase();
     if (!q) return [];
@@ -197,6 +235,26 @@ function RecetaModal({ receta, catalogo, onClose, onSaved }: {
         </div>
 
         <div style={{ padding: '1.25rem 1.4rem', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+          {/* Generar con IA */}
+          <div style={{ background: 'var(--y-soft)', border: '1px solid var(--border)', borderRadius: 'var(--r-sm)', padding: '0.75rem 0.85rem' }}>
+            <span style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', fontFamily: 'var(--font-display)', fontWeight: 700, fontSize: '0.58rem', letterSpacing: '0.14em', textTransform: 'uppercase', color: 'var(--y)', marginBottom: '0.45rem' }}>
+              <Sparkles size={12} /> Generar con IA
+            </span>
+            <div style={{ display: 'flex', gap: '0.4rem', flexWrap: 'wrap' }}>
+              <input value={iaDesc} onChange={e => setIaDesc(e.target.value)}
+                onKeyDown={e => { if (e.key === 'Enter' && !iaCargando) generarConIA(); }}
+                placeholder='Describe la receta (ej. "punto de enchufe embutido en tabique")'
+                style={{ ...field, flex: 1, minWidth: 180 }} />
+              <button onClick={generarConIA} disabled={iaCargando} className="btn btn-primary" style={{ whiteSpace: 'nowrap' }}>
+                {iaCargando ? <Loader2 size={13} className="iv-spin" /> : <Wand2 size={13} />} Generar
+              </button>
+            </div>
+            {iaError && <p style={{ fontSize: '0.72rem', color: 'var(--danger)', margin: '0.45rem 0 0' }}>{iaError}</p>}
+            <p style={{ fontSize: '0.66rem', color: 'var(--muted)', margin: '0.45rem 0 0', lineHeight: 1.4 }}>
+              Enlaza los componentes con el catálogo (precio real) cuando hay coincidencia; el resto queda con costo estimado. Revisa y ajusta antes de guardar.
+            </p>
+          </div>
+
           {/* Datos receta */}
           <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: '0.6rem' }}>
             <div>

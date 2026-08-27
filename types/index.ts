@@ -154,6 +154,24 @@ export interface PartidaIAResuelta {
   componentes: ComponenteIAResuelto[];
 }
 
+// ─── Receta asistida por IA ───────────────────────────────────────────────────
+/** Componente crudo de una receta generada por IA (costo estimado en CLP neto). */
+export interface ComponenteRecetaIA {
+  descripcion: string;
+  categoria: CategoriaItem;
+  unidad: string;
+  cantidad: number;
+  costoEstimado: number;
+}
+
+/** Receta propuesta por la IA a partir de una descripción. */
+export interface RecetaIA {
+  nombre: string;
+  unidad: string;
+  descripcion?: string;
+  componentes: ComponenteRecetaIA[];
+}
+
 export type EstadoCotizacion = 'Pendiente' | 'Aceptado' | 'Realizado' | 'Rechazado' | 'Entregado';
 
 /** Moneda de la cotización. UF permite decimales; CLP se redondea a peso entero. */

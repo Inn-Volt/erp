@@ -69,6 +69,30 @@ const s = StyleSheet.create({
 
 const today = () => new Date().toLocaleDateString('es-CL', { day: '2-digit', month: 'long', year: 'numeric' });
 
+/** Normaliza para comparar productos: minúsculas, sin acentos, sin espacios extra. */
+const norm = (x: string) => (x || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/\s+/g, ' ').trim();
+/** Formatea la cantidad: entero si corresponde, si no hasta 2 decimales. */
+const fmtCant = (n: number) => {
+  const r = Math.round((n + Number.EPSILON) * 100) / 100;
+  return Number.isInteger(r) ? String(r) : String(r).replace('.', ',');
+};
+
+/**
+ * Agrupa los materiales por producto (misma descripción + unidad) y SUMA sus
+ * cantidades. Así, el mismo cable pedido en dos partidas distintas aparece como
+ * una sola línea con el total a comprar (ej. 20 m + 20 m → 40 m).
+ */
+function agruparMateriales(items: CotizacionItem[]): Array<{ descripcion: string; unidad: string; cantidad: number }> {
+  const mapa = new Map<string, { descripcion: string; unidad: string; cantidad: number }>();
+  for (const it of items) {
+    const clave = `${norm(it.descripcion)}|${norm(it.unidad)}`;
+    const ex = mapa.get(clave);
+    if (ex) ex.cantidad += (it.cantidad || 0);
+    else mapa.set(clave, { descripcion: it.descripcion, unidad: it.unidad, cantidad: it.cantidad || 0 });
+  }
+  return [...mapa.values()];
+}
+
 interface Props {
   items: CotizacionItem[];
   folio: string;
@@ -84,6 +108,9 @@ export default function ListadoInternoPDF({ items, folio, clienteNombre, descrip
     email:    empresa?.email    || 'innvolt.cl@gmail.com',
     telefono: empresa?.telefono || '',
   };
+
+  // Consolida el mismo material de distintas partidas en una sola línea (suma cantidades).
+  const materiales = agruparMateriales(items);
 
   return (
     <Document>
@@ -115,8 +142,8 @@ export default function ListadoInternoPDF({ items, folio, clienteNombre, descrip
             </View>
             <View style={s.infoBox}>
               <Text style={s.infoLabel}>Resumen</Text>
-              <Text style={s.infoVal}>{items.length} materiales</Text>
-              <Text style={s.infoSub}>Registro de compras de la cotización</Text>
+              <Text style={s.infoVal}>{materiales.length} materiales</Text>
+              <Text style={s.infoSub}>Cantidades consolidadas por producto</Text>
             </View>
           </View>
 
@@ -130,11 +157,11 @@ export default function ListadoInternoPDF({ items, folio, clienteNombre, descrip
             <Text style={[s.th, s.colMoney]}>TOTAL</Text>
           </View>
 
-          {items.map((item, idx) => (
-            <View key={item.id} wrap={false} style={[s.row, idx % 2 === 1 ? s.rowAlt : {}]}>
+          {materiales.map((item, idx) => (
+            <View key={idx} wrap={false} style={[s.row, idx % 2 === 1 ? s.rowAlt : {}]}>
               <Text style={[s.tdMuted, s.colN]}>{idx + 1}</Text>
               <Text style={[s.td, s.colDesc]}>{item.descripcion}</Text>
-              <Text style={[s.td, s.colQty]}>{item.cantidad}</Text>
+              <Text style={[s.td, s.colQty]}>{fmtCant(item.cantidad)}</Text>
               <Text style={[s.tdMuted, s.colUnit]}>{item.unidad}</Text>
               <Text style={[s.tdMuted, s.colMoney]}>—</Text>
               <Text style={[s.tdMuted, s.colMoney]}>—</Text>
