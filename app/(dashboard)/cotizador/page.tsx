@@ -802,14 +802,16 @@ const [empresaEditing, setEmpresaEditing] = useState<EmpresaInfo | null>(null);
   }, [success, warning]);
 
   const addItem = useCallback((categoria: CategoriaItem = 'material') => {
-    setItems(prev => [newItem({ categoria }, supuestos), ...prev]);
+    // Se agrega AL FINAL (donde están los botones), para que aparezca justo
+    // donde hiciste clic y la vista no salte hacia arriba.
+    setItems(prev => [...prev, newItem({ categoria }, supuestos)]);
   }, [supuestos]);
 
   /** Inserta ítems del catálogo (a una partida destino si hay, o sueltos). */
   const insertarDesdeBiblioteca = useCallback((nuevos: CotizacionItem[], mensaje: string) => {
     if (nuevos.length === 0) return;
     const conPartida = partidaDestino ? nuevos.map(i => ({ ...i, partidaId: partidaDestino })) : nuevos;
-    setItems(prev => [...conPartida, ...prev]);
+    setItems(prev => [...prev, ...conPartida]);
     setShowBiblioteca(false);
     setPartidaDestino(null);
     success(mensaje);
@@ -820,12 +822,12 @@ const [empresaEditing, setEmpresaEditing] = useState<EmpresaInfo | null>(null);
     if (partidaDestino) {
       const { items: nuevos } = partidaDesdeReceta(receta, cantidad, supuestos);
       const conPartida = nuevos.map(i => ({ ...i, partidaId: partidaDestino }));
-      setItems(prev => [...conPartida, ...prev]);
+      setItems(prev => [...prev, ...conPartida]);
       success(`${nuevos.length} materiales agregados a la partida`);
     } else {
       const { partida, items: nuevos } = partidaDesdeReceta(receta, cantidad, supuestos);
       setPartidas(prev => [...prev, partida]);
-      setItems(prev => [...nuevos, ...prev]);
+      setItems(prev => [...prev, ...nuevos]);
       success(`Partida "${partida.nombre}" × ${cantidad} agregada (${nuevos.length} materiales internos)`);
     }
     setShowBiblioteca(false);
@@ -864,7 +866,7 @@ const [empresaEditing, setEmpresaEditing] = useState<EmpresaInfo | null>(null);
       }
     }
     setPartidas(prev => [...prev, ...nuevasPartidas]);
-    setItems(prev => [...nuevosItems, ...prev]);
+    setItems(prev => [...prev, ...nuevosItems]);
     setShowIA(false);
     success(`IA: ${nuevasPartidas.length} ${nuevasPartidas.length === 1 ? 'partida' : 'partidas'} y ${nuevosItems.length} ítems agregados`);
   }, [moneda, valorUF, supuestos, success]);
@@ -909,7 +911,7 @@ const [empresaEditing, setEmpresaEditing] = useState<EmpresaInfo | null>(null);
     const it = (p?.modoPrecio === 'margen')
       ? { ...base, margen: p.margen ?? base.margen, imprevistos: p.imprevistos ?? base.imprevistos, iva: p.iva ?? base.iva }
       : base;
-    setItems(prevI => [it, ...prevI]);
+    setItems(prevI => [...prevI, it]);
   }, [supuestos, partidas]);
 
   /** Abre la biblioteca para insertar dentro de una partida. */
@@ -921,7 +923,7 @@ const [empresaEditing, setEmpresaEditing] = useState<EmpresaInfo | null>(null);
   /** Crea un ítem de Mano de Obra a partir de la calculadora HH (a una partida si aplica). */
   const agregarDesdeHH = useCallback((costo: number, descripcion: string, horas: number) => {
     const it = newItem({ categoria: 'mano_obra', descripcion, costo, cantidad: 1, unidad: 'global', ...(hhDestino ? { partidaId: hhDestino } : {}) }, supuestos);
-    setItems(prev => [it, ...prev]);
+    setItems(prev => [...prev, it]);
     setShowHHModal(false);
     setHhDestino(null);
     success(`Mano de obra agregada — ${horas} h por persona`);
@@ -1025,7 +1027,7 @@ const [empresaEditing, setEmpresaEditing] = useState<EmpresaInfo | null>(null);
           warning('No se encontraron ítems válidos. Revisa que exista la columna "Descripcion".');
           return;
         }
-        setItems(prev => [...newItems, ...prev]);
+        setItems(prev => [...prev, ...newItems]);
         success(`${newItems.length} ítems importados desde Excel`);
       } catch {
         toastError('Error al procesar el archivo Excel. Verifica el formato.');
