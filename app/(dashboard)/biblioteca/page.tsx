@@ -70,12 +70,12 @@ function ItemModal({ item, onClose, onSaved }: {
 
   return (
     <div className="modal-overlay" onClick={e => { if (e.target === e.currentTarget) onClose(); }} style={{ zIndex: 200 }}>
-      <div className="modal-box" style={{ maxWidth: 460 }}>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '1.1rem 1.4rem', borderBottom: '1px solid var(--border2)' }}>
+      <div className="modal-box" style={{ maxWidth: 460, maxHeight: '90vh', overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
+        <div style={{ flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '1.1rem 1.4rem', borderBottom: '1px solid var(--border2)' }}>
           <span className="section-label" style={{ margin: 0, paddingTop: 0 }}><Package size={13} /> {item?.id ? 'Editar ítem' : 'Nuevo ítem'}</span>
           <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--muted)' }}><X size={16} /></button>
         </div>
-        <div style={{ padding: '1.25rem 1.4rem', display: 'flex', flexDirection: 'column', gap: '0.85rem' }}>
+        <div style={{ padding: '1.25rem 1.4rem', display: 'flex', flexDirection: 'column', gap: '0.85rem', flex: 1, overflowY: 'auto', minHeight: 0 }}>
           <div>
             <span style={fieldLabel}>Descripción *</span>
             <input style={field} value={form.descripcion || ''} onChange={e => set('descripcion', e.target.value)} placeholder="Ej. Cable THHN 2.5mm" autoFocus />
@@ -112,12 +112,14 @@ function ItemModal({ item, onClose, onSaved }: {
             <span style={fieldLabel}>Link del producto (opcional)</span>
             <input style={field} value={form.link || ''} onChange={e => set('link', e.target.value)} placeholder="https://…" />
           </div>
-          <div style={{ display: 'flex', gap: '0.5rem', justifyContent: 'flex-end', marginTop: '0.25rem' }}>
-            <button onClick={onClose} className="btn btn-ghost">Cancelar</button>
-            <button onClick={guardar} disabled={saving} className="btn btn-primary">
-              {saving ? <Loader2 size={13} className="iv-spin" /> : <Save size={13} />} Guardar
-            </button>
-          </div>
+        </div>{/* /cuerpo con scroll */}
+
+        {/* Pie fijo con acciones (siempre visible) */}
+        <div style={{ flexShrink: 0, display: 'flex', gap: '0.5rem', justifyContent: 'flex-end', padding: '0.9rem 1.4rem', borderTop: '1px solid var(--border2)' }}>
+          <button onClick={onClose} className="btn btn-ghost">Cancelar</button>
+          <button onClick={guardar} disabled={saving} className="btn btn-primary">
+            {saving ? <Loader2 size={13} className="iv-spin" /> : <Save size={13} />} Guardar
+          </button>
         </div>
       </div>
     </div>
@@ -228,13 +230,13 @@ function RecetaModal({ receta, catalogo, onClose, onSaved }: {
 
   return (
     <div className="modal-overlay" onClick={e => { if (e.target === e.currentTarget) onClose(); }} style={{ zIndex: 200 }}>
-      <div className="modal-box" style={{ maxWidth: 620, width: '95%', maxHeight: '92vh', overflowY: 'auto' }}>
-        <div style={{ position: 'sticky', top: 0, background: 'var(--bg2)', zIndex: 10, display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '1.1rem 1.4rem', borderBottom: '1px solid var(--border2)' }}>
+      <div className="modal-box" style={{ maxWidth: 620, width: '95%', maxHeight: '90vh', overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
+        <div style={{ flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '1.1rem 1.4rem', borderBottom: '1px solid var(--border2)' }}>
           <span className="section-label" style={{ margin: 0, paddingTop: 0 }}><Layers size={13} /> {receta?.id ? 'Editar receta' : 'Nueva receta'}</span>
           <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--muted)' }}><X size={16} /></button>
         </div>
 
-        <div style={{ padding: '1.25rem 1.4rem', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+        <div style={{ padding: '1.25rem 1.4rem', display: 'flex', flexDirection: 'column', gap: '1rem', flex: 1, overflowY: 'auto', minHeight: 0 }}>
           {/* Generar con IA */}
           <div style={{ background: 'var(--y-soft)', border: '1px solid var(--border)', borderRadius: 'var(--r-sm)', padding: '0.75rem 0.85rem' }}>
             <span style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', fontFamily: 'var(--font-display)', fontWeight: 700, fontSize: '0.58rem', letterSpacing: '0.14em', textTransform: 'uppercase', color: 'var(--y)', marginBottom: '0.45rem' }}>
@@ -324,12 +326,14 @@ function RecetaModal({ receta, catalogo, onClose, onSaved }: {
             <span style={{ fontFamily: 'var(--font-display)', fontWeight: 900, fontSize: '1.1rem', color: 'var(--y)' }}>{formatCLP(costoTotal)}</span>
           </div>
 
-          <div style={{ display: 'flex', gap: '0.5rem', justifyContent: 'flex-end' }}>
-            <button onClick={onClose} className="btn btn-ghost">Cancelar</button>
-            <button onClick={guardar} disabled={saving} className="btn btn-primary">
-              {saving ? <Loader2 size={13} className="iv-spin" /> : <Save size={13} />} Guardar receta
-            </button>
-          </div>
+        </div>{/* /cuerpo con scroll */}
+
+        {/* Pie fijo con acciones (siempre visible) */}
+        <div style={{ flexShrink: 0, display: 'flex', gap: '0.5rem', justifyContent: 'flex-end', padding: '0.9rem 1.4rem', borderTop: '1px solid var(--border2)' }}>
+          <button onClick={onClose} className="btn btn-ghost">Cancelar</button>
+          <button onClick={guardar} disabled={saving} className="btn btn-primary">
+            {saving ? <Loader2 size={13} className="iv-spin" /> : <Save size={13} />} Guardar receta
+          </button>
         </div>
       </div>
     </div>
