@@ -49,7 +49,7 @@ function aJsonSchema(g: GeminiSchema): Record<string, unknown> {
 async function generarGemini<T>(system: string, user: string, schema: GeminiSchema): Promise<T> {
   const key = process.env.GEMINI_API_KEY;
   if (!key) throw new Error('Falta GEMINI_API_KEY. Consíguela gratis en https://aistudio.google.com/apikey y agrégala al entorno.');
-  const model = process.env.GEMINI_MODEL || 'gemini-2.0-flash';
+  const model = process.env.GEMINI_MODEL || 'gemini-3.6-flash';
 
   const res = await fetch(
     `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`,
