@@ -20,7 +20,8 @@ const esInnVolt = (nombre: string) =>
 const lineasTexto = (texto?: string): string[] =>
   (texto || '')
     .split('\n')
-    .map(l => l.replace(/^\s*[•\-*]\s*/, '').trim())
+    // Quita la viñeta inicial (•, guion o UN solo *), sin tocar el ** de negrita.
+    .map(l => l.replace(/^\s*(?:[•·▪‣◦–—-]|\*(?!\*))\s*/, '').trim())
     .filter(Boolean);
 
 /** Sufijo con el descuento promedio de una categoría (ej. " (desc. prom. 12%)"). */
@@ -202,9 +203,13 @@ const s = StyleSheet.create({
   clausulaLetra: { fontSize: 7.5, fontFamily: 'Helvetica-Bold', color: MUTED, width: 14 },
   clausulaTexto: { fontSize: 7.5, color: '#333333', flex: 1, lineHeight: 1.55 },
 
-  // ── Firma ──
+  // ── Firma ── Fluye justo tras las cláusulas con un espacio fijo. No se usa
+  // justifyContent/space-between ni marginTop:auto (eso "corría" la firma cuando
+  // el texto era largo y saltaba de página).
   firmaContainer: {
-    margin: '24 32 18 32',
+    marginTop: 30,
+    marginHorizontal: 32,
+    marginBottom: 18,
     flexDirection: 'row',
     justifyContent: 'space-between',
   },
@@ -317,38 +322,6 @@ interface Props {
   /** Si true, dentro de cada partida se listan sus materiales. */
   mostrarDetalle?: boolean;
 }
-
-// ─── Cláusulas ───────────────────────────────────────────────────────────────
-const buildGarantiasEquipos = (empresa: EmpresaInfo) => {
-  const nombre = empresa.nombre?.trim() || 'la empresa';
-  return [
-    { l: 'a.', t: 'Garantía de instalación y mano de obra: 6 meses desde la fecha de entrega o puesta en servicio, salvo que la propuesta indique expresamente un plazo distinto.' },
-    { l: 'b.', t: 'Los equipos, componentes y materiales suministrados cuentan con la garantía otorgada por sus respectivos fabricantes o distribuidores autorizados.' },
-    { l: 'c.', t: `La garantía cubre exclusivamente defectos atribuibles a errores de instalación, montaje o configuración realizados por personal de ${nombre}.` },
-    { l: 'd.', t: 'La garantía no cubre daños provocados por manipulación de terceros, modificaciones no autorizadas, vandalismo, robo, incendios, inundaciones, humedad, sobretensiones, descargas atmosféricas, catástrofes naturales, fallas de suministro eléctrico o uso indebido.' },
-    { l: 'e.', t: `Equipos, materiales o instalaciones preexistentes propiedad del cliente y no suministrados por ${nombre} quedan expresamente excluidos de cualquier garantía.` },
-    { l: 'f.', t: 'Toda intervención realizada por terceros no autorizados dejará sin efecto la garantía sobre el elemento intervenido.' },
-  ];
-};
-
-const GARANTIAS_SERVICIOS = [
-  { l: 'a.', t: 'Los servicios cotizados consideran únicamente las actividades expresamente indicadas en el alcance de esta propuesta.' },
-  { l: 'b.', t: 'Materiales, equipos, obras civiles, canalizaciones, habilitaciones eléctricas, certificaciones o trabajos adicionales no especificados se considerarán partidas extraordinarias y serán cotizados por separado.' },
-  { l: 'c.', t: 'La programación de los trabajos estará sujeta a disponibilidad operativa y a la recepción conforme del pago inicial acordado.' },
-  { l: 'd.', t: 'Los plazos de ejecución podrán variar por causas de fuerza mayor, condiciones climáticas adversas, restricciones de acceso, retrasos de proveedores o situaciones ajenas al control de la empresa.' },
-  { l: 'e.', t: 'Los servicios de soporte técnico se prestan en horario hábil de lunes a viernes entre las 09:00 y las 18:00 horas, salvo contratación de cobertura especial.' },
-  { l: 'f.', t: 'Los trabajos ejecutados fuera de la Región Metropolitana podrán considerar costos adicionales por traslado, alojamiento, alimentación y logística.' },
-];
-
-const VALIDEZ_PAGO = [
-  { l: 'a.', t: 'La presente cotización tendrá una vigencia de 15 días corridos contados desde su fecha de emisión.' },
-  { l: 'b.', t: 'La aceptación de esta propuesta implica la conformidad del cliente con el alcance técnico, condiciones comerciales y cláusulas descritas en el presente documento.' },
-  { l: 'c.', t: 'Para proyectos superiores a UF 10 se establece un anticipo mínimo del 50% y saldo contra entrega o según cronograma de avance acordado.' },
-  { l: 'd.', t: 'Para proyectos iguales o inferiores a UF 10 se podrá requerir pago total anticipado previo al inicio de los trabajos.' },
-  { l: 'e.', t: 'Los materiales especiales, equipos importados o productos fabricados a pedido podrán requerir pago anticipado del 100%.' },
-  { l: 'f.', t: 'Toda modificación de alcance solicitada por el cliente después de aprobada la propuesta será evaluada y presupuestada mediante orden de cambio.' },
-  { l: 'g.', t: 'Gastos extraordinarios no considerados originalmente, tales como traslados adicionales, visitas técnicas extraordinarias, permisos, certificaciones o materiales imprevistos, serán cotizados y facturados por separado.' },
-];
 
 // ─── Componente fila de tabla (reutilizable) ──────────────────────────────────
 function TablaFila({
@@ -490,8 +463,6 @@ export default function PresupuestoPDF({
   const textoImportante =
     empresa.texto_importante ||
     `Todos los gastos o valores extraordinarios por factores externos a ${empresa.nombre} serán de total responsabilidad de quien contrate los servicios, por lo cual ${empresa.nombre} generará una cotización puntual al respecto.`;
-
-  const garantiasEquipos = buildGarantiasEquipos(empresa);
 
   // ── Página 1: Header + Partes + Descripción + Tabla de ítems + Totales ──────
   // ── Página 2+: Inicia con <Page break> — Importante + Cláusulas + Firma ─────
@@ -764,17 +735,7 @@ export default function PresupuestoPDF({
           Al usar una Page separada, TODO este contenido empieza en página nueva
           y la firma queda al fondo usando flexDirection + justifyContent.
       ══════════════════════════════════════════════════════════════════════ */}
-      <Page
-        size="A4"
-        style={[
-          s.page,
-          {
-            // flex column con space-between: empuja la firma al fondo
-            flexDirection: 'column',
-            justifyContent: 'space-between',
-          },
-        ]}
-      >
+      <Page size="A4" style={s.page}>
         {/* ── Barra de acento superior ── */}
         <View style={s.accentBar} fixed>
           <View style={s.accentDark} />
@@ -784,72 +745,16 @@ export default function PresupuestoPDF({
         {/* Contenido superior: Aclaraciones + Condiciones */}
         <View>
 
-          {/* ── ACLARACIONES ── */}
-          <View style={s.seccionBox}>
-
-            {/* Título principal + primer subtítulo juntos */}
-            <View wrap={false}>
-              <Text style={s.seccionTitulo}>ACLARACIONES DE SERVICIOS Y GARANTÍAS</Text>
-              <Text style={s.seccionSubtitulo}>1) DE LAS INSTALACIONES Y MANO DE OBRA:</Text>
-              {garantiasEquipos.slice(0, 1).map(c => (
-                <View key={c.l} style={s.clausulaRow}>
-                  <Text style={s.clausulaLetra}>{c.l}</Text>
-                  <Text style={s.clausulaTexto}>{c.t}</Text>
-                </View>
-              ))}
-            </View>
-            {garantiasEquipos.slice(1).map(c => (
-              <View key={c.l} style={s.clausulaRow} wrap={false}>
-                <Text style={s.clausulaLetra}>{c.l}</Text>
-                <Text style={s.clausulaTexto}>{c.t}</Text>
-              </View>
-            ))}
-
-            {/* Subtítulo 2 + primera cláusula juntos */}
-            <View wrap={false}>
-              <Text style={s.seccionSubtitulo}>2) DE LOS SERVICIOS:</Text>
-              {GARANTIAS_SERVICIOS.slice(0, 1).map(c => (
-                <View key={c.l} style={s.clausulaRow}>
-                  <Text style={s.clausulaLetra}>{c.l}</Text>
-                  <Text style={s.clausulaTexto}>{c.t}</Text>
-                </View>
-              ))}
-            </View>
-            {GARANTIAS_SERVICIOS.slice(1).map(c => (
-              <View key={c.l} style={s.clausulaRow} wrap={false}>
-                <Text style={s.clausulaLetra}>{c.l}</Text>
-                <Text style={s.clausulaTexto}>{c.t}</Text>
-              </View>
-            ))}
-
-            {/* Subtítulo 3 + primera cláusula juntos */}
-            <View wrap={false}>
-              <Text style={s.seccionSubtitulo}>3) VALIDEZ Y FORMAS DE PAGO:</Text>
-              {VALIDEZ_PAGO.slice(0, 1).map(c => (
-                <View key={c.l} style={s.clausulaRow}>
-                  <Text style={s.clausulaLetra}>{c.l}</Text>
-                  <Text style={s.clausulaTexto}>{c.t}</Text>
-                </View>
-              ))}
-            </View>
-            {VALIDEZ_PAGO.slice(1).map(c => (
-              <View key={c.l} style={s.clausulaRow} wrap={false}>
-                <Text style={s.clausulaLetra}>{c.l}</Text>
-                <Text style={s.clausulaTexto}>{c.t}</Text>
-              </View>
-            ))}
-
-          </View>
-
-          {/* ── CONDICIONES PARTICULARES (lo que se escribe en el cotizador) ──
-              Antes estos textos se editaban en la app pero nunca se imprimían. */}
+          {/* ── ACLARACIONES DE SERVICIOS Y GARANTÍAS (editable por cotización) ── */}
           {(lineasTexto(garantia).length > 0 || lineasTexto(condicionesComerciales).length > 0) && (
             <View style={s.seccionBox}>
-              <Text style={s.seccionTitulo}>CONDICIONES PARTICULARES DE ESTA COTIZACIÓN</Text>
+              <View wrap={false}>
+                <Text style={s.seccionTitulo}>ACLARACIONES DE SERVICIOS Y GARANTÍAS</Text>
+                {lineasTexto(garantia).length > 0 && <Text style={s.seccionSubtitulo}>GARANTÍA</Text>}
+              </View>
 
               {lineasTexto(garantia).length > 0 && (
                 <>
-                  <Text style={s.seccionSubtitulo}>GARANTÍA</Text>
                   {lineasTexto(garantia).map((t, i) => (
                     <View key={`gar-${i}`} style={s.clausulaRow} wrap={false}>
                       <Text style={s.clausulaLetra}>•</Text>
@@ -874,7 +779,7 @@ export default function PresupuestoPDF({
           )}
         </View>
 
-        {/* ── FIRMA — al fondo gracias a justifyContent: space-between ── */}
+        {/* ── FIRMA — fluye tras las cláusulas con un espacio fijo (no se descoloca) ── */}
         <View style={s.firmaContainer} wrap={false}>
 
           {/* Firma Cliente */}

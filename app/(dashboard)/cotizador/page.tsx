@@ -56,10 +56,27 @@ const btnGhost: React.CSSProperties = {
   display: 'inline-flex', alignItems: 'center', gap: '0.4rem',
 };
 
-const GARANTIA_DEFAULT =
-  '• Garantía: 6 meses sobre la mano de obra instalada.\n• La garantía no cubre fallas por mal uso, sobrecargas o intervención de terceros.\n• Materiales: La garantía de los componentes es responsabilidad del fabricante.';
-const CONDICIONES_DEFAULT =
-  '• Validez de la oferta: 15 días corridos.\n• Forma de Pago: 50% anticipo al inicio y 50% al finalizar conforme.\n• Medios de pago: Transferencia electrónica o efectivo.';
+// Textos por defecto (editables por cotización en el modal Descripción/Condiciones).
+// Basados en las "Aclaraciones de servicios y garantías" estándar de InnVolt.
+const GARANTIA_DEFAULT = [
+  '• Garantía de instalación y mano de obra: 6 meses desde la fecha de entrega o puesta en servicio, salvo que la propuesta indique expresamente un plazo distinto.',
+  '• Los equipos, componentes y materiales suministrados cuentan con la garantía otorgada por sus respectivos fabricantes o distribuidores autorizados.',
+  '• La garantía cubre exclusivamente defectos atribuibles a errores de instalación, montaje o configuración realizados por nuestro personal.',
+  '• La garantía no cubre daños por manipulación de terceros, modificaciones no autorizadas, vandalismo, robo, incendios, inundaciones, humedad, sobretensiones, descargas atmosféricas, catástrofes naturales, fallas de suministro eléctrico o uso indebido.',
+  '• Equipos, materiales o instalaciones preexistentes del cliente y no suministrados por nosotros quedan excluidos de cualquier garantía.',
+  '• Toda intervención de terceros no autorizados deja sin efecto la garantía sobre el elemento intervenido.',
+].join('\n');
+const CONDICIONES_DEFAULT = [
+  '• Los servicios cotizados consideran únicamente las actividades expresamente indicadas en el alcance de esta propuesta.',
+  '• Materiales, obras civiles, canalizaciones, certificaciones o trabajos adicionales no especificados se considerarán partidas extraordinarias y se cotizarán por separado.',
+  '• La programación de los trabajos está sujeta a disponibilidad operativa y a la recepción conforme del pago inicial acordado.',
+  '• Los plazos de ejecución podrán variar por causas de fuerza mayor, condiciones climáticas, restricciones de acceso o retrasos de proveedores.',
+  '• Vigencia de la oferta: 15 días corridos desde su emisión.',
+  '• Forma de pago: 50% de anticipo al aceptar la cotización y 50% contra entrega conforme (proyectos sobre UF 10).',
+  '• Para proyectos iguales o inferiores a UF 10 se podrá requerir pago total anticipado.',
+  '• Materiales especiales, equipos importados o fabricados a pedido podrán requerir pago anticipado del 100%.',
+  '• Toda modificación de alcance posterior a la aprobación será evaluada y presupuestada mediante orden de cambio.',
+].join('\n');
 
 const CAT_COLORS = CATEGORIA_COLORS;
 const CAT_ICONS: Record<CategoriaItem, React.ElementType> = {

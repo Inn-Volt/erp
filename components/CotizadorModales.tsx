@@ -61,7 +61,7 @@ const ta: React.CSSProperties = {
 
 /** Convierte texto multilínea en viñetas (quita •/-/* iniciales, filtra vacíos). */
 const lineas = (t?: string): string[] =>
-  (t || '').split('\n').map(l => l.replace(/^\s*[•\-*]\s*/, '').trim()).filter(Boolean);
+  (t || '').split('\n').map(l => l.replace(/^\s*(?:[•·▪‣◦–—-]|\*(?!\*))\s*/, '').trim()).filter(Boolean);
 
 // ══════════════════════════════════════════════════════════════════════════════
 export function DescripcionModal({
@@ -110,9 +110,9 @@ export function DescripcionModal({
           <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--muted)' }}><X size={16} /></button>
         </div>
 
-        <div className="desc-modal-grid" style={{ overflowY: 'auto', flex: 1 }}>
-          {/* Editor */}
-          <div style={{ padding: '1.2rem 1.4rem', display: 'flex', flexDirection: 'column', gap: '1rem', borderRight: '1px solid var(--border2)' }}>
+        <div className="desc-modal-grid" style={{ flex: 1, minHeight: 0, overflow: 'hidden' }}>
+          {/* Editor — con su propio scroll */}
+          <div style={{ padding: '1.2rem 1.4rem', display: 'flex', flexDirection: 'column', gap: '1rem', borderRight: '1px solid var(--border2)', overflowY: 'auto', minHeight: 0 }}>
             <div>
               <span style={fieldLabel}>Descripción general</span>
               <FmtBar onBold={() => aplicar('descripcion', 'bold')} onBullet={() => aplicar('descripcion', 'bullet')} />
@@ -130,8 +130,8 @@ export function DescripcionModal({
             </div>
           </div>
 
-          {/* Vista previa — réplica fiel del PDF (papel blanco, negro + remate amarillo) */}
-          <div style={{ padding: '1.2rem 1.4rem', background: 'var(--bg3)' }}>
+          {/* Vista previa — réplica fiel del PDF (papel blanco, negro + remate amarillo). Scroll propio. */}
+          <div style={{ padding: '1.2rem 1.4rem', background: 'var(--bg3)', overflowY: 'auto', minHeight: 0 }}>
             <p style={{ ...sectionLabel, color: 'var(--muted)', marginBottom: '0.7rem' }}><Eye size={12} /> Vista previa</p>
             <div style={{ background: '#ffffff', color: '#1a1a1a', borderRadius: 6, overflow: 'hidden', boxShadow: '0 6px 22px rgba(0,0,0,0.22)', fontFamily: 'Helvetica, Arial, sans-serif' }}>
               {/* barra de acento (como el PDF) */}
@@ -171,7 +171,11 @@ export function DescripcionModal({
 
       <style>{`
         .desc-modal-grid { display: grid; grid-template-columns: 1fr 1fr; }
-        @media (max-width: 720px) { .desc-modal-grid { grid-template-columns: 1fr; } .desc-modal-grid > div:first-child { border-right: none !important; border-bottom: 1px solid var(--border2); } }
+        @media (max-width: 720px) {
+          .desc-modal-grid { grid-template-columns: 1fr; overflow-y: auto !important; }
+          .desc-modal-grid > div { overflow: visible !important; min-height: 0; }
+          .desc-modal-grid > div:first-child { border-right: none !important; border-bottom: 1px solid var(--border2); }
+        }
       `}</style>
     </div>
   );
