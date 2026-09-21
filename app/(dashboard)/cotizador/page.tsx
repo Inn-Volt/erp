@@ -995,8 +995,6 @@ const [empresaEditing, setEmpresaEditing] = useState<EmpresaInfo | null>(null);
     reader.onload = (evt) => {
       try {
         const wb = XLSX.read(evt.target?.result, { type: 'binary' });
-        const ws = wb.Sheets[wb.SheetNames[0]];
-        const raw: any[] = XLSX.utils.sheet_to_json(ws);
 
         // Busca una columna por varios nombres posibles (tolerante al Excel origen)
         const pick = (r: any, ...claves: string[]) => {
@@ -1005,55 +1003,90 @@ const [empresaEditing, setEmpresaEditing] = useState<EmpresaInfo | null>(null);
           }
           return undefined;
         };
+        const pct = (v: unknown, fallback: number) => {
+          if (v === undefined) return fallback;
+          const n = cleanNumber(v);
+          return n > 0 && n <= 1 ? n * 100 : n; // 0.2 → 20
+        };
+        const numOrU = (v: unknown) => (v === undefined || v === '' ? undefined : cleanNumber(v));
 
+        // Hoja de ítems (la que no es Partidas/Resumen/Supuestos) y hoja de Partidas.
+        const nombreItems = wb.SheetNames.find(n => /cotiz|item|presup/i.test(n))
+          || wb.SheetNames.find(n => !/partida|resumen|supuesto/i.test(n))
+          || wb.SheetNames[0];
+        const nombrePartidasHoja = wb.SheetNames.find(n => /partida/i.test(n));
+        const raw: any[] = XLSX.utils.sheet_to_json(wb.Sheets[nombreItems]);
+        const rawPartidas: any[] = nombrePartidasHoja ? XLSX.utils.sheet_to_json(wb.Sheets[nombrePartidasHoja]) : [];
+
+        // ── Partidas: se crean por NOMBRE (metadata desde la hoja "Partidas" si existe) ──
+        const partidasPorNombre = new Map<string, Partida>();
+        const nuevasPartidas: Partida[] = [];
+        const asegurarPartida = (nombre: string): Partida => {
+          const key = nombre.trim().toLowerCase();
+          let p = partidasPorNombre.get(key);
+          if (p) return p;
+          const meta = rawPartidas.find(rp => String(pick(rp, 'Partida', 'Nombre', 'partida') ?? '').trim().toLowerCase() === key);
+          p = {
+            id: newId(),
+            nombre: nombre.trim(),
+            cantidad: meta ? (cleanNumber(pick(meta, 'Cantidad', 'cantidad')) || 1) : 1,
+            unidad: meta ? String(pick(meta, 'Unidad', 'unidad') ?? 'un') : 'un',
+            descripcion: meta ? (String(pick(meta, 'Descripción', 'Descripcion', 'descripcion') ?? '') || undefined) : undefined,
+            modoPrecio: (meta && /marg/i.test(String(pick(meta, 'Modo precio', 'ModoPrecio', 'modo') ?? ''))) ? 'margen' : 'items',
+            margen: meta ? numOrU(pick(meta, 'Margen (%)', 'Margen', 'margen')) : undefined,
+            imprevistos: meta ? numOrU(pick(meta, '% Imprevistos', 'Imprevistos', 'imprevistos')) : undefined,
+            iva: meta ? numOrU(pick(meta, 'IVA (%)', 'IVA', 'iva')) : undefined,
+          };
+          partidasPorNombre.set(key, p);
+          nuevasPartidas.push(p);
+          return p;
+        };
+        // Registra primero las partidas de la hoja "Partidas" (aunque no tengan ítems)
+        for (const rp of rawPartidas) {
+          const nombre = String(pick(rp, 'Partida', 'Nombre', 'partida') ?? '').trim();
+          if (nombre) asegurarPartida(nombre);
+        }
+
+        // ── Ítems ──
         const newItems: CotizacionItem[] = raw
           .map(r => {
-            const descripcion = String(
-              pick(r, 'Descripcion', 'Descripción', 'Descripción / Ítem', 'descripcion') ?? ''
-            ).trim();
+            const descripcion = String(pick(r, 'Descripcion', 'Descripción', 'Descripción / Ítem', 'descripcion') ?? '').trim();
             if (!descripcion) return null;
 
             const categoria = parseCategoria(pick(r, 'Categoria', 'Categoría', 'categoria'));
             const s = supuestos[categoria];
-
             const costo    = cleanNumber(pick(r, 'Costo unitario', 'Costo Unit. (CLP)', 'Costo Unit.', 'costo'));
             const cantidad = cleanNumber(pick(r, 'Cantidad', 'cantidad')) || 1;
-
-            const impRaw = pick(r, '% Imprevistos', 'Imprevistos', 'imprevistos');
-            const margRaw = pick(r, 'Margen (%)', 'Margen %', 'margen');
-            const ivaRaw  = pick(r, 'IVA (%)', 'IVA %', 'iva');
-
-            // El Excel guarda porcentajes como fracción (0.2) → normalizar a 20
-            const pct = (v: unknown, fallback: number) => {
-              if (v === undefined) return fallback;
-              const n = cleanNumber(v);
-              return n > 0 && n <= 1 ? n * 100 : n;
-            };
-
-            const imprevistos = pct(impRaw, s.imprevistos);
-            const margen      = pct(margRaw, s.margen);
+            const imprevistos = pct(pick(r, '% Imprevistos', 'Imprevistos', 'imprevistos'), s.imprevistos);
+            const margen      = pct(pick(r, 'Margen (%)', 'Margen %', 'margen'), s.margen);
+            const ivaRaw      = pick(r, 'IVA (%)', 'IVA %', 'iva');
             const iva         = ivaRaw !== undefined ? pct(ivaRaw, s.iva) : s.iva;
+            const precioRaw   = cleanNumber(pick(r, 'Precio venta', 'Precio Venta', 'precio'));
+            const precio      = precioRaw > 0 ? precioRaw : Math.round(precioDesdeMargen(costo, margen, imprevistos));
 
-            // Si el archivo trae precio de venta, respetarlo; si no, derivarlo
-            const precioRaw = cleanNumber(pick(r, 'Precio venta', 'Precio Venta', 'precio'));
-            const precio = precioRaw > 0
-              ? precioRaw
-              : Math.round(precioDesdeMargen(costo, margen, imprevistos));
+            // Partida (columna "Partida"): si viene, se agrupa y se enlaza.
+            const nombrePartida = String(pick(r, 'Partida', 'partida') ?? '').trim();
+            const extra: Partial<CotizacionItem> = {};
+            if (nombrePartida) {
+              const p = asegurarPartida(nombrePartida);
+              extra.partidaId = p.id;
+              extra.cantidadPorUnidad = (p.cantidad && p.cantidad > 0) ? cantidad / p.cantidad : cantidad;
+            }
 
             return newItem({
-              descripcion, categoria, cantidad, costo,
-              imprevistos, margen, iva, precio,
-              unidad: String(pick(r, 'Unidad', 'unidad') ?? 'un'),
+              descripcion, categoria, cantidad, costo, imprevistos, margen, iva, precio,
+              unidad: String(pick(r, 'Unidad', 'unidad') ?? 'un'), ...extra,
             }, supuestos);
           })
           .filter((x): x is CotizacionItem => x !== null);
 
-        if (newItems.length === 0) {
-          warning('No se encontraron ítems válidos. Revisa que exista la columna "Descripcion".');
+        if (newItems.length === 0 && nuevasPartidas.length === 0) {
+          warning('No se encontraron ítems válidos. Descarga la plantilla para ver el formato.');
           return;
         }
+        if (nuevasPartidas.length > 0) setPartidas(prev => [...prev, ...nuevasPartidas]);
         setItems(prev => [...prev, ...newItems]);
-        success(`${newItems.length} ítems importados desde Excel`);
+        success(`Importado: ${nuevasPartidas.length} partida${nuevasPartidas.length === 1 ? '' : 's'} y ${newItems.length} ítems`);
       } catch {
         toastError('Error al procesar el archivo Excel. Verifica el formato.');
       } finally {
@@ -1064,12 +1097,51 @@ const [empresaEditing, setEmpresaEditing] = useState<EmpresaInfo | null>(null);
     reader.readAsBinaryString(file);
   };
 
+  /** Descarga una plantilla Excel con el formato de partidas + ítems. */
+  const descargarPlantilla = () => {
+    const wb = XLSX.utils.book_new();
+    const ejItems = [
+      { Partida: 'Habilitación de tablero', Descripcion: 'Tablero eléctrico 12 polos', Categoria: 'material', Cantidad: 1, Unidad: 'un', 'Costo unitario': 45000, '% Imprevistos': 10, 'Margen (%)': 20, 'IVA (%)': 19 },
+      { Partida: 'Habilitación de tablero', Descripcion: 'Instalación y conexionado', Categoria: 'mano_obra', Cantidad: 1, Unidad: 'global', 'Costo unitario': 60000, '% Imprevistos': 15, 'Margen (%)': 40, 'IVA (%)': 19 },
+      { Partida: 'Puntos de enchufe', Descripcion: 'Enchufe doble 10A', Categoria: 'material', Cantidad: 8, Unidad: 'un', 'Costo unitario': 3500, '% Imprevistos': 10, 'Margen (%)': 20, 'IVA (%)': 19 },
+      { Partida: '', Descripcion: 'Flete y movilización (ítem suelto)', Categoria: 'operacion', Cantidad: 1, Unidad: 'global', 'Costo unitario': 20000, '% Imprevistos': 0, 'Margen (%)': 15, 'IVA (%)': 19 },
+    ];
+    const ejPartidas = [
+      { Partida: 'Habilitación de tablero', Cantidad: 1, Unidad: 'un', 'Descripción': 'Suministro y montaje de tablero eléctrico', 'Modo precio': 'items', 'Margen (%)': '', '% Imprevistos': '', 'IVA (%)': '' },
+      { Partida: 'Puntos de enchufe', Cantidad: 8, Unidad: 'un', 'Descripción': 'Suministro e instalación de puntos de enchufe', 'Modo precio': 'items', 'Margen (%)': '', '% Imprevistos': '', 'IVA (%)': '' },
+    ];
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(ejItems), 'Cotización');
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(ejPartidas), 'Partidas');
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet([
+      { Campo: 'Partida', Detalle: 'Nombre de la partida a la que pertenece el ítem. Déjalo vacío para "ítems sueltos".' },
+      { Campo: 'Categoria', Detalle: 'material, mano_obra, servicio u operacion.' },
+      { Campo: 'Hoja Partidas', Detalle: 'Opcional: define cantidad/unidad/descripción de cada partida. Si falta, se asume cantidad 1, unidad "un".' },
+    ]), 'Instrucciones');
+    XLSX.writeFile(wb, 'Plantilla_cotizacion_InnVolt.xlsx');
+  };
+
   const exportExcel = () => {
     if (items.length === 0) { warning('Agrega ítems antes de exportar'); return; }
     const wb = XLSX.utils.book_new();
 
-    // Hoja 1 — Detalle de ítems con toda la cadena de costeo
-    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(itemsToExcelRows(items)), 'Cotización');
+    // Hoja 1 — Detalle de ítems (incluye columna Partida) con la cadena de costeo
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(itemsToExcelRows(items, partidas)), 'Cotización');
+
+    // Hoja Partidas — metadatos de cada partida (para reimportar tal cual)
+    if (partidas.length > 0) {
+      XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(
+        partidas.map(p => ({
+          'Partida': p.nombre || 'Partida',
+          'Cantidad': p.cantidad || 1,
+          'Unidad': p.unidad || 'un',
+          'Descripción': p.descripcion || '',
+          'Modo precio': p.modoPrecio || 'items',
+          'Margen (%)': p.margen ?? '',
+          '% Imprevistos': p.imprevistos ?? '',
+          'IVA (%)': p.iva ?? '',
+        })),
+      ), 'Partidas');
+    }
 
     // Hoja 2 — Resumen por categoría (equivale a "Presupuesto Resumen")
     const resumen = CATEGORIAS_ORDEN
@@ -1344,8 +1416,11 @@ const [empresaEditing, setEmpresaEditing] = useState<EmpresaInfo | null>(null);
           <Link href="/cotizador/historial" style={{ ...btnGhost, textDecoration: 'none', justifyContent: 'center', margin: 0 }}>
             <History size={12} /> Historial
           </Link>
-          <button onClick={() => fileInputRef.current?.click()} style={{ ...btnGhost, justifyContent: 'center', margin: 0 }}>
+          <button onClick={() => fileInputRef.current?.click()} style={{ ...btnGhost, justifyContent: 'center', margin: 0 }} title="Importar partidas e ítems desde Excel">
             <FileUp size={12} /> Excel
+          </button>
+          <button onClick={descargarPlantilla} style={{ ...btnGhost, justifyContent: 'center', margin: 0 }} title="Descargar plantilla Excel (partidas + ítems)">
+            <FileText size={12} /> Plantilla
           </button>
           {hasFolio && (
             <button

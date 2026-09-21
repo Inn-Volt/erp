@@ -475,10 +475,12 @@ export function aplicarSupuestos(items: CotizacionItem[], supuestos: Supuestos):
 // ─── Excel helpers ────────────────────────────────────────────────────────────
 
 /** Columnas idénticas a la hoja "Exportar Cotizador" del Excel de InnVolt. */
-export function itemsToExcelRows(items: CotizacionItem[]) {
+export function itemsToExcelRows(items: CotizacionItem[], partidas: { id: string; nombre: string }[] = []) {
+  const nombrePartida = new Map(partidas.map(p => [p.id, p.nombre || 'Partida']));
   return items.map(i => {
     const c = calcularItem(i);
     return {
+      'Partida':          i.partidaId ? (nombrePartida.get(i.partidaId) || '') : '',
       'Descripcion':      i.descripcion,
       'Categoria':        i.categoria,
       'Cantidad':         i.cantidad,
