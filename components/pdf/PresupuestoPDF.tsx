@@ -3,7 +3,7 @@ import {
   Document, Page, Text, View, StyleSheet, Image,
 } from '@react-pdf/renderer';
 import type { CotizacionItem, Cliente, Partida } from '@/types';
-import type { Totals } from '@/utils';
+import { boldPorLinea, type Totals } from '@/utils';
 
 /** Logo con tinta oscura: es el que contrasta sobre el papel blanco del PDF. */
 const LOGO_PDF = '/InnVolt-transparente-claro.png';
@@ -18,7 +18,7 @@ const esInnVolt = (nombre: string) =>
  * descarta las líneas vacías.
  */
 const lineasTexto = (texto?: string): string[] =>
-  (texto || '')
+  boldPorLinea(texto || '')            // negrita multilínea → por línea (sobrevive al split)
     .split('\n')
     // Quita la viñeta inicial (•, guion o UN solo *), sin tocar el ** de negrita.
     .map(l => l.replace(/^\s*(?:[•·▪‣◦–—-]|\*(?!\*))\s*/, '').trim())
@@ -531,7 +531,7 @@ export default function PresupuestoPDF({
             <View wrap={false}>
               <Text style={s.cardLabel}>DESCRIPCIÓN DEL TRABAJO</Text>
             </View>
-            {descripcionGeneral.split('\n').map((linea, i) => {
+            {boldPorLinea(descripcionGeneral).split('\n').map((linea, i) => {
               const t = linea.replace(/\s+$/, '');
               // Línea en blanco → espacio (mantiene la separación de párrafos)
               if (t.trim() === '') return <View key={i} style={{ height: 5 }} />;
@@ -583,7 +583,7 @@ export default function PresupuestoPDF({
         {/* ── IMPORTANTE (completa la página 1) ── */}
         <View style={s.importanteBox} wrap={false}>
           <Text style={s.importanteLabel}>IMPORTANTE</Text>
-          <Text style={s.importanteText}>{textoImportante}</Text>
+          <RichText style={s.importanteText}>{textoImportante}</RichText>
         </View>
 
         {/* ── FOOTER página 1 ── */}

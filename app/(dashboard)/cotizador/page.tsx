@@ -1283,6 +1283,7 @@ const [empresaEditing, setEmpresaEditing] = useState<EmpresaInfo | null>(null);
             else setCondicionesComerciales(v);
           }}
           onClose={() => setShowDescripcion(false)}
+          onRestaurarBase={() => { setGarantia(defGarantia); setCondicionesComerciales(defCondiciones); }}
         />
       )}
 

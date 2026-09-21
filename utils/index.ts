@@ -387,6 +387,19 @@ const _normMatch = (s: string) => (s || '').toLowerCase().normalize('NFD').repla
 const _tokensMatch = (s: string) => _normMatch(s).split(/[^a-z0-9]+/).filter(t => t.length >= 3);
 
 /**
+ * Reescribe la negrita **...** que cruza saltos de línea como negrita POR LÍNEA.
+ * El PDF (y la vista previa) parten el texto en líneas antes de renderizar, así que
+ * una negrita que abarca varios renglones perdía su par de ** en cada línea. Con
+ * esto, cada línea del bloque queda con su propio **...** y la negrita sí se aplica.
+ * La negrita de una sola línea queda intacta.
+ */
+export function boldPorLinea(texto: string): string {
+  return (texto || '').replace(/\*\*([\s\S]+?)\*\*/g, (_full, inner: string) =>
+    inner.split('\n').map(l => (l.trim() === '' ? l : `**${l}**`)).join('\n'),
+  );
+}
+
+/**
  * Devuelve el ítem del catálogo que mejor coincide con una descripción (misma
  * categoría), o null si no hay match confiable. Se usa para enlazar componentes
  * generados por IA con ítems reales de la biblioteca (precio + código vivos).

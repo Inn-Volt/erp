@@ -10,7 +10,8 @@
  */
 
 import { useRef } from 'react';
-import { FileText, X, Eye, SlidersHorizontal, Check, Bold, List } from 'lucide-react';
+import { FileText, X, Eye, SlidersHorizontal, Check, Bold, List, RotateCcw } from 'lucide-react';
+import { boldPorLinea } from '@/utils';
 import type { EmpresaInfo } from '@/components/pdf/PresupuestoPDF';
 
 type Campo = 'descripcion' | 'garantia' | 'condiciones';
@@ -61,16 +62,18 @@ const ta: React.CSSProperties = {
 
 /** Convierte texto multilínea en viñetas (quita •/-/* iniciales, filtra vacíos). */
 const lineas = (t?: string): string[] =>
-  (t || '').split('\n').map(l => l.replace(/^\s*(?:[•·▪‣◦–—-]|\*(?!\*))\s*/, '').trim()).filter(Boolean);
+  boldPorLinea(t || '').split('\n').map(l => l.replace(/^\s*(?:[•·▪‣◦–—-]|\*(?!\*))\s*/, '').trim()).filter(Boolean);
 
 // ══════════════════════════════════════════════════════════════════════════════
 export function DescripcionModal({
   descripcion, garantia, condiciones, empresa,
-  onChange, onClose,
+  onChange, onClose, onRestaurarBase,
 }: {
   descripcion: string; garantia: string; condiciones: string; empresa: EmpresaInfo | null;
   onChange: (campo: Campo, v: string) => void;
   onClose: () => void;
+  /** Restaura garantía y condiciones a los textos base (fijos) de la empresa. */
+  onRestaurarBase?: () => void;
 }) {
   const refs = useRef<Record<Campo, HTMLTextAreaElement | null>>({ descripcion: null, garantia: null, condiciones: null });
 
@@ -164,7 +167,14 @@ export function DescripcionModal({
           </div>
         </div>
 
-        <div style={{ display: 'flex', justifyContent: 'flex-end', padding: '0.9rem 1.4rem', borderTop: '1px solid var(--border2)' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '0.6rem', padding: '0.9rem 1.4rem', borderTop: '1px solid var(--border2)', flexWrap: 'wrap' }}>
+          {onRestaurarBase ? (
+            <button
+              onClick={() => { if (confirm('¿Restaurar la garantía y condiciones a los textos base? Se reemplazará lo escrito en esos dos campos.')) onRestaurarBase(); }}
+              className="btn btn-ghost"
+              title="Vuelve la garantía y las condiciones a los textos base (fijos), luego puedes editarlos"
+            ><RotateCcw size={13} /> Restaurar garantías base</button>
+          ) : <span />}
           <button onClick={onClose} className="btn btn-primary"><Check size={14} /> Listo</button>
         </div>
       </div>
