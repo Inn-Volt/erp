@@ -191,25 +191,40 @@ export function DescripcionModal({
 const clausulaLineas = (t?: string): string[] =>
   boldPorLinea(t || '').split('\n').filter(l => l.trim() !== '');
 
-/** Vista previa de las aclaraciones: réplica de cómo se ven en el PDF. */
+/** Una línea de aclaración en la vista previa (réplica del PDF). */
+function FilaPreview({ linea }: { linea: string }) {
+  const t = linea.trim();
+  if (/^\d+[.)]\s/.test(t)) return <p style={{ fontWeight: 700, fontSize: '0.62rem', color: '#1a1a1a', margin: '7px 0 3px' }}>{renderInline(t)}</p>;
+  const md = t.match(/^[-–—]\s+([\s\S]*)$/);
+  if (md) return (
+    <div style={{ display: 'flex', gap: 5, marginBottom: 3, marginLeft: 10 }}>
+      <span style={{ color: '#8a8a8a' }}>•</span>
+      <span style={{ color: '#333', fontSize: '0.64rem', lineHeight: 1.45 }}>{renderInline(md[1])}</span>
+    </div>
+  );
+  const m = t.match(/^([a-zñ]\.)\s+([\s\S]*)$/i);
+  if (m) return (
+    <div style={{ display: 'flex', gap: 5, marginBottom: 3 }}>
+      <span style={{ color: '#565656', fontWeight: 700, width: 12, flexShrink: 0, fontSize: '0.64rem' }}>{m[1]}</span>
+      <span style={{ color: '#333', fontSize: '0.64rem', lineHeight: 1.45 }}>{renderInline(m[2])}</span>
+    </div>
+  );
+  return <p style={{ color: '#333', fontSize: '0.64rem', lineHeight: 1.45, margin: '0 0 3px' }}>{renderInline(t)}</p>;
+}
+
+/** Vista previa de las aclaraciones: réplica de cómo se ven en el PDF (dos bloques). */
 function PreviewAclaraciones({ garantia, condiciones }: { garantia: string; condiciones: string }) {
-  const lns = [...clausulaLineas(garantia), ...clausulaLineas(condiciones)];
-  if (lns.length === 0) return null;
+  const gar = clausulaLineas(garantia);
+  const con = clausulaLineas(condiciones);
+  if (gar.length === 0 && con.length === 0) return null;
+  const bloqueHeader: React.CSSProperties = { fontWeight: 700, fontSize: '0.6rem', letterSpacing: '0.08em', color: '#1a1a1a', margin: '9px 0 4px', paddingBottom: 2, borderBottom: '0.75px solid #dcdcdc' };
   return (
     <div style={{ marginBottom: 11 }}>
-      <p style={{ fontWeight: 700, fontSize: '0.62rem', textTransform: 'uppercase', letterSpacing: '0.04em', margin: '0 0 6px', paddingBottom: 3, borderBottom: '1.5px solid #1a1a1a', color: '#1a1a1a' }}>Aclaraciones de servicios y garantías</p>
-      {lns.map((linea, i) => {
-        const t = linea.trim();
-        if (/^\d+\)/.test(t)) return <p key={i} style={{ fontWeight: 700, fontSize: '0.6rem', color: '#1a1a1a', margin: '7px 0 3px' }}>{renderInline(t)}</p>;
-        const m = t.match(/^([a-zñ]\.)\s+([\s\S]*)$/i);
-        if (m) return (
-          <div key={i} style={{ display: 'flex', gap: 5, marginBottom: 3 }}>
-            <span style={{ color: '#565656', fontWeight: 700, width: 12, flexShrink: 0, fontSize: '0.64rem' }}>{m[1]}</span>
-            <span style={{ color: '#333', fontSize: '0.64rem', lineHeight: 1.45 }}>{renderInline(m[2])}</span>
-          </div>
-        );
-        return <p key={i} style={{ color: '#333', fontSize: '0.64rem', lineHeight: 1.45, margin: '0 0 3px' }}>{renderInline(t)}</p>;
-      })}
+      <p style={{ fontWeight: 700, fontSize: '0.62rem', textTransform: 'uppercase', letterSpacing: '0.04em', margin: '0 0 4px', paddingBottom: 3, borderBottom: '1.5px solid #1a1a1a', color: '#1a1a1a' }}>Aclaraciones de servicios y garantías</p>
+      {gar.length > 0 && <p style={bloqueHeader}>GARANTÍA</p>}
+      {gar.map((l, i) => <FilaPreview key={`g-${i}`} linea={l} />)}
+      {con.length > 0 && <p style={{ ...bloqueHeader, marginTop: 12 }}>CONDICIONES COMERCIALES</p>}
+      {con.map((l, i) => <FilaPreview key={`c-${i}`} linea={l} />)}
     </div>
   );
 }

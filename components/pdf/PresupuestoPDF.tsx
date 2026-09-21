@@ -203,6 +203,18 @@ const s = StyleSheet.create({
     marginTop: 9,
     marginBottom: 4,
   },
+  // Encabezado de bloque dentro de Aclaraciones (GARANTÍA / CONDICIONES COMERCIALES)
+  bloqueHeader: {
+    fontSize: 8.5,
+    fontFamily: 'Helvetica-Bold',
+    color: INK,
+    letterSpacing: 0.8,
+    marginTop: 11,
+    marginBottom: 5,
+    paddingBottom: 3,
+    borderBottomWidth: 0.75,
+    borderBottomColor: LINE,
+  },
   clausulaRow: { flexDirection: 'row', marginBottom: 3.5 },
   clausulaLetra: { fontSize: 7.5, fontFamily: 'Helvetica-Bold', color: MUTED, width: 14 },
   clausulaTexto: { fontSize: 7.5, color: '#333333', flex: 1, lineHeight: 1.55 },
@@ -296,7 +308,19 @@ function RichText({ children, style }: { children: string; style?: React.Compone
  */
 function FilaClausula({ linea }: { linea: string }) {
   const t = linea.trim();
-  if (/^\d+\)/.test(t)) return <Text style={s.seccionSubtitulo}>{t}</Text>;
+  // Subsección numerada: "1. Título" o "1) Título"
+  if (/^\d+[.)]\s/.test(t)) return <Text style={s.seccionSubtitulo}>{t}</Text>;
+  // Viñeta con guion: "- texto" (lista anidada, con sangría)
+  const md = t.match(/^[-–—]\s+([\s\S]*)$/);
+  if (md) {
+    return (
+      <View style={[s.clausulaRow, { marginLeft: 12 }]} wrap={false}>
+        <Text style={s.clausulaLetra}>•</Text>
+        <RichText style={s.clausulaTexto}>{md[1]}</RichText>
+      </View>
+    );
+  }
+  // Cláusula con letra: "a. texto"
   const m = t.match(/^([a-zñ]\.)\s+([\s\S]*)$/i);
   if (m) {
     return (
@@ -306,6 +330,7 @@ function FilaClausula({ linea }: { linea: string }) {
       </View>
     );
   }
+  // Texto normal (con **negrita**, ej. etiquetas "**Plazo:** …")
   return (
     <View style={s.clausulaRow} wrap={false}>
       <RichText style={s.clausulaTexto}>{t}</RichText>
@@ -778,17 +803,25 @@ export default function PresupuestoPDF({
                  respetando su estructura "1) …" / "a. …") ── */}
           {(lineasClausula(garantia).length > 0 || lineasClausula(condicionesComerciales).length > 0) && (
             <View style={s.seccionBox}>
-              {/* Título + primera línea juntos (evita título huérfano al final de página) */}
+              {/* Título + encabezado GARANTÍA juntos (evita quedar huérfanos) */}
               <View wrap={false}>
                 <Text style={s.seccionTitulo}>ACLARACIONES DE SERVICIOS Y GARANTÍAS</Text>
-                {lineasClausula(garantia).slice(0, 1).map((l, i) => (
-                  <FilaClausula key={`g0-${i}`} linea={l} />
-                ))}
+                {lineasClausula(garantia).length > 0 && <Text style={s.bloqueHeader}>GARANTÍA</Text>}
               </View>
-              {lineasClausula(garantia).slice(1).map((l, i) => (
+              {lineasClausula(garantia).map((l, i) => (
                 <FilaClausula key={`g-${i}`} linea={l} />
               ))}
-              {lineasClausula(condicionesComerciales).map((l, i) => (
+
+              {/* Bloque de condiciones — claramente separado */}
+              {lineasClausula(condicionesComerciales).length > 0 && (
+                <View wrap={false}>
+                  <Text style={s.bloqueHeader}>CONDICIONES COMERCIALES</Text>
+                  {lineasClausula(condicionesComerciales).slice(0, 1).map((l, i) => (
+                    <FilaClausula key={`c0-${i}`} linea={l} />
+                  ))}
+                </View>
+              )}
+              {lineasClausula(condicionesComerciales).slice(1).map((l, i) => (
                 <FilaClausula key={`c-${i}`} linea={l} />
               ))}
             </View>
