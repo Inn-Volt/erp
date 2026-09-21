@@ -17,12 +17,16 @@ const esInnVolt = (nombre: string) =>
  * Quita los "•" o "-" iniciales (el PDF pone su propio símbolo) y
  * descarta las líneas vacías.
  */
-const lineasTexto = (texto?: string): string[] =>
-  boldPorLinea(texto || '')            // negrita multilínea → por línea (sobrevive al split)
+/**
+ * Líneas de aclaraciones PRESERVANDO su estructura: no quita los prefijos
+ * "1)" (títulos) ni "a." (cláusulas); solo aplica negrita por línea y descarta
+ * líneas vacías. Se usa para el bloque editable de garantía/condiciones.
+ */
+const lineasClausula = (texto?: string): string[] =>
+  boldPorLinea(texto || '')
     .split('\n')
-    // Quita la viñeta inicial (•, guion o UN solo *), sin tocar el ** de negrita.
-    .map(l => l.replace(/^\s*(?:[•·▪‣◦–—-]|\*(?!\*))\s*/, '').trim())
-    .filter(Boolean);
+    .map(l => l.replace(/\s+$/, ''))
+    .filter(l => l.trim() !== '');
 
 /** Sufijo con el descuento promedio de una categoría (ej. " (desc. prom. 12%)"). */
 const descTxt = (promedio: number): string =>
@@ -281,6 +285,31 @@ function RichText({ children, style }: { children: string; style?: React.Compone
           : <Text key={i}>{p.t}</Text>,
       )}
     </Text>
+  );
+}
+
+/**
+ * Una línea de aclaración, respetando su estructura:
+ *  · "1) TÍTULO"  → subtítulo (negrita)
+ *  · "a. texto"   → letra en su columna + texto (con **negrita**)
+ *  · otra línea   → texto simple (con **negrita**)
+ */
+function FilaClausula({ linea }: { linea: string }) {
+  const t = linea.trim();
+  if (/^\d+\)/.test(t)) return <Text style={s.seccionSubtitulo}>{t}</Text>;
+  const m = t.match(/^([a-zñ]\.)\s+([\s\S]*)$/i);
+  if (m) {
+    return (
+      <View style={s.clausulaRow} wrap={false}>
+        <Text style={s.clausulaLetra}>{m[1]}</Text>
+        <RichText style={s.clausulaTexto}>{m[2]}</RichText>
+      </View>
+    );
+  }
+  return (
+    <View style={s.clausulaRow} wrap={false}>
+      <RichText style={s.clausulaTexto}>{t}</RichText>
+    </View>
   );
 }
 
@@ -745,36 +774,23 @@ export default function PresupuestoPDF({
         {/* Contenido superior: Aclaraciones + Condiciones */}
         <View>
 
-          {/* ── ACLARACIONES DE SERVICIOS Y GARANTÍAS (editable por cotización) ── */}
-          {(lineasTexto(garantia).length > 0 || lineasTexto(condicionesComerciales).length > 0) && (
+          {/* ── ACLARACIONES DE SERVICIOS Y GARANTÍAS (editable por cotización,
+                 respetando su estructura "1) …" / "a. …") ── */}
+          {(lineasClausula(garantia).length > 0 || lineasClausula(condicionesComerciales).length > 0) && (
             <View style={s.seccionBox}>
+              {/* Título + primera línea juntos (evita título huérfano al final de página) */}
               <View wrap={false}>
                 <Text style={s.seccionTitulo}>ACLARACIONES DE SERVICIOS Y GARANTÍAS</Text>
-                {lineasTexto(garantia).length > 0 && <Text style={s.seccionSubtitulo}>GARANTÍA</Text>}
+                {lineasClausula(garantia).slice(0, 1).map((l, i) => (
+                  <FilaClausula key={`g0-${i}`} linea={l} />
+                ))}
               </View>
-
-              {lineasTexto(garantia).length > 0 && (
-                <>
-                  {lineasTexto(garantia).map((t, i) => (
-                    <View key={`gar-${i}`} style={s.clausulaRow} wrap={false}>
-                      <Text style={s.clausulaLetra}>•</Text>
-                      <RichText style={s.clausulaTexto}>{t}</RichText>
-                    </View>
-                  ))}
-                </>
-              )}
-
-              {lineasTexto(condicionesComerciales).length > 0 && (
-                <>
-                  <Text style={s.seccionSubtitulo}>CONDICIONES COMERCIALES</Text>
-                  {lineasTexto(condicionesComerciales).map((t, i) => (
-                    <View key={`con-${i}`} style={s.clausulaRow} wrap={false}>
-                      <Text style={s.clausulaLetra}>•</Text>
-                      <RichText style={s.clausulaTexto}>{t}</RichText>
-                    </View>
-                  ))}
-                </>
-              )}
+              {lineasClausula(garantia).slice(1).map((l, i) => (
+                <FilaClausula key={`g-${i}`} linea={l} />
+              ))}
+              {lineasClausula(condicionesComerciales).map((l, i) => (
+                <FilaClausula key={`c-${i}`} linea={l} />
+              ))}
             </View>
           )}
         </View>

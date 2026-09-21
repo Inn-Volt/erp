@@ -56,26 +56,34 @@ const btnGhost: React.CSSProperties = {
   display: 'inline-flex', alignItems: 'center', gap: '0.4rem',
 };
 
-// Textos por defecto (editables por cotización en el modal Descripción/Condiciones).
-// Basados en las "Aclaraciones de servicios y garantías" estándar de InnVolt.
+// Textos base (editables por cotización en el modal Descripción/Condiciones).
+// Son las "Aclaraciones de servicios y garantías" estándar de InnVolt. El PDF
+// respeta su estructura (títulos "1) …" y cláusulas "a. …"); se pueden modificar.
 const GARANTIA_DEFAULT = [
-  '• Garantía de instalación y mano de obra: 6 meses desde la fecha de entrega o puesta en servicio, salvo que la propuesta indique expresamente un plazo distinto.',
-  '• Los equipos, componentes y materiales suministrados cuentan con la garantía otorgada por sus respectivos fabricantes o distribuidores autorizados.',
-  '• La garantía cubre exclusivamente defectos atribuibles a errores de instalación, montaje o configuración realizados por nuestro personal.',
-  '• La garantía no cubre daños por manipulación de terceros, modificaciones no autorizadas, vandalismo, robo, incendios, inundaciones, humedad, sobretensiones, descargas atmosféricas, catástrofes naturales, fallas de suministro eléctrico o uso indebido.',
-  '• Equipos, materiales o instalaciones preexistentes del cliente y no suministrados por nosotros quedan excluidos de cualquier garantía.',
-  '• Toda intervención de terceros no autorizados deja sin efecto la garantía sobre el elemento intervenido.',
+  '1) DE LAS INSTALACIONES Y MANO DE OBRA:',
+  'a. Garantía de instalación y mano de obra: 6 meses desde la fecha de entrega o puesta en servicio, salvo que la propuesta indique expresamente un plazo distinto.',
+  'b. Los equipos, componentes y materiales suministrados cuentan con la garantía otorgada por sus respectivos fabricantes o distribuidores autorizados.',
+  'c. La garantía cubre exclusivamente defectos atribuibles a errores de instalación, montaje o configuración realizados por personal de InnVolt SpA.',
+  'd. La garantía no cubre daños provocados por manipulación de terceros, modificaciones no autorizadas, vandalismo, robo, incendios, inundaciones, humedad, sobretensiones, descargas atmosféricas, catástrofes naturales, fallas de suministro eléctrico o uso indebido.',
+  'e. Equipos, materiales o instalaciones preexistentes propiedad del cliente y no suministrados por InnVolt SpA quedan expresamente excluidos de cualquier garantía.',
+  'f. Toda intervención realizada por terceros no autorizados dejará sin efecto la garantía sobre el elemento intervenido.',
 ].join('\n');
 const CONDICIONES_DEFAULT = [
-  '• Los servicios cotizados consideran únicamente las actividades expresamente indicadas en el alcance de esta propuesta.',
-  '• Materiales, obras civiles, canalizaciones, certificaciones o trabajos adicionales no especificados se considerarán partidas extraordinarias y se cotizarán por separado.',
-  '• La programación de los trabajos está sujeta a disponibilidad operativa y a la recepción conforme del pago inicial acordado.',
-  '• Los plazos de ejecución podrán variar por causas de fuerza mayor, condiciones climáticas, restricciones de acceso o retrasos de proveedores.',
-  '• Vigencia de la oferta: 15 días corridos desde su emisión.',
-  '• Forma de pago: 50% de anticipo al aceptar la cotización y 50% contra entrega conforme (proyectos sobre UF 10).',
-  '• Para proyectos iguales o inferiores a UF 10 se podrá requerir pago total anticipado.',
-  '• Materiales especiales, equipos importados o fabricados a pedido podrán requerir pago anticipado del 100%.',
-  '• Toda modificación de alcance posterior a la aprobación será evaluada y presupuestada mediante orden de cambio.',
+  '2) DE LOS SERVICIOS:',
+  'a. Los servicios cotizados consideran únicamente las actividades expresamente indicadas en el alcance de esta propuesta.',
+  'b. Materiales, equipos, obras civiles, canalizaciones, habilitaciones eléctricas, certificaciones o trabajos adicionales no especificados se considerarán partidas extraordinarias y serán cotizados por separado.',
+  'c. La programación de los trabajos estará sujeta a disponibilidad operativa y a la recepción conforme del pago inicial acordado.',
+  'd. Los plazos de ejecución podrán variar por causas de fuerza mayor, condiciones climáticas adversas, restricciones de acceso, retrasos de proveedores o situaciones ajenas al control de la empresa.',
+  'e. Los servicios de soporte técnico se prestan en horario hábil de lunes a viernes entre las 09:00 y las 18:00 horas, salvo contratación de cobertura especial.',
+  'f. Los trabajos ejecutados fuera de la Región Metropolitana podrán considerar costos adicionales por traslado, alojamiento, alimentación y logística.',
+  '3) VALIDEZ Y FORMAS DE PAGO:',
+  'a. La presente cotización tendrá una vigencia de 15 días corridos contados desde su fecha de emisión.',
+  'b. La aceptación de esta propuesta implica la conformidad del cliente con el alcance técnico, condiciones comerciales y cláusulas descritas en el presente documento.',
+  'c. Para proyectos superiores a UF 10 se establece un anticipo mínimo del 50% y saldo contra entrega o según cronograma de avance acordado.',
+  'd. Para proyectos iguales o inferiores a UF 10 se podrá requerir pago total anticipado previo al inicio de los trabajos.',
+  'e. Los materiales especiales, equipos importados o productos fabricados a pedido podrán requerir pago anticipado del 100%.',
+  'f. Toda modificación de alcance solicitada por el cliente después de aprobada la propuesta será evaluada y presupuestada mediante orden de cambio.',
+  'g. Gastos extraordinarios no considerados originalmente, tales como traslados adicionales, visitas técnicas extraordinarias, permisos, certificaciones o materiales imprevistos, serán cotizados y facturados por separado.',
 ].join('\n');
 
 const CAT_COLORS = CATEGORIA_COLORS;
