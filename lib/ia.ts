@@ -45,44 +45,109 @@ function aJsonSchema(g: GeminiSchema): Record<string, unknown> {
   return out;
 }
 
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+/** Error interno de Gemini. `fallback=true` → conviene probar el siguiente modelo. */
+class GeminiError extends Error {
+  constructor(message: string, public fallback: boolean) {
+    super(message);
+    this.name = 'GeminiError';
+  }
+}
+
+/**
+ * Construye la cadena de modelos a intentar: primero el elegido (GEMINI_MODEL o
+ * el default), luego respaldos con MÁS cuota gratuita (500 pedidos/día). Como
+ * cada modelo tiene su propia cuota, si el primero da 429/503 el siguiente sigue
+ * funcionando. Sin duplicados.
+ */
+function cadenaModelos(): string[] {
+  const principal = process.env.GEMINI_MODEL || 'gemini-3.6-flash';
+  const respaldos = ['gemini-3.5-flash-lite', 'gemini-3.1-flash-lite'];
+  return [principal, ...respaldos.filter((m) => m !== principal)];
+}
+
+/** Intenta un modelo concreto, con reintentos ante errores transitorios (503/500/502/504). */
+async function pedirModeloGemini<T>(model: string, body: string, key: string): Promise<T> {
+  const MAX_INTENTOS = 3;
+  const backoff = [1200, 3000]; // ms antes del intento 2 y 3
+  let ultimoDetalle = '';
+
+  for (let intento = 1; intento <= MAX_INTENTOS; intento++) {
+    const res = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'x-goog-api-key': key },
+        body,
+      },
+    );
+
+    if (res.ok) {
+      const data = await res.json();
+      const cand = data?.candidates?.[0];
+      if (cand?.finishReason && cand.finishReason !== 'STOP' && cand.finishReason !== 'MAX_TOKENS') {
+        // Filtro de contenido: cambiar de modelo no ayuda → error fatal.
+        throw new GeminiError('La IA no pudo completar la respuesta (posible filtro de contenido). Reformula la descripción.', false);
+      }
+      const texto: string = (cand?.content?.parts || []).map((p: { text?: string }) => p.text || '').join('');
+      if (!texto) throw new GeminiError('La IA no devolvió contenido. Intenta de nuevo.', true);
+      return JSON.parse(texto) as T;
+    }
+
+    ultimoDetalle = await res.text().catch(() => '');
+
+    // Cuota agotada de ESTE modelo → probar el siguiente (tiene cuota aparte).
+    if (res.status === 429) throw new GeminiError(`Cuota diaria de ${model} agotada.`, true);
+    // Llave inválida: es la misma para todos → fatal, no reintentar con otros.
+    if (res.status === 400 && /API key not valid/i.test(ultimoDetalle)) throw new GeminiError('La GEMINI_API_KEY es inválida.', false);
+
+    const transitorio = res.status === 503 || res.status === 500 || res.status === 502 || res.status === 504;
+    if (transitorio && intento < MAX_INTENTOS) {
+      await sleep(backoff[intento - 1]);
+      continue;
+    }
+    // Transitorio agotado (o modelo inexistente 404) → probar el siguiente modelo.
+    throw new GeminiError(`${model}: HTTP ${res.status}. ${ultimoDetalle.slice(0, 140)}`, true);
+  }
+
+  throw new GeminiError(`${model} no respondió tras ${MAX_INTENTOS} intentos.`, true);
+}
+
 // ── Gemini (REST, sin SDK) ────────────────────────────────────────────────────
 async function generarGemini<T>(system: string, user: string, schema: GeminiSchema): Promise<T> {
   const key = process.env.GEMINI_API_KEY;
   if (!key) throw new Error('Falta GEMINI_API_KEY. Consíguela gratis en https://aistudio.google.com/apikey y agrégala al entorno.');
-  const model = process.env.GEMINI_MODEL || 'gemini-3.6-flash';
 
-  const res = await fetch(
-    `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`,
-    {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'x-goog-api-key': key },
-      body: JSON.stringify({
-        systemInstruction: { parts: [{ text: system }] },
-        contents: [{ role: 'user', parts: [{ text: user }] }],
-        generationConfig: {
-          responseMimeType: 'application/json',
-          responseSchema: schema,
-          temperature: 0.4,
-        },
-      }),
+  const body = JSON.stringify({
+    systemInstruction: { parts: [{ text: system }] },
+    contents: [{ role: 'user', parts: [{ text: user }] }],
+    generationConfig: {
+      responseMimeType: 'application/json',
+      responseSchema: schema,
+      temperature: 0.4,
     },
-  );
+  });
 
-  if (!res.ok) {
-    const detalle = await res.text().catch(() => '');
-    if (res.status === 429) throw new Error('Límite del tier gratuito de Gemini alcanzado. Espera un momento e intenta de nuevo.');
-    if (res.status === 400 && /API key not valid/i.test(detalle)) throw new Error('La GEMINI_API_KEY es inválida.');
-    throw new Error(`Gemini respondió HTTP ${res.status}. ${detalle.slice(0, 180)}`);
+  const modelos = cadenaModelos();
+  let ultimoError: GeminiError | null = null;
+
+  for (const model of modelos) {
+    try {
+      return await pedirModeloGemini<T>(model, body, key);
+    } catch (e) {
+      if (e instanceof GeminiError) {
+        ultimoError = e;
+        if (e.fallback) continue; // probar el siguiente modelo de la cadena
+        throw new Error(e.message); // error fatal (llave inválida, filtro)
+      }
+      throw e;
+    }
   }
 
-  const data = await res.json();
-  const cand = data?.candidates?.[0];
-  if (cand?.finishReason && cand.finishReason !== 'STOP' && cand.finishReason !== 'MAX_TOKENS') {
-    throw new Error('La IA no pudo completar la respuesta (posible filtro de contenido). Reformula la descripción.');
-  }
-  const texto: string = (cand?.content?.parts || []).map((p: { text?: string }) => p.text || '').join('');
-  if (!texto) throw new Error('La IA no devolvió contenido. Intenta de nuevo.');
-  return JSON.parse(texto) as T;
+  // Se agotaron todos los modelos de la cadena.
+  const detalle = ultimoError?.message || '';
+  throw new Error(`Sin cupo de IA disponible en este momento (se probaron ${modelos.length} modelos de Gemini). Espera unos minutos e intenta de nuevo. ${detalle}`);
 }
 
 // ── Anthropic (Claude) ────────────────────────────────────────────────────────
