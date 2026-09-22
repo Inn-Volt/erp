@@ -67,21 +67,43 @@ function cadenaModelos(): string[] {
   return [principal, ...respaldos.filter((m) => m !== principal)];
 }
 
-/** Intenta un modelo concreto, con reintentos ante errores transitorios (503/500/502/504). */
-async function pedirModeloGemini<T>(model: string, body: string, key: string): Promise<T> {
-  const MAX_INTENTOS = 3;
-  const backoff = [1200, 3000]; // ms antes del intento 2 y 3
+/**
+ * Intenta un modelo concreto, con reintentos ante errores transitorios, SIN
+ * pasarse del `deadline` (epoch ms). Cada fetch se aborta si va a exceder el
+ * presupuesto, para que la función serverless responda antes del timeout de la
+ * plataforma (Netlify corta ~10 s) y nunca devuelva un 504 crudo.
+ */
+async function pedirModeloGemini<T>(model: string, body: string, key: string, deadline: number): Promise<T> {
+  const MAX_INTENTOS = 2;
+  const CALL_CAP_MS = 7000; // tope duro por llamada
   let ultimoDetalle = '';
 
   for (let intento = 1; intento <= MAX_INTENTOS; intento++) {
-    const res = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`,
-      {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'x-goog-api-key': key },
-        body,
-      },
-    );
+    const restante = deadline - Date.now();
+    if (restante < 1500) throw new GeminiError(`${model}: sin tiempo suficiente (presupuesto agotado).`, true);
+
+    const ctrl = new AbortController();
+    const callMs = Math.min(CALL_CAP_MS, restante - 300);
+    const timer = setTimeout(() => ctrl.abort(), callMs);
+
+    let res: Response;
+    try {
+      res = await fetch(
+        `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'x-goog-api-key': key },
+          body,
+          signal: ctrl.signal,
+        },
+      );
+    } catch (e) {
+      clearTimeout(timer);
+      // Abort por presupuesto o error de red → transitorio, probar siguiente modelo.
+      const abort = e instanceof Error && e.name === 'AbortError';
+      throw new GeminiError(abort ? `${model}: la petición tardó demasiado.` : `${model}: error de red.`, true);
+    }
+    clearTimeout(timer);
 
     if (res.ok) {
       const data = await res.json();
@@ -103,8 +125,9 @@ async function pedirModeloGemini<T>(model: string, body: string, key: string): P
     if (res.status === 400 && /API key not valid/i.test(ultimoDetalle)) throw new GeminiError('La GEMINI_API_KEY es inválida.', false);
 
     const transitorio = res.status === 503 || res.status === 500 || res.status === 502 || res.status === 504;
-    if (transitorio && intento < MAX_INTENTOS) {
-      await sleep(backoff[intento - 1]);
+    // Reintentar solo si queda presupuesto para un backoff corto + otra llamada.
+    if (transitorio && intento < MAX_INTENTOS && deadline - Date.now() > 3000) {
+      await sleep(700);
       continue;
     }
     // Transitorio agotado (o modelo inexistente 404) → probar el siguiente modelo.
@@ -129,12 +152,19 @@ async function generarGemini<T>(system: string, user: string, schema: GeminiSche
     },
   });
 
+  // Presupuesto total de tiempo. Debe quedar por DEBAJO del límite de la función
+  // serverless (Netlify free ≈ 10 s) para responder con un error limpio en vez
+  // de que la plataforma corte con un 504.
+  const BUDGET_MS = 8500;
+  const deadline = Date.now() + BUDGET_MS;
+
   const modelos = cadenaModelos();
   let ultimoError: GeminiError | null = null;
 
   for (const model of modelos) {
+    if (deadline - Date.now() < 1500) break; // sin tiempo para otro modelo
     try {
-      return await pedirModeloGemini<T>(model, body, key);
+      return await pedirModeloGemini<T>(model, body, key, deadline);
     } catch (e) {
       if (e instanceof GeminiError) {
         ultimoError = e;
