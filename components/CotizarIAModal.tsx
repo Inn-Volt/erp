@@ -14,13 +14,15 @@ const EJEMPLOS = [
 ];
 
 export default function CotizarIAModal({
-  moneda, onInsertar, onClose,
+  moneda, onInsertar, onClose, descripcionInicial = '',
 }: {
   moneda: Moneda;
   onInsertar: (partidas: PartidaIAResuelta[]) => void;
   onClose: () => void;
+  /** Texto precargado (ej. al venir desde una Solicitud). El usuario lo revisa y genera. */
+  descripcionInicial?: string;
 }) {
-  const [descripcion, setDescripcion] = useState('');
+  const [descripcion, setDescripcion] = useState(descripcionInicial);
   const [cargando, setCargando] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [resumen, setResumen] = useState('');

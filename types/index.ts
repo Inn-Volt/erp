@@ -191,6 +191,8 @@ export interface Cotizacion {
   supuestos?: Supuestos;
   /** Empresa emisora; sin esto el PDF se generaba siempre con la primera. */
   empresa_id?: string | null;
+  /** Solicitud que originó esta cotización (relación inversa; opcional). */
+  solicitud_id?: string | null;
   /** Moneda de la cotización (por defecto CLP). */
   moneda?: Moneda;
   /** Valor de la UF en CLP al momento de cotizar (solo informativo, si moneda = UF). */
