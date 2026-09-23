@@ -62,8 +62,11 @@ class GeminiError extends Error {
  * funcionando. Sin duplicados.
  */
 function cadenaModelos(): string[] {
-  const principal = process.env.GEMINI_MODEL || 'gemini-3.6-flash';
-  const respaldos = ['gemini-3.5-flash-lite', 'gemini-3.1-flash-lite'];
+  // Por defecto arranca con un modelo "lite": 500 pedidos/día (vs 20 del flash
+  // completo) y responde más rápido, clave para caber en el timeout de Netlify.
+  // GEMINI_MODEL fuerza otro como primario si se quiere más calidad.
+  const principal = process.env.GEMINI_MODEL || 'gemini-3.5-flash-lite';
+  const respaldos = ['gemini-3.1-flash-lite', 'gemini-3.6-flash'];
   return [principal, ...respaldos.filter((m) => m !== principal)];
 }
 
@@ -75,7 +78,7 @@ function cadenaModelos(): string[] {
  */
 async function pedirModeloGemini<T>(model: string, body: string, key: string, deadline: number): Promise<T> {
   const MAX_INTENTOS = 2;
-  const CALL_CAP_MS = 7000; // tope duro por llamada
+  const CALL_CAP_MS = 9000; // tope duro por llamada
   let ultimoDetalle = '';
 
   for (let intento = 1; intento <= MAX_INTENTOS; intento++) {
@@ -83,7 +86,7 @@ async function pedirModeloGemini<T>(model: string, body: string, key: string, de
     if (restante < 1500) throw new GeminiError(`${model}: sin tiempo suficiente (presupuesto agotado).`, true);
 
     const ctrl = new AbortController();
-    const callMs = Math.min(CALL_CAP_MS, restante - 300);
+    const callMs = Math.min(CALL_CAP_MS, restante - 350);
     const timer = setTimeout(() => ctrl.abort(), callMs);
 
     let res: Response;
@@ -155,7 +158,7 @@ async function generarGemini<T>(system: string, user: string, schema: GeminiSche
   // Presupuesto total de tiempo. Debe quedar por DEBAJO del límite de la función
   // serverless (Netlify free ≈ 10 s) para responder con un error limpio en vez
   // de que la plataforma corte con un 504.
-  const BUDGET_MS = 8500;
+  const BUDGET_MS = 9300;
   const deadline = Date.now() + BUDGET_MS;
 
   const modelos = cadenaModelos();
