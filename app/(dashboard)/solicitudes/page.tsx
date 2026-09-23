@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import {
-  Inbox, Plus, Search, X, Loader2, Sparkles, Wand2,
+  Inbox, Plus, Search, X, Loader2, Sparkles, Wand2, CalendarPlus,
   FileText, ExternalLink, Edit3, Trash2, ChevronRight, ClipboardList, HelpCircle,
 } from 'lucide-react';
 import { solicitudesService } from '@/services/solicitudes';
@@ -420,6 +420,9 @@ function DetalleSolicitud({ sol, onClose, onChange, onEdit, onDelete }: {
         <div style={{ padding: '1rem 1.25rem', borderTop: '1px solid var(--border2)', display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
           <button onClick={generarBorrador} className="btn btn-primary btn-sm" style={{ width: '100%', justifyContent: 'center' }}>
             <FileText size={13} /> Generar borrador de cotización
+          </button>
+          <button onClick={() => router.push(`/agenda?solicitud=${sol.id}${sol.cliente_id ? `&cliente=${sol.cliente_id}` : ''}`)} className="btn btn-ghost btn-sm" style={{ width: '100%', justifyContent: 'center' }}>
+            <CalendarPlus size={13} /> Agendar visita
           </button>
           {sol.cotizacion_id && (
             <button onClick={() => router.push(`/cotizador?edit=${sol.cotizacion_id}`)} className="btn btn-ghost btn-sm" style={{ width: '100%', justifyContent: 'center' }}>
