@@ -36,6 +36,11 @@ function SolicitudModal({ solicitud, clientes, createdBy, onClose, onSaved }: {
 }) {
   const { success, error: toastError } = useToast();
   const [clienteId, setClienteId] = useState(solicitud?.cliente_id || '');
+  const [clienteSearch, setClienteSearch] = useState(() => {
+    const c = clientes.find(x => x.id === solicitud?.cliente_id);
+    return c ? c.nombre_cliente : '';
+  });
+  const [showClienteDrop, setShowClienteDrop] = useState(false);
   const [contacto, setContacto] = useState(solicitud?.contacto || '');
   const [descripcion, setDescripcion] = useState(solicitud?.descripcion || '');
   const [tipos, setTipos] = useState<TipoServicio[]>(solicitud?.tipos_servicio || []);
@@ -48,14 +53,24 @@ function SolicitudModal({ solicitud, clientes, createdBy, onClose, onSaved }: {
   const toggleTipo = (t: TipoServicio) =>
     setTipos(prev => prev.includes(t) ? prev.filter(x => x !== t) : [...prev, t]);
 
-  // Autocompletar contacto con el del cliente al elegirlo (si está vacío).
-  const onCliente = (id: string) => {
-    setClienteId(id);
-    if (!contacto) {
-      const c = clientes.find(x => x.id === id);
-      if (c?.contacto_nombre) setContacto(c.contacto_nombre);
-    }
+  // Selección desde el buscador: fija cliente y autocompleta contacto si está vacío.
+  const elegirCliente = (c: Cliente) => {
+    setClienteId(c.id);
+    setClienteSearch(c.nombre_cliente);
+    setShowClienteDrop(false);
+    if (!contacto && c.contacto_nombre) setContacto(c.contacto_nombre);
   };
+
+  const clientesFiltrados = (() => {
+    const q = clienteSearch.trim().toLowerCase();
+    const base = q
+      ? clientes.filter(c =>
+          c.nombre_cliente.toLowerCase().includes(q) ||
+          (c.empresa || '').toLowerCase().includes(q) ||
+          (c.rut || '').toLowerCase().includes(q))
+      : clientes;
+    return base.slice(0, 8);
+  })();
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -95,14 +110,41 @@ function SolicitudModal({ solicitud, clientes, createdBy, onClose, onSaved }: {
           <p className="section-label" style={{ margin: 0 }}><Inbox size={13} /> {solicitud ? 'Editar solicitud' : 'Nueva solicitud'}</p>
           <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--muted)' }}><X size={16} /></button>
         </div>
-        <form onSubmit={submit} style={{ padding: '1.5rem', display: 'flex', flexDirection: 'column', gap: '1rem', overflowY: 'auto' }}>
+        <form onSubmit={submit} style={{ display: 'flex', flexDirection: 'column', minHeight: 0, flex: 1 }}>
+          <div style={{ padding: '1.5rem', display: 'flex', flexDirection: 'column', gap: '1rem', overflowY: 'auto' }}>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
-            <div>
+            <div style={{ position: 'relative' }}>
               <label className="label-muted" style={{ display: 'block', marginBottom: '0.4rem' }}>Cliente</label>
-              <select className="input" value={clienteId} onChange={e => onCliente(e.target.value)}>
-                <option value="">— Sin cliente —</option>
-                {clientes.map(c => <option key={c.id} value={c.id}>{c.nombre_cliente}{c.empresa ? ` · ${c.empresa}` : ''}</option>)}
-              </select>
+              <div style={{ position: 'relative' }}>
+                <Search size={13} style={{ position: 'absolute', left: '0.6rem', top: '50%', transform: 'translateY(-50%)', color: 'var(--muted)', pointerEvents: 'none' }} />
+                <input
+                  className="input"
+                  value={clienteSearch}
+                  onChange={e => { setClienteSearch(e.target.value); setShowClienteDrop(true); if (!e.target.value) setClienteId(''); }}
+                  onFocus={() => setShowClienteDrop(true)}
+                  onBlur={() => setTimeout(() => setShowClienteDrop(false), 150)}
+                  placeholder="Buscar por nombre, empresa o RUT…"
+                  style={{ paddingLeft: '1.9rem', paddingRight: clienteId ? '1.9rem' : undefined }}
+                  autoComplete="off"
+                />
+                {clienteId && (
+                  <button type="button" onClick={() => { setClienteId(''); setClienteSearch(''); }} title="Quitar cliente"
+                    style={{ position: 'absolute', right: '0.5rem', top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', cursor: 'pointer', color: 'var(--muted)' }}>
+                    <X size={13} />
+                  </button>
+                )}
+              </div>
+              {showClienteDrop && clientesFiltrados.length > 0 && (
+                <div style={{ position: 'absolute', top: '100%', left: 0, right: 0, zIndex: 20, marginTop: 2, background: 'var(--bg2)', border: '1px solid var(--border2)', borderRadius: 'var(--r)', boxShadow: '0 8px 24px rgba(0,0,0,0.35)', maxHeight: 240, overflowY: 'auto' }}>
+                  {clientesFiltrados.map(c => (
+                    <button key={c.id} type="button" onMouseDown={() => elegirCliente(c)}
+                      style={{ display: 'block', width: '100%', textAlign: 'left', padding: '0.5rem 0.7rem', background: c.id === clienteId ? 'var(--y-soft)' : 'transparent', border: 'none', cursor: 'pointer' }}>
+                      <span style={{ fontSize: '0.84rem', color: 'var(--text)', fontWeight: 500 }}>{c.nombre_cliente}</span>
+                      {(c.empresa || c.rut) && <span style={{ fontSize: '0.72rem', color: 'var(--muted)', marginLeft: 6 }}>{[c.empresa, c.rut].filter(Boolean).join(' · ')}</span>}
+                    </button>
+                  ))}
+                </div>
+              )}
             </div>
             <div>
               <label className="label-muted" style={{ display: 'block', marginBottom: '0.4rem' }}>Contacto</label>
@@ -156,7 +198,8 @@ function SolicitudModal({ solicitud, clientes, createdBy, onClose, onSaved }: {
             <textarea className="input" value={obs} onChange={e => setObs(e.target.value)} rows={2} placeholder="Notas internas" style={{ resize: 'vertical' }} />
           </div>
 
-          <div style={{ display: 'flex', gap: '0.5rem', justifyContent: 'flex-end' }}>
+          </div>{/* fin cuerpo scrollable */}
+          <div style={{ padding: '1rem 1.5rem', borderTop: '1px solid var(--border2)', display: 'flex', gap: '0.5rem', justifyContent: 'flex-end' }}>
             <button type="button" onClick={onClose} className="btn btn-ghost">Cancelar</button>
             <button type="submit" className="btn btn-primary" disabled={saving}>
               {saving ? <Loader2 size={13} className="iv-spin" /> : <Plus size={13} />}
@@ -230,8 +273,8 @@ function DetalleSolicitud({ sol, onClose, onChange, onEdit, onDelete }: {
   const a = sol.analisis_ia;
 
   return (
-    <div className="cliente-detail-overlay open" onClick={onClose}>
-      <div className="cliente-detail-panel-mobile" onClick={e => e.stopPropagation()} style={{ maxWidth: 480 }}>
+    <div className="sol-detail" onClick={onClose}>
+      <div className="sol-detail-panel" onClick={e => e.stopPropagation()}>
         <div style={{ padding: '1rem 1.25rem', borderBottom: '1px solid var(--border2)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
           <p className="section-label" style={{ margin: 0 }}><Inbox size={12} /> {folioSol(sol)}</p>
           <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--muted)' }}><X size={14} /></button>
@@ -456,15 +499,18 @@ export default function SolicitudesPage() {
           onSaved={load}
         />
       )}
-      {detalle && (
-        <DetalleSolicitud
-          sol={detalle}
-          onClose={() => setDetalle(null)}
-          onChange={onDetalleChange}
-          onEdit={() => { setModal({ open: true, sol: detalle }); setDetalle(null); }}
-          onDelete={() => handleDelete(detalle)}
-        />
-      )}
+      <style>{`
+        .sol-layout { display: grid; grid-template-columns: 1fr; gap: 2px; align-items: start; }
+        @media (min-width: 900px) { .sol-layout.split { grid-template-columns: 1fr 420px; } }
+        .sol-detail-panel { background: var(--bg2); border: 1px solid var(--border2); border-radius: var(--r); overflow: hidden; }
+        @media (max-width: 899px) {
+          .sol-detail { position: fixed; inset: 0; z-index: 80; background: rgba(0,0,0,0.6); display: flex; justify-content: flex-end; }
+          .sol-detail-panel { width: min(480px,100vw); height: 100%; overflow-y: auto; border: none; border-left: 1px solid var(--border2); border-radius: 0; animation: slideInRight 0.2s ease both; }
+        }
+        @media (min-width: 900px) {
+          .sol-detail-panel { position: sticky; top: 8px; max-height: calc(100svh - 90px); overflow-y: auto; }
+        }
+      `}</style>
 
       <div className="iv-page-header">
         <div>
@@ -478,6 +524,7 @@ export default function SolicitudesPage() {
         </div>
       </div>
 
+      <div className={`sol-layout${detalle ? ' split' : ''}`}>
       <div className="panel-y">
         <div style={{ padding: '1rem', borderBottom: '1px solid var(--border2)', display: 'flex', gap: '0.6rem', flexWrap: 'wrap' }}>
           <div style={{ position: 'relative', flex: 1, minWidth: 180 }}>
@@ -524,6 +571,17 @@ export default function SolicitudesPage() {
         <div style={{ padding: '0.75rem 1rem', borderTop: '1px solid var(--border2)', color: 'var(--muted)', fontSize: '0.75rem' }}>
           {filtered.length} solicitud{filtered.length !== 1 ? 'es' : ''}
         </div>
+      </div>
+
+      {detalle && (
+        <DetalleSolicitud
+          sol={detalle}
+          onClose={() => setDetalle(null)}
+          onChange={onDetalleChange}
+          onEdit={() => { setModal({ open: true, sol: detalle }); setDetalle(null); }}
+          onDelete={() => handleDelete(detalle)}
+        />
+      )}
       </div>
     </div>
   );
