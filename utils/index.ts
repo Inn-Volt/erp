@@ -3,6 +3,7 @@ import type {
   BorradorIA, PartidaIAResuelta,
 } from '@/types';
 import { SUPUESTOS_DEFAULT, CATEGORIAS_ORDEN } from '@/types';
+import type { AnalisisIA } from '@/types/solicitud';
 
 // ─── Formatters ───────────────────────────────────────────────────────────────
 
@@ -443,6 +444,26 @@ export function resolverBorradorIA(borrador: BorradorIA, catalogo: CatalogoItem[
         : { descripcion: c.descripcion, categoria: c.categoria, unidad: c.unidad, cantidad: c.cantidad, costo: c.costoUnitario, matched: false };
     }),
   }));
+}
+
+/**
+ * Convierte el ANÁLISIS de una solicitud (necesidades + ítems sugeridos, ya
+ * generado por la IA) en un borrador para el cotizador SIN volver a llamar a la
+ * IA. Matchea cada ítem con el catálogo para traer su precio real; los no
+ * encontrados quedan en 0 para que el usuario los complete. Devuelve una única
+ * partida con todos los ítems (el usuario la reorganiza/edita en el cotizador).
+ */
+export function borradorDesdeAnalisis(
+  analisis: AnalisisIA, catalogo: CatalogoItem[], nombrePartida = 'Propuesta técnica',
+): PartidaIAResuelta[] {
+  const componentes = (analisis.items_sugeridos || []).map(it => {
+    const m = catalogo.length ? mejorMatchCatalogo(it.descripcion, it.categoria, catalogo) : null;
+    return m
+      ? { descripcion: m.descripcion, categoria: it.categoria, unidad: m.unidad || it.unidad, cantidad: it.cantidad_sugerida || 1, costo: m.costo, codigo: m.codigo, matched: true }
+      : { descripcion: it.descripcion, categoria: it.categoria, unidad: it.unidad || 'un', cantidad: it.cantidad_sugerida || 1, costo: 0, matched: false };
+  });
+  if (!componentes.length) return [];
+  return [{ nombre: nombrePartida, descripcion: analisis.resumen || '', cantidad: 1, unidad: 'global', componentes }];
 }
 
 /**

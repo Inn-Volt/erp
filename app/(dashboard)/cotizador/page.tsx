@@ -20,14 +20,13 @@ import { clientesService } from '@/services/clientes';
 import { cotizacionesService } from '@/services/cotizaciones';
 import { catalogoService } from '@/services/catalogo';
 import { solicitudesService } from '@/services/solicitudes';
-import { TIPO_SERVICIO_LABEL } from '@/types/solicitud';
 import type { Solicitud } from '@/types/solicitud';
 import { useToast } from '@/hooks/useToast';
 import {
   formatCLP, formatMoneda, redondearMoneda, formatFolio, cleanNumber, calcularTotals, calcularItem,
   newItem, newId, normalizarItem, precioDesdeMargen,
   margenDesdePrecio, itemsToExcelRows, parseCategoria,
-  calcularPartida, partidaDesdeReceta, resolverBorradorIA,
+  calcularPartida, partidaDesdeReceta, borradorDesdeAnalisis,
 } from '@/utils';
 import type { CotizacionItem, Cliente, CategoriaItem, Supuestos, Moneda, Partida, RecetaConComponentes, PartidaIAResuelta, CatalogoItem } from '@/types';
 import {
@@ -654,29 +653,6 @@ function PartidaCard({
   );
 }
 
-/**
- * Arma el texto para el cotizador IA a partir de una solicitud: requerimiento
- * original + tipos + info adicional + lo que la IA ya identificó. El usuario lo
- * revisa y pulsa "Generar" en el modal existente (que sí usa el catálogo/precios).
- */
-function componerDescripcionSolicitud(sol: Solicitud): string {
-  const partes: string[] = [sol.descripcion];
-  if (sol.tipos_servicio?.length) {
-    partes.push(`Tipos de servicio: ${sol.tipos_servicio.map(t => TIPO_SERVICIO_LABEL[t]).join(', ')}.`);
-  }
-  if (sol.info_adicional) partes.push(`Información adicional: ${sol.info_adicional}`);
-  const a = sol.analisis_ia;
-  if (a) {
-    if (a.necesidades?.length) {
-      partes.push('Necesidades técnicas identificadas:\n' + a.necesidades.map(n => `- ${n.titulo}${n.detalle ? `: ${n.detalle}` : ''}`).join('\n'));
-    }
-    if (a.items_sugeridos?.length) {
-      partes.push('Ítems sugeridos:\n' + a.items_sugeridos.map(i => `- ${i.descripcion} (${i.cantidad_sugerida} ${i.unidad})`).join('\n'));
-    }
-  }
-  return partes.join('\n\n');
-}
-
 // ─── Contenido principal ──────────────────────────────────────────────────────
 function CotizadorContent() {
   const searchParams = useSearchParams();
@@ -958,25 +934,25 @@ const [empresaEditing, setEmpresaEditing] = useState<EmpresaInfo | null>(null);
   }, [moneda, valorUF, supuestos, success]);
 
   /**
-   * Flujo Solicitud → Cotización: genera el borrador con la IA (usando el motor
-   * existente /api/cotizar-ia + catálogo) y lo inserta directamente, sin abrir
-   * el modal. El usuario revisa y edita en el cotizador, luego guarda.
+   * Flujo Solicitud → Cotización: toma el ANÁLISIS de IA que YA hizo la solicitud
+   * (necesidades + ítems sugeridos) y lo inserta directamente en el cotizador,
+   * SIN volver a llamar a la IA. Matchea el catálogo para traer precios reales;
+   * el usuario revisa, ajusta y guarda.
    */
   async function generarBorradorDesdeSolicitud(sol: Solicitud) {
+    const analisis = sol.analisis_ia;
+    if (!analisis || !analisis.items_sugeridos?.length) {
+      toastError('La solicitud aún no tiene análisis de IA con ítems. Analízala primero, o cotiza manualmente.');
+      return;
+    }
     setGenerandoIA(true);
     try {
-      const res = await fetch('/api/cotizar-ia', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ descripcion: componerDescripcionSolicitud(sol) }),
-      });
-      const data = await res.json();
-      if (!res.ok) { toastError(data?.error || 'No se pudo generar el borrador con IA. Puedes cotizar manualmente.'); return; }
       let catalogo: CatalogoItem[] = [];
-      try { catalogo = await catalogoService.getAll(false); } catch { /* sin catálogo: usa estimados de la IA */ }
-      insertarDesdeIA(resolverBorradorIA(data.borrador, catalogo));
-    } catch {
-      toastError('Error al generar el borrador desde la solicitud. Puedes cotizar manualmente.');
+      try { catalogo = await catalogoService.getAll(false); } catch { /* sin catálogo: precios en 0 para completar */ }
+      const nombre = analisis.necesidades?.[0]?.titulo || 'Propuesta técnica';
+      const partidas = borradorDesdeAnalisis(analisis, catalogo, nombre);
+      if (!partidas.length) { toastError('El análisis no tiene ítems para insertar.'); return; }
+      insertarDesdeIA(partidas);
     } finally {
       setGenerandoIA(false);
     }
@@ -1443,7 +1419,7 @@ const [empresaEditing, setEmpresaEditing] = useState<EmpresaInfo | null>(null);
         <div style={{ position: 'fixed', inset: 0, zIndex: 90, background: 'rgba(0,0,0,0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
           <div style={{ background: 'var(--bg2)', border: '1px solid var(--border2)', borderRadius: 'var(--r)', padding: '1.5rem 1.75rem', display: 'flex', alignItems: 'center', gap: '0.75rem', maxWidth: 340 }}>
             <Loader2 size={20} className="iv-spin" style={{ color: 'var(--y)', flexShrink: 0 }} />
-            <span style={{ color: 'var(--text)', fontSize: '0.9rem' }}>Generando borrador con IA desde la solicitud…</span>
+            <span style={{ color: 'var(--text)', fontSize: '0.9rem' }}>Generando borrador desde el análisis de la solicitud…</span>
           </div>
         </div>
       )}
