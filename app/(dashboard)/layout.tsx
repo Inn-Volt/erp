@@ -3,7 +3,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import {
   LayoutDashboard, FileText, Users, LogOut, Menu, X,
-  Settings, History, ClipboardList, Library, Inbox,
+  Settings, History, ClipboardList, Library, Inbox, Calendar,
   PanelLeftClose, PanelLeftOpen,
 } from 'lucide-react';
 import { useRouter, usePathname } from 'next/navigation';
@@ -34,7 +34,8 @@ const menuItems = [
   { name: 'Dashboard',      icon: LayoutDashboard, path: '/dashboard',                num: '01' },
   { name: 'Clientes',       icon: Users,           path: '/clientes',                 num: '02' },
   { name: 'Solicitudes',    icon: Inbox,           path: '/solicitudes',              num: '03' },
-  { name: 'Cotizador',      icon: FileText,        path: '/cotizador',                num: '04' },
+  { name: 'Agenda',         icon: Calendar,        path: '/agenda',                   num: '04' },
+  { name: 'Cotizador',      icon: FileText,        path: '/cotizador',                num: '05' },
   { name: 'Historial',      icon: History,         path: '/cotizador/historial',      num: '04' },
   { name: 'Biblioteca',     icon: Library,         path: '/biblioteca',               num: '05' },
   { name: 'Levantamiento',  icon: ClipboardList,   path: '/levantamiento',            num: '06' },
