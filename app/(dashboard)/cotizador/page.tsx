@@ -9,7 +9,7 @@ import {
   Loader2, RefreshCcw, Check, FileUp,
   Copy, Package, Settings2, X, ArrowUp, ArrowDown,
   Building2, ChevronDown, Pencil, Handshake, HardHat, BrickWall,
-  Calculator, Truck, Library, Sparkles,
+  Calculator, Truck, Library, Sparkles, Inbox, ExternalLink,
 } from 'lucide-react';
 import { pdf } from '@react-pdf/renderer';
 import { saveAs } from 'file-saver';
@@ -18,6 +18,9 @@ import * as XLSX from 'xlsx';
 import { supabase } from '@/lib/supabase';
 import { clientesService } from '@/services/clientes';
 import { cotizacionesService } from '@/services/cotizaciones';
+import { solicitudesService } from '@/services/solicitudes';
+import { TIPO_SERVICIO_LABEL } from '@/types/solicitud';
+import type { Solicitud } from '@/types/solicitud';
 import { useToast } from '@/hooks/useToast';
 import {
   formatCLP, formatMoneda, redondearMoneda, formatFolio, cleanNumber, calcularTotals, calcularItem,
@@ -650,6 +653,29 @@ function PartidaCard({
   );
 }
 
+/**
+ * Arma el texto para el cotizador IA a partir de una solicitud: requerimiento
+ * original + tipos + info adicional + lo que la IA ya identificó. El usuario lo
+ * revisa y pulsa "Generar" en el modal existente (que sí usa el catálogo/precios).
+ */
+function componerDescripcionSolicitud(sol: Solicitud): string {
+  const partes: string[] = [sol.descripcion];
+  if (sol.tipos_servicio?.length) {
+    partes.push(`Tipos de servicio: ${sol.tipos_servicio.map(t => TIPO_SERVICIO_LABEL[t]).join(', ')}.`);
+  }
+  if (sol.info_adicional) partes.push(`Información adicional: ${sol.info_adicional}`);
+  const a = sol.analisis_ia;
+  if (a) {
+    if (a.necesidades?.length) {
+      partes.push('Necesidades técnicas identificadas:\n' + a.necesidades.map(n => `- ${n.titulo}${n.detalle ? `: ${n.detalle}` : ''}`).join('\n'));
+    }
+    if (a.items_sugeridos?.length) {
+      partes.push('Ítems sugeridos:\n' + a.items_sugeridos.map(i => `- ${i.descripcion} (${i.cantidad_sugerida} ${i.unidad})`).join('\n'));
+    }
+  }
+  return partes.join('\n\n');
+}
+
 // ─── Contenido principal ──────────────────────────────────────────────────────
 function CotizadorContent() {
   const searchParams = useSearchParams();
@@ -659,6 +685,7 @@ function CotizadorContent() {
   const editId        = searchParams.get('edit');
   const cloneId       = searchParams.get('clone');
   const clienteParam  = searchParams.get('cliente');
+  const solicitudParam = searchParams.get('solicitud');
   const fileInputRef  = useRef<HTMLInputElement>(null);
 
   // ── Estado formulario ──
@@ -685,6 +712,9 @@ function CotizadorContent() {
   const [showHHModal,            setShowHHModal]            = useState(false);
   const [showBiblioteca,         setShowBiblioteca]         = useState(false);
   const [showIA,                 setShowIA]                 = useState(false);
+  // Solicitud de origen (flujo Solicitud → IA → Cotización). Vacío en cotización directa.
+  const [solicitudOrigen,        setSolicitudOrigen]        = useState<Solicitud | null>(null);
+  const [iaDescripcionInicial,   setIaDescripcionInicial]   = useState('');
   const [showDescripcion,        setShowDescripcion]        = useState(false);
   const [showOpciones,           setShowOpciones]           = useState(false);
   const [moneda,                 setMoneda]                 = useState<Moneda>('CLP');
@@ -722,6 +752,23 @@ const [empresaEditing, setEmpresaEditing] = useState<EmpresaInfo | null>(null);
     if (clienteParam) {
       const c = dataClientes.find((x: Cliente) => x.id === clienteParam);
       if (c) { setClienteSeleccionado(c); setSearchCliente(c.nombre_cliente); }
+    }
+
+    // Flujo Solicitud → IA → Cotización: precarga cliente y abre el modal de IA
+    // (el MISMO cotizador existente). No afecta la cotización directa.
+    if (solicitudParam && !editId && !cloneId) {
+      try {
+        const sol = await solicitudesService.getById(solicitudParam);
+        if (sol) {
+          setSolicitudOrigen(sol);
+          if (sol.cliente_id) {
+            const c = dataClientes.find((x: Cliente) => x.id === sol.cliente_id);
+            if (c) { setClienteSeleccionado(c); setSearchCliente(c.nombre_cliente); }
+          }
+          setIaDescripcionInicial(componerDescripcionSolicitud(sol));
+          setShowIA(true);
+        }
+      } catch { /* si falla la carga, el cotizador sigue funcionando normal */ }
     }
   }
 
@@ -795,6 +842,11 @@ const [empresaEditing, setEmpresaEditing] = useState<EmpresaInfo | null>(null);
         const lista = await loadEmpresas();
         const emp = lista.find(e => e.id === cot.empresa_id);
         if (emp) setEmpresaSelec(emp);
+      }
+      // Relación inversa: si la cotización nació de una solicitud, la recuperamos
+      // para conservar el vínculo al guardar y ofrecer "ver solicitud de origen".
+      if (cot.solicitud_id && !isCloning) {
+        try { const sol = await solicitudesService.getById(cot.solicitud_id); if (sol) setSolicitudOrigen(sol); } catch { /* opcional */ }
       }
       if (!isCloning) setFolioGenerado(cot.folio);
       else            obtenerUltimoFolio();
@@ -1217,6 +1269,8 @@ const [empresaEditing, setEmpresaEditing] = useState<EmpresaInfo | null>(null);
       condiciones_comerciales: condicionesComerciales,
       estado: 'Pendiente' as const,
       ocultar_suministros: ocultarSuministros,
+      // Relación con la solicitud de origen (solo si vino de ese flujo).
+      ...(solicitudOrigen ? { solicitud_id: solicitudOrigen.id } : {}),
     };
     try {
       let result;
@@ -1226,6 +1280,13 @@ const [empresaEditing, setEmpresaEditing] = useState<EmpresaInfo | null>(null);
       } else {
         result = await cotizacionesService.create(payload);
         success('Cotización guardada correctamente');
+        // Vincula la cotización recién creada a su solicitud de origen.
+        if (solicitudOrigen) {
+          try {
+            await solicitudesService.vincularCotizacion(solicitudOrigen.id, result.id, result.folio, solicitudOrigen.historial);
+            setSolicitudOrigen({ ...solicitudOrigen, cotizacion_id: result.id, estado: 'COTIZACION_GENERADA' });
+          } catch { /* la cotización ya quedó guardada; el vínculo es best-effort */ }
+        }
       }
       setFolioGenerado(result.folio);
       if (!editId || cloneId) router.replace(`/cotizador?edit=${result.id}`);
@@ -1249,6 +1310,8 @@ const [empresaEditing, setEmpresaEditing] = useState<EmpresaInfo | null>(null);
     setGarantia(defGarantia);
     setCondicionesComerciales(defCondiciones);
     setSupuestos({ ...SUPUESTOS_DEFAULT });
+    setSolicitudOrigen(null);
+    setIaDescripcionInicial('');
     obtenerUltimoFolio();
     router.push('/cotizador');
   };
@@ -1355,6 +1418,7 @@ const [empresaEditing, setEmpresaEditing] = useState<EmpresaInfo | null>(null);
           moneda={moneda}
           onInsertar={insertarDesdeIA}
           onClose={() => setShowIA(false)}
+          descripcionInicial={iaDescripcionInicial}
         />
       )}
 
@@ -1449,6 +1513,17 @@ const [empresaEditing, setEmpresaEditing] = useState<EmpresaInfo | null>(null);
           </button>
         </div>
       </div>
+
+      {/* Origen: solicitud que dio pie a esta cotización (flujo Solicitud → IA). */}
+      {solicitudOrigen && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap', background: 'var(--y-soft)', border: '1px solid var(--border)', borderRadius: 'var(--r)', padding: '0.5rem 0.8rem', marginBottom: '1rem', fontSize: '0.78rem', color: 'var(--muted)' }}>
+          <Inbox size={13} style={{ color: 'var(--y)', flexShrink: 0 }} />
+          <span>Cotización originada por la solicitud <b style={{ color: 'var(--text)' }}>SOL-{new Date(solicitudOrigen.created_at).getFullYear()}-{String(solicitudOrigen.folio).padStart(4, '0')}</b></span>
+          <Link href="/solicitudes" style={{ marginLeft: 'auto', color: 'var(--y)', fontWeight: 700, textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: '0.3rem' }}>
+            Ver solicitud <ExternalLink size={12} />
+          </Link>
+        </div>
+      )}
 
       {/* ══ COTIZADOR (ancho completo) ══ */}
       <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
