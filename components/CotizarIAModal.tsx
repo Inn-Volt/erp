@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Sparkles, X, Loader2, Wand2, PackagePlus, AlertTriangle } from 'lucide-react';
 import { formatCLP, mejorMatchCatalogo } from '@/utils';
 import { catalogoService } from '@/services/catalogo';
@@ -24,6 +24,7 @@ export default function CotizarIAModal({
 }) {
   const [descripcion, setDescripcion] = useState(descripcionInicial);
   const [cargando, setCargando] = useState(false);
+  const autoRan = useRef(false);
   const [error, setError] = useState<string | null>(null);
   const [resumen, setResumen] = useState('');
   const [resueltas, setResueltas] = useState<PartidaIAResuelta[] | null>(null);
@@ -69,6 +70,17 @@ export default function CotizarIAModal({
       setCargando(false);
     }
   }
+
+  // Al venir desde una Solicitud (descripcionInicial precargada), genera el
+  // borrador automáticamente: el usuario solo revisa e inserta, sin volver a
+  // pulsar "Generar".
+  useEffect(() => {
+    if (!autoRan.current && descripcionInicial.trim().length >= 10) {
+      autoRan.current = true;
+      generar();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [descripcionInicial]);
 
   const costoTotal = (resueltas || []).reduce(
     (acc, p) => acc + p.componentes.reduce((a, c) => a + c.costo * c.cantidad, 0), 0,
