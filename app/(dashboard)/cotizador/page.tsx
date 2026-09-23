@@ -18,6 +18,7 @@ import * as XLSX from 'xlsx';
 import { supabase } from '@/lib/supabase';
 import { clientesService } from '@/services/clientes';
 import { cotizacionesService } from '@/services/cotizaciones';
+import { catalogoService } from '@/services/catalogo';
 import { solicitudesService } from '@/services/solicitudes';
 import { TIPO_SERVICIO_LABEL } from '@/types/solicitud';
 import type { Solicitud } from '@/types/solicitud';
@@ -26,9 +27,9 @@ import {
   formatCLP, formatMoneda, redondearMoneda, formatFolio, cleanNumber, calcularTotals, calcularItem,
   newItem, newId, normalizarItem, precioDesdeMargen,
   margenDesdePrecio, itemsToExcelRows, parseCategoria,
-  calcularPartida, partidaDesdeReceta,
+  calcularPartida, partidaDesdeReceta, resolverBorradorIA,
 } from '@/utils';
-import type { CotizacionItem, Cliente, CategoriaItem, Supuestos, Moneda, Partida, RecetaConComponentes, PartidaIAResuelta } from '@/types';
+import type { CotizacionItem, Cliente, CategoriaItem, Supuestos, Moneda, Partida, RecetaConComponentes, PartidaIAResuelta, CatalogoItem } from '@/types';
 import {
   CATEGORIA_LABELS, CATEGORIAS_ORDEN, CATEGORIA_COLORS,
   SUPUESTOS_DEFAULT, UNIDADES,
@@ -714,7 +715,7 @@ function CotizadorContent() {
   const [showIA,                 setShowIA]                 = useState(false);
   // Solicitud de origen (flujo Solicitud → IA → Cotización). Vacío en cotización directa.
   const [solicitudOrigen,        setSolicitudOrigen]        = useState<Solicitud | null>(null);
-  const [iaDescripcionInicial,   setIaDescripcionInicial]   = useState('');
+  const [generandoIA,            setGenerandoIA]            = useState(false);
   const [showDescripcion,        setShowDescripcion]        = useState(false);
   const [showOpciones,           setShowOpciones]           = useState(false);
   const [moneda,                 setMoneda]                 = useState<Moneda>('CLP');
@@ -765,8 +766,9 @@ const [empresaEditing, setEmpresaEditing] = useState<EmpresaInfo | null>(null);
             const c = dataClientes.find((x: Cliente) => x.id === sol.cliente_id);
             if (c) { setClienteSeleccionado(c); setSearchCliente(c.nombre_cliente); }
           }
-          setIaDescripcionInicial(componerDescripcionSolicitud(sol));
-          setShowIA(true);
+          // Genera el borrador con IA y lo inserta directo (sin modal): el
+          // usuario aterriza con las partidas cargadas para revisar/editar.
+          await generarBorradorDesdeSolicitud(sol);
         }
       } catch { /* si falla la carga, el cotizador sigue funcionando normal */ }
     }
@@ -954,6 +956,31 @@ const [empresaEditing, setEmpresaEditing] = useState<EmpresaInfo | null>(null);
     setShowIA(false);
     success(`IA: ${nuevasPartidas.length} ${nuevasPartidas.length === 1 ? 'partida' : 'partidas'} y ${nuevosItems.length} ítems agregados`);
   }, [moneda, valorUF, supuestos, success]);
+
+  /**
+   * Flujo Solicitud → Cotización: genera el borrador con la IA (usando el motor
+   * existente /api/cotizar-ia + catálogo) y lo inserta directamente, sin abrir
+   * el modal. El usuario revisa y edita en el cotizador, luego guarda.
+   */
+  async function generarBorradorDesdeSolicitud(sol: Solicitud) {
+    setGenerandoIA(true);
+    try {
+      const res = await fetch('/api/cotizar-ia', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ descripcion: componerDescripcionSolicitud(sol) }),
+      });
+      const data = await res.json();
+      if (!res.ok) { toastError(data?.error || 'No se pudo generar el borrador con IA. Puedes cotizar manualmente.'); return; }
+      let catalogo: CatalogoItem[] = [];
+      try { catalogo = await catalogoService.getAll(false); } catch { /* sin catálogo: usa estimados de la IA */ }
+      insertarDesdeIA(resolverBorradorIA(data.borrador, catalogo));
+    } catch {
+      toastError('Error al generar el borrador desde la solicitud. Puedes cotizar manualmente.');
+    } finally {
+      setGenerandoIA(false);
+    }
+  }
 
   // ── Handlers de PARTIDAS ──
   const addPartida = useCallback(() => {
@@ -1311,7 +1338,6 @@ const [empresaEditing, setEmpresaEditing] = useState<EmpresaInfo | null>(null);
     setCondicionesComerciales(defCondiciones);
     setSupuestos({ ...SUPUESTOS_DEFAULT });
     setSolicitudOrigen(null);
-    setIaDescripcionInicial('');
     obtenerUltimoFolio();
     router.push('/cotizador');
   };
@@ -1413,12 +1439,20 @@ const [empresaEditing, setEmpresaEditing] = useState<EmpresaInfo | null>(null);
         />
       )}
 
+      {generandoIA && (
+        <div style={{ position: 'fixed', inset: 0, zIndex: 90, background: 'rgba(0,0,0,0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <div style={{ background: 'var(--bg2)', border: '1px solid var(--border2)', borderRadius: 'var(--r)', padding: '1.5rem 1.75rem', display: 'flex', alignItems: 'center', gap: '0.75rem', maxWidth: 340 }}>
+            <Loader2 size={20} className="iv-spin" style={{ color: 'var(--y)', flexShrink: 0 }} />
+            <span style={{ color: 'var(--text)', fontSize: '0.9rem' }}>Generando borrador con IA desde la solicitud…</span>
+          </div>
+        </div>
+      )}
+
       {showIA && (
         <CotizarIAModal
           moneda={moneda}
           onInsertar={insertarDesdeIA}
           onClose={() => setShowIA(false)}
-          descripcionInicial={iaDescripcionInicial}
         />
       )}
 

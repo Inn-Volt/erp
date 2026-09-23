@@ -1,5 +1,6 @@
 import type {
   CotizacionItem, CategoriaItem, Supuestos, CatalogoItem, RecetaConComponentes, Moneda, Partida,
+  BorradorIA, PartidaIAResuelta,
 } from '@/types';
 import { SUPUESTOS_DEFAULT, CATEGORIAS_ORDEN } from '@/types';
 
@@ -421,6 +422,27 @@ export function mejorMatchCatalogo<T extends { descripcion: string; categoria: s
     if (shared >= 2 && score > bestScore) { bestScore = score; best = it; }
   }
   return bestScore >= 0.5 ? best : null;
+}
+
+/**
+ * Convierte el borrador de la IA en partidas resueltas listas para insertar en
+ * el cotizador: matchea cada componente con el catálogo (precio real) o deja el
+ * costo estimado por la IA. Fuente única usada por el modal y por el flujo
+ * Solicitud → Cotización.
+ */
+export function resolverBorradorIA(borrador: BorradorIA, catalogo: CatalogoItem[]): PartidaIAResuelta[] {
+  return borrador.partidas.map(p => ({
+    nombre: p.nombre,
+    descripcion: p.descripcion,
+    cantidad: p.cantidad,
+    unidad: p.unidad,
+    componentes: p.componentes.map(c => {
+      const m = catalogo.length ? mejorMatchCatalogo(c.descripcion, c.categoria, catalogo) : null;
+      return m
+        ? { descripcion: m.descripcion, categoria: c.categoria, unidad: m.unidad || c.unidad, cantidad: c.cantidad, costo: m.costo, codigo: m.codigo, matched: true }
+        : { descripcion: c.descripcion, categoria: c.categoria, unidad: c.unidad, cantidad: c.cantidad, costo: c.costoUnitario, matched: false };
+    }),
+  }));
 }
 
 /**

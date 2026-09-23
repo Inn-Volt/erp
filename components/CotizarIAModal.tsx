@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef } from 'react';
 import { Sparkles, X, Loader2, Wand2, PackagePlus, AlertTriangle } from 'lucide-react';
-import { formatCLP, mejorMatchCatalogo } from '@/utils';
+import { formatCLP, resolverBorradorIA } from '@/utils';
 import { catalogoService } from '@/services/catalogo';
 import { CATEGORIA_LABELS, CATEGORIA_COLORS } from '@/types';
 import type { BorradorIA, PartidaIAResuelta, CategoriaItem, Moneda } from '@/types';
@@ -49,21 +49,8 @@ export default function CotizarIAModal({
       let catalogo: Awaited<ReturnType<typeof catalogoService.getAll>> = [];
       try { catalogo = await catalogoService.getAll(false); } catch { /* sin catálogo: usa estimados */ }
 
-      const resolved: PartidaIAResuelta[] = borrador.partidas.map(p => ({
-        nombre: p.nombre,
-        descripcion: p.descripcion,
-        cantidad: p.cantidad,
-        unidad: p.unidad,
-        componentes: p.componentes.map(c => {
-          const m = catalogo.length ? mejorMatchCatalogo(c.descripcion, c.categoria, catalogo) : null;
-          return m
-            ? { descripcion: m.descripcion, categoria: c.categoria, unidad: m.unidad || c.unidad, cantidad: c.cantidad, costo: m.costo, codigo: m.codigo, matched: true }
-            : { descripcion: c.descripcion, categoria: c.categoria, unidad: c.unidad, cantidad: c.cantidad, costo: c.costoUnitario, matched: false };
-        }),
-      }));
-
       setResumen(borrador.resumen || '');
-      setResueltas(resolved);
+      setResueltas(resolverBorradorIA(borrador, catalogo));
     } catch {
       setError('Error de conexión al generar la cotización.');
     } finally {
