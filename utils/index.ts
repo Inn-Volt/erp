@@ -26,11 +26,45 @@ export const redondearMoneda = (v: number, moneda: Moneda = 'CLP') =>
 export const formatMiles = (v: number) =>
   new Intl.NumberFormat('es-CL', { maximumFractionDigits: 2 }).format(v || 0);
 
+/** Texto seguro para nombre de archivo (un cliente "A/B Ltda." rompía la descarga). */
+export const nombreArchivo = (s: string) =>
+  (s || 'cliente').normalize('NFD').replace(/[̀-ͯ]/g, '')
+    .replace(/[\\/:*?"<>|]+/g, '-').replace(/\s+/g, '_').slice(0, 60);
+
 export const formatFolio = (num: number | null | undefined) =>
   num ? `IV-${num.toString().padStart(4, '0')}` : 'IV-0000';
 
-export const formatDate = (iso: string) =>
-  new Date(iso).toLocaleDateString('es-CL', { day: '2-digit', month: '2-digit', year: 'numeric' });
+/**
+ * Fecha dd-mm-aaaa. Las columnas DATE de Postgres llegan como "2026-09-24":
+ * `new Date("2026-09-24")` las interpreta en UTC y en Chile se mostraba el día
+ * ANTERIOR. Por eso esas fechas se construyen como fecha local.
+ */
+export const formatDate = (iso: string | null | undefined) => {
+  if (!iso) return '—';
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(iso);
+  const d = m ? new Date(+m[1], +m[2] - 1, +m[3]) : new Date(iso);
+  if (isNaN(d.getTime())) return '—';
+  return d.toLocaleDateString('es-CL', { day: '2-digit', month: '2-digit', year: 'numeric' });
+};
+
+/**
+ * Fecha LOCAL en formato YYYY-MM-DD. No usar `toISOString().slice(0,10)`: es
+ * UTC y en Chile, desde las ~21:00, devuelve la fecha de mañana.
+ */
+export const fechaLocal = (d: Date = new Date()) =>
+  `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+
+/**
+ * Suma días a una fecha y la devuelve como YYYY-MM-DD local. Acepta una fecha
+ * pura ("2026-09-24", se toma como local) o un timestamp ISO (created_at), que
+ * se convierte primero a la hora de Chile.
+ */
+export const sumarDias = (iso: string, dias: number) => {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(iso);
+  const d = m ? new Date(+m[1], +m[2] - 1, +m[3]) : new Date(iso);
+  d.setDate(d.getDate() + dias);
+  return fechaLocal(d);
+};
 
 export const formatPct = (v: number) =>
   `${(Math.round((v || 0) * 10) / 10).toLocaleString('es-CL')}%`;
@@ -504,6 +538,26 @@ export function normalizarItem(
     partidaId:         raw.partidaId,
     cantidadPorUnidad: raw.cantidadPorUnidad,
   };
+}
+
+/**
+ * Convierte costo y precio de los ítems entre CLP y UF usando el valor de la UF.
+ * Preserva el valor económico (convierte montos, no recalcula márgenes): así un
+ * ítem con solo precio (sin costo) no queda en cero. El costo interno en UF se
+ * guarda con 4 decimales para no perder precisión al volver a pesos; el precio
+ * de venta se redondea según la moneda destino (UF 2 decimales, CLP entero).
+ */
+export function convertirItemsMoneda(
+  items: CotizacionItem[], de: Moneda, a: Moneda, valorUF: number,
+): CotizacionItem[] {
+  if (de === a || !(valorUF > 0)) return items;
+  const f = a === 'UF' ? 1 / valorUF : valorUF;
+  const costoRed = (v: number) => (a === 'UF' ? Math.round(v * 10000) / 10000 : Math.round(v));
+  return items.map(it => ({
+    ...it,
+    costo:  costoRed((it.costo || 0) * f),
+    precio: redondearMoneda((it.precio || 0) * f, a),
+  }));
 }
 
 /** Aplica los supuestos globales a todos los ítems y recalcula sus precios. */

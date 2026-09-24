@@ -141,7 +141,8 @@ export const SISTEMAS_ELEC = ['Monofásico', 'Trifásico', 'Bifásico'];
 
 export const emptyLevantamiento = (): LevantamientoData => ({
   cliente_nombre:'', empresa:'', direccion:'',
-  fecha: new Date().toISOString().slice(0,10),
+  // Fecha LOCAL (toISOString es UTC: de noche en Chile daba el día siguiente).
+  fecha: (d => `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`)(new Date()),
   hora: new Date().toTimeString().slice(0,5),
   contacto:'', telefono:'', correo:'', tecnico:'',
   tipo_proyecto:'', obs_generales:'',

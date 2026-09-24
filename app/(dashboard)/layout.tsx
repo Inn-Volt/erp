@@ -9,6 +9,7 @@ import {
 import { useRouter, usePathname } from 'next/navigation';
 import { useAuth } from '@/hooks/useAuth';
 import { useToastProvider } from '@/hooks/useToast';
+import { confirmarSalida } from '@/hooks/useSinGuardar';
 import ToastContainer from '@/components/ToastContainer';
 import ThemeToggle from '@/components/ThemeToggle';
 import { LogoImg } from '@/components/Logo';
@@ -85,7 +86,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       (exactPaths.includes(path) && pathname === path);
     return (
       <button
-        onClick={() => router.push(path)}
+        onClick={() => { if (pathname !== path && !confirmarSalida()) return; router.push(path); }}
         title={compact ? name : undefined}
         style={{
           width: '100%', display: 'flex', alignItems: 'center',
@@ -107,7 +108,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
   const Sidebar = ({ big = false, compact = false }: { big?: boolean; compact?: boolean }) => (
     <>
-      <button onClick={() => router.push('/dashboard')} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: compact ? '1.1rem 0' : '1.25rem 1.1rem 1rem', display: 'flex', alignItems: 'center', justifyContent: 'center', width: '100%' }}>
+      <button onClick={() => { if (confirmarSalida()) router.push('/dashboard'); }} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: compact ? '1.1rem 0' : '1.25rem 1.1rem 1rem', display: 'flex', alignItems: 'center', justifyContent: 'center', width: '100%' }}>
         {compact ? <Mark /> : <Logo height={big ? 46 : 40} />}
       </button>
       {!compact && <p style={{ padding: '0.5rem 1.1rem 0.4rem', fontSize: '0.68rem', color: 'var(--faint)', fontWeight: 500, letterSpacing: '0.06em', textTransform: 'uppercase' }}>Principal</p>}
@@ -126,7 +127,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
             </div>
           </div>
         )}
-        <button onClick={logout} title={compact ? 'Cerrar sesión' : undefined} className="btn btn-ghost btn-sm" style={{ width: '100%', justifyContent: 'center' }}>
+        <button onClick={() => { if (confirmarSalida()) logout(); }} title={compact ? 'Cerrar sesión' : undefined} className="btn btn-ghost btn-sm" style={{ width: '100%', justifyContent: 'center' }}>
           <LogOut size={14} /> {!compact && 'Cerrar sesión'}
         </button>
       </div>

@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { Save, Printer, ArrowLeft, AlertTriangle, CheckCircle, FileDown } from 'lucide-react';
+import { Save, Printer, ArrowLeft, AlertTriangle, CheckCircle, FileDown, FileText, Loader2 } from 'lucide-react';
 import { levantamientosService } from '@/services/levantamientos';
 import { clientesService } from '@/services/clientes';
 import type { Cliente } from '@/types';
@@ -11,10 +11,12 @@ import {
   emptyLevantamiento, CHECKLIST_CRITICO, TIPOS_PROYECTO, TIPOS_EMPALME,
   ESTADOS_GEN, TIPOS_TABLERO, TIPOS_CABLE, TIPOS_CANAL, TIPOS_LUM, SISTEMAS_ELEC,
 } from '@/types/levantamiento';
-import { newId } from '@/utils';
+import { newId, nombreArchivo } from '@/utils';
+import { useToast } from '@/hooks/useToast';
 
 // Importación del componente de renderizado de PDF estructurado analizado previamente
-import { PDFDownloadLink } from '@react-pdf/renderer';
+import { pdf } from '@react-pdf/renderer';
+import { saveAs } from 'file-saver';
 import LevantamientoPDF from '@/components/pdf/LevantamientoPDF';
 
 // ─── FIELD COMPONENTS ────────────────────────────────────────────────────────
@@ -202,6 +204,10 @@ export default function LevantamientoPage() {
   const [clientes, setClientes] = useState<Cliente[]>([]);
   const [clienteId,setClienteId]= useState('');
   const [estado,   setEstado]   = useState<EstadoLevantamiento>('Borrador');
+  const [folio,    setFolio]    = useState<number | null>(null);
+  const [genPDF,   setGenPDF]   = useState(false);
+  const [yendoCot, setYendoCot] = useState(false);
+  const { success, error: toastError } = useToast();
   const [saving,   setSaving]   = useState(false);
   const [saved,    setSaved]    = useState(false);
   const [activeNav,setActiveNav]= useState('s1');
@@ -213,7 +219,7 @@ export default function LevantamientoPage() {
 
   useEffect(() => {
     if (editId) levantamientosService.getById(editId).then(lev => {
-      if (lev) { setData(lev.data); setClienteId(lev.cliente_id || ''); setEstado(lev.estado); }
+      if (lev) { setData(lev.data); setClienteId(lev.cliente_id || ''); setEstado(lev.estado); setFolio(lev.folio); }
     });
   }, [editId]);
 
@@ -224,19 +230,53 @@ export default function LevantamientoPage() {
     return () => obs.disconnect();
   }, []);
 
-  const handleSave = async () => {
+  /** Guarda y devuelve el id (null si falló). */
+  const guardar = async (): Promise<string | null> => {
     setSaving(true);
     try {
       const payload = { cliente_id: clienteId || null, data, estado };
+      let id = editId || null;
       if (editId) await levantamientosService.update(editId, payload);
       else {
         const created = await levantamientosService.create(payload);
+        id = created.id;
+        setFolio(created.folio);
         router.replace(`/levantamiento?id=${created.id}`);
       }
       setSaved(true); setTimeout(() => setSaved(false), 2500);
-    } catch { alert('Error al guardar');
+      return id;
+    } catch (e) {
+      toastError('Error al guardar el levantamiento: ' + (e instanceof Error ? e.message : ''));
+      return null;
+    } finally {
+      setSaving(false);
     }
-    setSaving(false);
+  };
+  const handleSave = async () => { if (await guardar()) success('Levantamiento guardado'); };
+
+  /** Levantamiento → Cotización: guarda y abre el cotizador con cliente y alcance precargados. */
+  const cotizar = async () => {
+    if (!clienteId) { toastError('Asocia un cliente al levantamiento antes de cotizar.'); return; }
+    if (!data.alcance_trabajos?.trim() && !data.alcance_mejoras?.trim()) {
+      if (!confirm('La sección "Alcance" está vacía: la cotización no tendrá descripción precargada. ¿Continuar?')) return;
+    }
+    setYendoCot(true);
+    const id = await guardar();
+    if (id) router.push(`/cotizador?levantamiento=${id}`);
+    else setYendoCot(false);
+  };
+
+  /** PDF bajo demanda. Antes <PDFDownloadLink> regeneraba el PDF en cada tecla. */
+  const descargarPDF = async () => {
+    setGenPDF(true);
+    try {
+      const blob = await pdf(<LevantamientoPDF data={data} estado={estado} />).toBlob();
+      saveAs(blob, `Levantamiento_${folio ? `LV-${String(folio).padStart(4, '0')}_` : ''}${nombreArchivo(data.cliente_nombre || 'sin_nombre')}.pdf`);
+    } catch (e) {
+      toastError('No se pudo generar el PDF: ' + (e instanceof Error ? e.message : ''));
+    } finally {
+      setGenPDF(false);
+    }
   };
 
   // Tables helpers
@@ -439,7 +479,7 @@ export default function LevantamientoPage() {
             <p style={{ fontSize:'8pt', color:'#666', letterSpacing:'0.15em', textTransform:'uppercase' }}>Levantamiento Técnico Eléctrico</p>
           </div>
           <div style={{ textAlign:'right', fontSize:'8pt', color:'#555', lineHeight:1.6 }}>
-            <p>Folio: LV-{data.cliente_nombre ? '—' : '—'}</p>
+            <p>Folio: {folio ? `LV-${String(folio).padStart(4, '0')}` : 'Borrador'}</p>
             <p>Fecha: {data.fecha}</p>
             <p>Técnico: {data.tecnico || '—'}</p>
             <p>Estado: {estado}</p>
@@ -477,20 +517,13 @@ export default function LevantamientoPage() {
               <Printer size={13} /> Imprimir
             </button>
             
-            {/* Componente Asíncrono para descarga directa estructurada de PDF */}
-            <PDFDownloadLink 
-              document={<LevantamientoPDF data={data} estado={estado} />}
-              fileName={`Levantamiento_${data.cliente_nombre || 'Sin_Nombre'}.pdf`}
-              className="btn btn-primary btn-sm"
-              style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}
-            >
-              {({ loading }) => (
-                <>
-                  <FileDown size={13} />
-                  {loading ? 'Generando...' : 'Descargar PDF'}
-                </>
-              )}
-            </PDFDownloadLink>
+            <button onClick={descargarPDF} disabled={genPDF} className="btn btn-ghost btn-sm">
+              {genPDF ? <Loader2 size={13} className="iv-spin" /> : <FileDown size={13} />}
+              {genPDF ? 'Generando…' : 'Descargar PDF'}
+            </button>
+            <button onClick={cotizar} disabled={yendoCot || saving} className="btn btn-primary btn-sm" title="Guardar y crear la cotización con el cliente y el alcance de este levantamiento">
+              {yendoCot ? <Loader2 size={13} className="iv-spin" /> : <FileText size={13} />} Cotizar
+            </button>
           </div>
         </div>
 
@@ -755,20 +788,13 @@ export default function LevantamientoPage() {
             <Printer size={14} /> Vista de Impresión (CSS)
           </button>
           
-          {/* Duplicado del componente de descarga en la botonera inferior */}
-          <PDFDownloadLink 
-            document={<LevantamientoPDF data={data} estado={estado} />} 
-            fileName={`Levantamiento_${data.cliente_nombre || 'Sin_Nombre'}.pdf`}
-            className="btn btn-ghost btn-sm"
-            style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}
-          >
-            {({ loading }) => (
-              <>
-                <FileDown size={14} />
-                {loading ? 'Generando...' : 'Exportar PDF Estructurado'}
-              </>
-            )}
-          </PDFDownloadLink>
+          <button onClick={descargarPDF} disabled={genPDF} className="btn btn-ghost btn-sm">
+            {genPDF ? <Loader2 size={14} className="iv-spin" /> : <FileDown size={14} />}
+            {genPDF ? 'Generando…' : 'Exportar PDF'}
+          </button>
+          <button onClick={cotizar} disabled={yendoCot || saving} className="btn btn-primary btn-sm">
+            {yendoCot ? <Loader2 size={14} className="iv-spin" /> : <FileText size={14} />} Cotizar este levantamiento
+          </button>
         </div>
 
         {/* Saved toast */}

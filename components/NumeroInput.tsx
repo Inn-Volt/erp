@@ -3,11 +3,16 @@
 /**
  * NumeroInput
  * ─────────────────────────────────────────────────────────────────────────────
- * Input numérico que MUESTRA separador de miles chileno (60000 → "60.000").
- * Un <input type="number"> no admite el punto, así que usa type="text":
- *   · al salir del campo se ve formateado ("60.000")
- *   · al escribir se ven los dígitos limpios (sin saltos de cursor)
- * Admite prefijo ($) y sufijo (%).
+ * Input numérico pensado para Chile (y para el teclado del celular):
+ *   · type="text" + inputMode="decimal": abre el teclado numérico en iPhone y
+ *     Android y acepta la COMA decimal ("2,5"), que un <input type="number">
+ *     rechaza (dejaba el valor en 0).
+ *   · Mientras escribes se conserva EXACTAMENTE tu texto ("1,25", "45.000"):
+ *     antes se reconstruía desde el número y la coma o el punto desaparecían,
+ *     lo que impedía ingresar decimales (UF, metros).
+ *   · Al salir del campo se muestra formateado ("45.000", "$45.000", "UF 1,25").
+ *   · Al entrar se selecciona el contenido: tipeas y reemplazas, sin borrar.
+ * Admite prefijo ($) y sufijo (%), y un formateador propio para la vista.
  */
 
 import { useState } from 'react';
@@ -25,15 +30,22 @@ interface Props {
   min?: number;
   max?: number;
   ariaLabel?: string;
+  /** Cómo se muestra el valor cuando el campo NO tiene foco (por defecto "45.000"). */
+  formatear?: (v: number) => string;
 }
 
+/** Número → texto editable en formato chileno (1.25 → "1,25"; 45000 → "45000"). */
+const aTextoEditable = (n: number) => (n ? String(n).replace('.', ',') : '');
+
 export default function NumeroInput({
-  value, onChange, prefijo, sufijo, placeholder, style, className, title, min, max, ariaLabel,
+  value, onChange, prefijo, sufijo, placeholder, style, className, title, min, max, ariaLabel, formatear,
 }: Props) {
   const [foco, setFoco] = useState(false);
+  const [raw, setRaw] = useState('');
+
   const display = foco
-    ? (value ? String(value) : '')
-    : (value ? formatMiles(value) : '');
+    ? raw
+    : (value ? (formatear ? formatear(value) : formatMiles(value)) : '');
 
   const adorno: React.CSSProperties = {
     position: 'absolute', top: '50%', transform: 'translateY(-50%)',
@@ -46,14 +58,22 @@ export default function NumeroInput({
       <input
         type="text"
         inputMode="decimal"
+        autoComplete="off"
         value={display}
         placeholder={placeholder}
         title={title}
         aria-label={ariaLabel}
-        onFocus={() => setFoco(true)}
+        onFocus={e => {
+          setRaw(aTextoEditable(value));
+          setFoco(true);
+          const el = e.currentTarget;
+          requestAnimationFrame(() => { try { el.select(); } catch { /* sin selección */ } });
+        }}
         onBlur={() => setFoco(false)}
         onChange={e => {
-          let n = cleanNumber(e.target.value);
+          const texto = e.target.value;
+          setRaw(texto);
+          let n = cleanNumber(texto);
           if (typeof min === 'number') n = Math.max(min, n);
           if (typeof max === 'number') n = Math.min(max, n);
           onChange(n);

@@ -11,7 +11,7 @@ import { saveAs } from 'file-saver';
 
 import { cotizacionesService } from '@/services/cotizaciones';
 import { useToast } from '@/hooks/useToast';
-import { formatCLP, formatMoneda, formatFolio, formatDate, calcularTotals, normalizarItem } from '@/utils';
+import { formatCLP, formatMoneda, formatFolio, formatDate, calcularTotals, normalizarItem, nombreArchivo } from '@/utils';
 import type { Cotizacion, EstadoCotizacion, Moneda } from '@/types';
 import { ESTADO_COLORS, ESTADOS_TODOS, SUPUESTOS_DEFAULT } from '@/types';
 import PresupuestoPDF from '@/components/pdf/PresupuestoPDF';
@@ -139,9 +139,10 @@ const [empresas, setEmpresas] = useState<EmpresaInfo[]>([]);
           valorUF={cot.valor_uf || 0}
           partidas={cot.partidas || []}
           mostrarDetalle={cot.mostrar_detalle || false}
+          fechaEmision={cot.created_at}
         />
       ).toBlob();
-      saveAs(blob, `Cotizacion_${formatFolio(cot.folio)}_${cot.clientes.nombre_cliente}.pdf`);
+      saveAs(blob, `Cotizacion_${formatFolio(cot.folio)}_${nombreArchivo(cot.clientes.nombre_cliente)}.pdf`);
     } catch (e) {
       console.error(e);
       toastError('Error al generar PDF');
@@ -171,7 +172,8 @@ const [empresas, setEmpresas] = useState<EmpresaInfo[]>([]);
       let va: string | number = 0, vb: string | number = 0;
       if (sortKey === 'folio')   { va = a.folio; vb = b.folio; }
       if (sortKey === 'cliente') { va = a.clientes?.nombre_cliente || ''; vb = b.clientes?.nombre_cliente || ''; }
-      if (sortKey === 'total')   { va = a.total; vb = b.total; }
+      // En pesos: una cotización de 150 UF no debe quedar "debajo" de una de $300.000.
+      if (sortKey === 'total')   { va = a.total_clp ?? a.total; vb = b.total_clp ?? b.total; }
       if (sortKey === 'fecha')   { va = a.created_at; vb = b.created_at; }
       if (sortKey === 'estado')  { va = a.estado; vb = b.estado; }
       if (va < vb) return sortDir === 'asc' ? -1 : 1;
@@ -326,7 +328,7 @@ const [empresas, setEmpresas] = useState<EmpresaInfo[]>([]);
               {filtered.map(cot => {
                 const ec = ESTADO_COLORS[cot.estado];
                 return (
-                  <tr key={cot.id} style={{ cursor: 'pointer' }}>
+                  <tr key={cot.id} style={{ cursor: 'pointer' }} onClick={() => router.push(`/cotizador?edit=${cot.id}`)} title="Abrir cotización">
                     <td>
                       <span style={{ fontFamily: 'var(--font-display)', fontWeight: 900, fontSize: '0.85rem', color: 'var(--y)' }}>
                         {formatFolio(cot.folio)}
@@ -349,7 +351,7 @@ const [empresas, setEmpresas] = useState<EmpresaInfo[]>([]);
                       {formatDate(cot.created_at)}
                     </td>
                     <td>
-                      <div style={{ display: 'inline-flex', alignItems: 'center', gap: '0.4rem', background: ec.bg, border: `1px solid ${ec.color}55`, borderRadius: 'var(--r-sm)', padding: '0.2rem 0.5rem' }}>
+                      <div onClick={e => e.stopPropagation()} style={{ display: 'inline-flex', alignItems: 'center', gap: '0.4rem', background: ec.bg, border: `1px solid ${ec.color}55`, borderRadius: 'var(--r-sm)', padding: '0.2rem 0.5rem' }}>
                         <span style={{ width: 7, height: 7, borderRadius: '50%', background: ec.color, flexShrink: 0 }} />
                         <select
                           value={cot.estado}
@@ -371,7 +373,7 @@ const [empresas, setEmpresas] = useState<EmpresaInfo[]>([]);
                       {formatMoneda(cot.total, (cot.moneda as Moneda) || 'CLP')}
                     </td>
                     <td>
-                      <div style={{ display: 'flex', gap: '0.3rem', justifyContent: 'center' }}>
+                      <div onClick={e => e.stopPropagation()} style={{ display: 'flex', gap: '0.3rem', justifyContent: 'center' }}>
                         <button
                           onClick={() => router.push(`/cotizador?edit=${cot.id}`)}
                           title="Editar"

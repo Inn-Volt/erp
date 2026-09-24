@@ -282,9 +282,18 @@ export interface ConfiguracionEmpresa {
 
 export interface KpiData {
   total_cotizaciones: number;
+  /** Solo ventas concretadas (Aceptado/Realizado/Entregado), en CLP. */
   venta_acumulada: number;
   pendiente_pipeline: number;
   aceptadas: number;
+  /** Ventas concretadas cuya cotización se emitió este mes (CLP). */
+  venta_mes?: number;
+  rechazadas?: number;
+  pendientes?: number;
+  /** % de cierre sobre cotizaciones ya decididas (aceptadas / (aceptadas + rechazadas)). */
+  tasa_cierre?: number | null;
+  /** Monto promedio de las ventas concretadas (CLP). */
+  ticket_promedio?: number;
 }
 
 // ─── Utilidades UI ────────────────────────────────────────────────────────────

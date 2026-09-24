@@ -19,16 +19,18 @@ import {
 import { TIPO_SERVICIO_OPCIONES } from '@/types/solicitud';
 import type { TipoServicio } from '@/types/solicitud';
 import { googleCalendarUrl, descargarICS, type EventoCalendario } from '@/lib/calendario';
+import { fechaLocal } from '@/utils';
 
 // ─── Utilidades de fecha ──────────────────────────────────────────────────────
 const DIAS = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'];
-const hoyStr = () => new Date().toISOString().slice(0, 10);
+// Fecha LOCAL: toISOString() es UTC y de noche en Chile ya da "mañana".
+const hoyStr = () => fechaLocal();
 
 function etiquetaDia(fecha: string): string {
   const hoy = hoyStr();
   const d = new Date(fecha + 'T00:00:00');
   const man = new Date(); man.setDate(man.getDate() + 1);
-  const manStr = man.toISOString().slice(0, 10);
+  const manStr = fechaLocal(man);
   if (fecha === hoy) return 'Hoy';
   if (fecha === manStr) return 'Mañana';
   return `${DIAS[d.getDay()]} ${d.getDate()}/${d.getMonth() + 1}`;
@@ -298,7 +300,7 @@ function AgendaContent() {
   }, [abrirNueva, loading]);
 
   const hoy = hoyStr();
-  const finSemana = (() => { const d = new Date(); d.setDate(d.getDate() + 7); return d.toISOString().slice(0, 10); })();
+  const finSemana = (() => { const d = new Date(); d.setDate(d.getDate() + 7); return fechaLocal(d); })();
 
   const filtradas = citas.filter(c => {
     if (fResp && c.responsable !== fResp) return false;

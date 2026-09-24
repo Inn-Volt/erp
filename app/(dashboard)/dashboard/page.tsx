@@ -2,12 +2,17 @@
 
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { FileText, Users, TrendingUp, Clock, Plus, ChevronRight, Zap } from 'lucide-react';
+import { FileText, Users, TrendingUp, Clock, Plus, ChevronRight, Zap, Inbox, Calendar, Target } from 'lucide-react';
 import { cotizacionesService } from '@/services/cotizaciones';
 import { clientesService } from '@/services/clientes';
-import type { KpiData, Cotizacion } from '@/types';
+import { solicitudesService } from '@/services/solicitudes';
+import { agendaService } from '@/services/agenda';
+import type { KpiData, Cotizacion, Moneda } from '@/types';
 import { ESTADO_COLORS, INNVOLT_INFO } from '@/types';
-import { formatCLP, formatFolio, formatDate } from '@/utils';
+import { formatCLP, formatMoneda, formatFolio, formatDate, fechaLocal } from '@/utils';
+
+/** Embudo comercial: cuántos casos hay en cada etapa del flujo. */
+interface Embudo { solicitudes: number | null; citas: number | null; pendientes: number; ventas: number; }
 
 function KpiCard({ label, value, sub, icon: Icon, accent }: {
   label: string; value: string; sub?: string;
@@ -39,17 +44,29 @@ export default function DashboardPage() {
   const [kpis, setKpis] = useState<KpiData | null>(null);
   const [recientes, setRecientes] = useState<Cotizacion[]>([]);
   const [totalClientes, setTotalClientes] = useState(0);
+  const [embudo, setEmbudo] = useState<Embudo | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    // Solicitudes y agenda son módulos nuevos: si su tabla aún no existe, el
+    // embudo muestra "—" en esa etapa sin romper el dashboard.
+    const solicitudesAbiertas = solicitudesService.getAll()
+      .then(ss => ss.filter(x => !['CERRADA', 'CANCELADA', 'NO_VIABLE', 'COTIZACION_GENERADA'].includes(x.estado)).length)
+      .catch(() => null);
+    const citasProximas = agendaService.getAll()
+      .then(citas => { const hoy = fechaLocal(); return citas.filter(a => a.fecha >= hoy && !['Cancelada', 'Realizada'].includes(a.estado)).length; })
+      .catch(() => null);
     Promise.all([
       cotizacionesService.getKpis(),
       cotizacionesService.getRecientes(6),
       clientesService.getAll(),
-    ]).then(([k, r, c]) => {
+      solicitudesAbiertas,
+      citasProximas,
+    ]).then(([k, r, c, sol, cit]) => {
       setKpis(k);
       setRecientes(r);
       setTotalClientes(c.length);
+      setEmbudo({ solicitudes: sol, citas: cit, pendientes: k.pendientes || 0, ventas: k.aceptadas || 0 });
     }).catch(err => {
       // Sin este catch, un error de red dejaba el dashboard cargando para siempre
       console.error('Error al cargar el dashboard:', err);
@@ -81,13 +98,37 @@ export default function DashboardPage() {
           Array.from({ length: 4 }).map((_, i) => <Skeleton key={i} h={110} />)
         ) : (
           <>
-            <KpiCard label="Total cotizaciones" value={String(kpis?.total_cotizaciones || 0)} icon={FileText} />
-            <KpiCard label="Venta acumulada" value={formatCLP(kpis?.venta_acumulada || 0)} sub="Excl. rechazadas" icon={TrendingUp} accent="var(--success)" />
-            <KpiCard label="Pipeline pendiente" value={formatCLP(kpis?.pendiente_pipeline || 0)} sub="En espera de respuesta" icon={Clock} accent="var(--orange)" />
-            <KpiCard label="Trabajos aceptados" value={String(kpis?.aceptadas || 0)} sub="Aceptado + Realizado + Entregado" icon={Zap} accent="var(--info)" />
+            <KpiCard label="Ventas del mes" value={formatCLP(kpis?.venta_mes || 0)} sub={`Acumulado: ${formatCLP(kpis?.venta_acumulada || 0)}`} icon={TrendingUp} accent="var(--success)" />
+            <KpiCard label="Pipeline pendiente" value={formatCLP(kpis?.pendiente_pipeline || 0)} sub={`${kpis?.pendientes || 0} cotizaciones esperando respuesta`} icon={Clock} accent="var(--orange)" />
+            <KpiCard label="Tasa de cierre" value={kpis?.tasa_cierre != null ? `${kpis.tasa_cierre}%` : '—'} sub={`${kpis?.aceptadas || 0} ganadas · ${kpis?.rechazadas || 0} perdidas`} icon={Target} accent="var(--info)" />
+            <KpiCard label="Ticket promedio" value={formatCLP(kpis?.ticket_promedio || 0)} sub={`${kpis?.total_cotizaciones || 0} cotizaciones emitidas`} icon={Zap} />
           </>
         )}
       </div>
+
+      {/* Embudo comercial: del requerimiento a la venta */}
+      {!loading && embudo && (
+        <div className="panel-y" style={{ padding: '1rem 1.25rem', marginBottom: '2px' }}>
+          <p className="section-label" style={{ marginBottom: '0.75rem' }}><Target size={12} /> Flujo comercial</p>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: '6px' }}>
+            {[
+              { label: 'Solicitudes abiertas',    v: embudo.solicitudes, path: '/solicitudes',         icon: Inbox,      color: 'var(--info)' },
+              { label: 'Visitas agendadas',       v: embudo.citas,       path: '/agenda',              icon: Calendar,   color: 'var(--y)' },
+              { label: 'Cotizaciones pendientes', v: embudo.pendientes,  path: '/cotizador/historial', icon: Clock,      color: 'var(--orange)' },
+              { label: 'Ventas concretadas',      v: embudo.ventas,      path: '/cotizador/historial', icon: TrendingUp, color: 'var(--success)' },
+            ].map((e, i) => (
+              <button key={e.label} onClick={() => router.push(e.path)}
+                style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', padding: '0.7rem 0.8rem', background: 'var(--bg3)', border: '1px solid var(--border2)', borderRadius: 'var(--r)', cursor: 'pointer', textAlign: 'left' }}>
+                <e.icon size={16} color={e.color} style={{ flexShrink: 0 }} />
+                <span style={{ minWidth: 0 }}>
+                  <span style={{ display: 'block', fontFamily: 'var(--font-display)', fontWeight: 900, fontSize: '1.2rem', color: 'var(--text)', lineHeight: 1 }}>{e.v ?? '—'}</span>
+                  <span style={{ display: 'block', fontSize: '0.7rem', color: 'var(--muted)', marginTop: 2 }}>{i + 1}. {e.label}</span>
+                </span>
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Grid: recientes + info */}
       <div className="dashboard-main-grid">
@@ -136,7 +177,7 @@ export default function DashboardPage() {
                     </div>
                     <span style={{ color: ec.color, background: ec.bg, ...badgeStyle }}>{c.estado}</span>
                     <span style={{ fontFamily: 'var(--font-display)', fontWeight: 700, fontSize: '0.85rem', color: 'var(--text)', minWidth: 90, textAlign: 'right' }}>
-                      {formatCLP(c.total)}
+                      {formatMoneda(c.total, (c.moneda as Moneda) || 'CLP')}
                     </span>
                     <ChevronRight size={13} color="var(--muted)" />
                   </div>
@@ -172,8 +213,10 @@ export default function DashboardPage() {
             <p className="section-label" style={{ marginBottom: '1rem' }}><Plus size={12} /> Acciones rápidas</p>
             <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
               {[
-                { label: 'Nueva cotización',    path: '/cotizador',                icon: FileText      },
+                { label: 'Nueva solicitud',     path: '/solicitudes',              icon: Inbox         },
+                { label: 'Agendar visita',      path: '/agenda?nueva=1',           icon: Calendar      },
                 { label: 'Nuevo levantamiento', path: '/levantamiento',            icon: FileText      },
+                { label: 'Nueva cotización',    path: '/cotizador',                icon: FileText      },
                 { label: 'Ver historial',        path: '/cotizador/historial',      icon: Clock         },
                 { label: 'Agregar cliente',      path: '/clientes',                 icon: Users         },
               ].map(({ label, path, icon: Icon }) => (
@@ -195,9 +238,7 @@ export default function DashboardPage() {
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '0.5rem 0' }}>
                 <span style={{ fontSize: '0.82rem', color: 'var(--muted)' }}>Tasa de cierre</span>
                 <span style={{ fontFamily: 'var(--font-display)', fontWeight: 900, color: 'var(--success)' }}>
-                  {kpis && kpis.total_cotizaciones > 0
-                    ? `${Math.round((kpis.aceptadas / kpis.total_cotizaciones) * 100)}%`
-                    : '—'}
+                  {kpis?.tasa_cierre != null ? `${kpis.tasa_cierre}%` : '—'}
                 </span>
               </div>
             </div>

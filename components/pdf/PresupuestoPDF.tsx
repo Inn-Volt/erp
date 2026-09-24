@@ -3,7 +3,7 @@ import {
   Document, Page, Text, View, StyleSheet, Image,
 } from '@react-pdf/renderer';
 import type { CotizacionItem, Cliente, Partida } from '@/types';
-import { boldPorLinea, type Totals } from '@/utils';
+import { boldPorLinea, formatDate, fechaLocal, sumarDias, type Totals } from '@/utils';
 
 /** Logo con tinta oscura: es el que contrasta sobre el papel blanco del PDF. */
 const LOGO_PDF = '/InnVolt-transparente-claro.png';
@@ -27,10 +27,6 @@ const lineasClausula = (texto?: string): string[] =>
     .split('\n')
     .map(l => l.replace(/\s+$/, ''))
     .filter(l => l.trim() !== '');
-
-/** Sufijo con el descuento promedio de una categoría (ej. " (desc. prom. 12%)"). */
-const descTxt = (promedio: number): string =>
-  promedio > 0 ? ` (desc. prom. ${Math.round(promedio)}%)` : '';
 
 // ─── Paleta INNVOLT (sobria: negro + blanco + gris, amarillo como único acento) ─
 const INK      = '#1a1a1a';  // texto principal / bloques oscuros
@@ -136,14 +132,47 @@ const s = StyleSheet.create({
   catBadge: { fontSize: 5.5, fontFamily: 'Helvetica-Bold', color: FAINT, letterSpacing: 1, marginTop: 2 },
 
   colNum: { width: 18, textAlign: 'center' },
-  colServicio: { flex: 1 },
-  colDesc: { width: 96 },
-  colQty: { width: 36, textAlign: 'center' },
-  colValor: { width: 64, textAlign: 'right' },
-  colTotal: { width: 68, textAlign: 'right' },
+  colServicio: { flex: 1, paddingRight: 6 },
+  colUnidad: { width: 44, textAlign: 'center' },
+  colQty: { width: 44, textAlign: 'center' },
+  colValor: { width: 70, textAlign: 'right' },
+  colTotal: { width: 76, textAlign: 'right' },
+
+  // ── Inversión total (página 1): lo primero que mira el cliente ──
+  inversionBox: {
+    margin: '14 32 0 32',
+    flexDirection: 'row',
+    borderRadius: 6,
+    overflow: 'hidden',
+    borderWidth: 1,
+    borderColor: DARK,
+  },
+  inversionLeft: { flex: 1, backgroundColor: DARK, padding: '12 16', justifyContent: 'center' },
+  inversionLabel: { fontSize: 7, fontFamily: 'Helvetica-Bold', color: SPARK, letterSpacing: 2.5, marginBottom: 4 },
+  inversionTotal: { fontSize: 20, fontFamily: 'Helvetica-Bold', color: WHITE },
+  inversionSub: { fontSize: 7.5, color: '#cfcfcf', marginTop: 3 },
+  inversionRight: { width: 190, backgroundColor: TINT, padding: '10 14', justifyContent: 'center' },
+  inversionKey: { fontSize: 6.5, color: FAINT, letterSpacing: 0.5, textTransform: 'uppercase' },
+  inversionVal: { fontSize: 8.5, color: INK, fontFamily: 'Helvetica-Bold', marginBottom: 5 },
 
   // ── Totales ──
-  totalesBox: { marginTop: 12, flexDirection: 'row', justifyContent: 'flex-end' },
+  totalesBox: { marginTop: 12, flexDirection: 'row', justifyContent: 'flex-end', alignItems: 'flex-start' },
+  composicionBox: { flex: 1, marginRight: 18, paddingTop: 2 },
+  composicionTitulo: { fontSize: 6.5, fontFamily: 'Helvetica-Bold', color: FAINT, letterSpacing: 1.5, marginBottom: 4 },
+  composicionRow: { flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 2.5, borderBottomWidth: 0.5, borderBottomColor: LINE },
+  composicionLabel: { fontSize: 7, color: MUTED },
+  composicionVal: { fontSize: 7, color: INK },
+
+  // ── Datos de pago / aceptación (página final) ──
+  pagoBox: {
+    margin: '16 32 0 32', padding: '10 14', borderRadius: 6,
+    borderWidth: 1, borderColor: LINE, flexDirection: 'row',
+  },
+  pagoCol: { flex: 1, paddingRight: 10 },
+  pagoTitulo: { fontSize: 7, fontFamily: 'Helvetica-Bold', color: INK, letterSpacing: 2, marginBottom: 6 },
+  pagoKey: { fontSize: 6.5, color: FAINT, textTransform: 'uppercase', letterSpacing: 0.5 },
+  pagoVal: { fontSize: 8, color: INK, fontFamily: 'Helvetica-Bold', marginBottom: 4 },
+  aceptaText: { fontSize: 7.5, color: MUTED, lineHeight: 1.5 },
   totalesInner: { width: 240, borderWidth: 1, borderColor: LINE, borderRadius: 6, overflow: 'hidden' },
   totalesRow: {
     flexDirection: 'row',
@@ -260,6 +289,10 @@ const fmtCLP = (n: number) =>
     style: 'currency', currency: 'CLP', minimumFractionDigits: 0,
   }).format(n || 0);
 
+/** Valor de la UF en pesos con sus 2 decimales ("$39.485,65"). */
+const fmtValorUF = (n: number) =>
+  new Intl.NumberFormat('es-CL', { style: 'currency', currency: 'CLP', minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(n || 0);
+
 const fmtUFn = (n: number) =>
   `UF ${new Intl.NumberFormat('es-CL', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(n || 0)}`;
 
@@ -267,10 +300,20 @@ type Moneda = 'CLP' | 'UF';
 /** Devuelve un formateador según la moneda de la cotización. */
 const fmtMoneda = (moneda: Moneda) => (n: number) => (moneda === 'UF' ? fmtUFn(n) : fmtCLP(n));
 
-const today = () =>
-  new Date().toLocaleDateString('es-CL', {
-    day: '2-digit', month: '2-digit', year: 'numeric',
-  });
+/** Cantidad legible (máx. 2 decimales, formato chileno): 0.3333 → "0,33". */
+const fmtCant = (n: number) =>
+  new Intl.NumberFormat('es-CL', { maximumFractionDigits: 2 }).format(n || 0);
+
+/**
+ * Días de validez de la oferta. Se leen de las condiciones comerciales
+ * ("Validez oferta: 15 días") para que la fecha del PDF y el texto nunca se
+ * contradigan. Si no se indica, 15 días.
+ */
+const diasValidez = (condiciones: string): number => {
+  const m = /validez[^\d\n]{0,40}(\d{1,3})\s*d[ií]as/i.exec(condiciones || '');
+  const n = m ? parseInt(m[1], 10) : NaN;
+  return n > 0 && n <= 365 ? n : 15;
+};
 
 /** Divide un texto en segmentos según **negrita** (marcadores estilo markdown). */
 const parseInline = (text: string): { t: string; b: boolean }[] => {
@@ -375,6 +418,12 @@ interface Props {
   partidas?: Partida[];
   /** Si true, dentro de cada partida se listan sus materiales. */
   mostrarDetalle?: boolean;
+  /**
+   * Fecha de emisión real (created_at de la cotización). Antes el PDF ponía
+   * SIEMPRE la fecha de hoy: una cotización de agosto descargada en septiembre
+   * salía con fecha de septiembre. null/undefined = hoy (cotización nueva).
+   */
+  fechaEmision?: string | null;
 }
 
 // ─── Componente fila de tabla (reutilizable) ──────────────────────────────────
@@ -398,10 +447,13 @@ function TablaFila({
       <Text style={[s.tableCell, s.colNum]}>{idx + 1}</Text>
       <View style={s.colServicio}>
         <Text style={s.tableCell}>{item.descripcion}</Text>
-        <Text style={s.catBadge}>{catLabel[item.categoria] || item.categoria}</Text>
+        <Text style={s.catBadge}>
+          {catLabel[item.categoria] || item.categoria}
+          {(item.descuento || 0) > 0 ? `  ·  DESCUENTO ${item.descuento}% (APLICADO EN EL TOTAL)` : ''}
+        </Text>
       </View>
-      <Text style={[s.tableCellMuted, s.colDesc]}>{item.unidad}</Text>
-      <Text style={[s.tableCell, s.colQty]}>{item.cantidad}</Text>
+      <Text style={[s.tableCellMuted, s.colUnidad]}>{item.unidad}</Text>
+      <Text style={[s.tableCell, s.colQty]}>{fmtCant(item.cantidad)}</Text>
       <Text style={[s.tableCell, s.colValor]}>{fmt(item.precio)}</Text>
       <Text style={[s.tableCell, s.colTotal]}>{fmt(subtotal)}</Text>
     </View>
@@ -425,8 +477,8 @@ function FilaPartida({ partida, bruto, idx, fmt }: {
           <Text style={[s.tableCellMuted, { marginTop: 2, lineHeight: 1.4 }]}>{partida.descripcion}</Text>
         ) : null}
       </View>
-      <Text style={[s.tableCellMuted, s.colDesc]}>{partida.unidad}</Text>
-      <Text style={[s.tableCell, s.colQty]}>{partida.cantidad}</Text>
+      <Text style={[s.tableCellMuted, s.colUnidad]}>{partida.unidad}</Text>
+      <Text style={[s.tableCell, s.colQty]}>{fmtCant(partida.cantidad)}</Text>
       <Text style={[s.tableCell, s.colValor]}>{fmt(unit)}</Text>
       <Text style={[s.tableCell, s.colTotal]}>{fmt(bruto)}</Text>
     </View>
@@ -441,8 +493,8 @@ function FilaDetalle({ item }: { item: CotizacionItem }) {
       <View style={s.colServicio}>
         <Text style={[s.tableCellMuted, { paddingLeft: 10 }]}>· {item.descripcion}</Text>
       </View>
-      <Text style={[s.tableCellMuted, s.colDesc]}>{item.unidad}</Text>
-      <Text style={[s.tableCellMuted, s.colQty]}>{item.cantidad}</Text>
+      <Text style={[s.tableCellMuted, s.colUnidad]}>{item.unidad}</Text>
+      <Text style={[s.tableCellMuted, s.colQty]}>{fmtCant(item.cantidad)}</Text>
       <Text style={[s.tableCellMuted, s.colValor]}> </Text>
       <Text style={[s.tableCellMuted, s.colTotal]}> </Text>
     </View>
@@ -454,19 +506,26 @@ export default function PresupuestoPDF({
   cliente, items, totals,
   folio, descripcionGeneral, garantia, condicionesComerciales,
   ocultarSuministros, empresa, moneda = 'CLP', valorUF = 0,
-  partidas = [], mostrarDetalle = false,
+  partidas = [], mostrarDetalle = false, fechaEmision,
 }: Props) {
 
   // Formateador de moneda de todo el documento (CLP o UF).
   const fmt = fmtMoneda(moneda);
   const monedaLabel = moneda === 'UF' ? 'Unidad de Fomento (UF)' : 'Peso Chileno (CLP)';
 
+  // Fechas: emisión real (o hoy si es nueva) y vigencia según las condiciones.
+  const emisionISO = fechaEmision || fechaLocal();
+  const validez = diasValidez(condicionesComerciales);
+  const fechaEmisionTxt = formatDate(emisionISO);
+  const validaHastaTxt = formatDate(sumarDias(emisionISO, validez));
+
   // Ítems sueltos (fuera de partidas) — a estos aplica "agrupar suministros".
   const sueltos = items.filter(i => !i.partidaId);
   const matSueltos = sueltos.filter(i => i.categoria === 'material');
   const netoMatSueltos = matSueltos.reduce((sum, i) => sum + brutoItem(i), 0);
-  const ivaMatSueltos = matSueltos.reduce((sum, i) => sum + brutoItem(i) * (i.iva || 0) / 100, 0);
 
+  // La línea agrupada va en NETO como todas las demás de la tabla (antes se
+  // sumaba el IVA y mezclaba un valor con IVA en una columna de valores netos).
   const sueltosDisplay: CotizacionItem[] = ocultarSuministros
     ? [
         ...sueltos.filter(i => i.categoria !== 'material'),
@@ -477,12 +536,39 @@ export default function PresupuestoPDF({
               categoria: 'material' as const,
               cantidad: 1, unidad: 'global',
               costo: 0, imprevistos: 0, margen: 0,
-              precio: netoMatSueltos + ivaMatSueltos,
+              precio: netoMatSueltos,
               iva: 0,
             }]
           : []),
       ]
     : sueltos;
+
+  // Subtotal = suma de la columna "Total" de la tabla (antes de descuento).
+  const subtotalDetalle = items.reduce((sum, i) => sum + brutoItem(i), 0);
+
+  // Cifras del cuadro de totales YA redondeadas a la moneda, con descuento e IVA
+  // derivados de ellas: así lo impreso SIEMPRE suma exacto (Subtotal − Descuento
+  // = Neto; Neto + IVA = Total) y el Total coincide con el guardado. Redondear
+  // cada cifra por separado dejaba descuadres de $1 / UF 0,01.
+  const red = (v: number) => (moneda === 'UF' ? Math.round(v * 100) / 100 : Math.round(v));
+  const subtotalR  = red(subtotalDetalle);
+  const netoR      = red(totals.netoGeneral);
+  const totalR     = red(totals.total);
+  const descuentoR = Math.max(0, red(subtotalR - netoR));
+  const ivaR       = red(totalR - netoR);
+  // IVA uniforme → "IVA (19%)"; si hay tasas distintas (ítems exentos) → "IVA".
+  const tasasIva = Array.from(new Set(items.filter(i => brutoItem(i) > 0).map(i => i.iva || 0)));
+  const ivaLabel = tasasIva.length === 1 && tasasIva[0] > 0 ? `IVA (${tasasIva[0]}%)` : 'IVA';
+
+  // Composición informativa del neto por tipo (ya incluye los descuentos).
+  const composicion = [
+    { label: 'Materiales',        v: totals.porCategoria.material.neto },
+    { label: 'Mano de obra',      v: totals.porCategoria.mano_obra.neto },
+    { label: 'Servicios',         v: totals.porCategoria.servicio.neto },
+    { label: 'Operación y otros', v: totals.porCategoria.operacion.neto },
+  ].filter(c => c.v > 0);
+
+  const tieneDatosPago = !!(empresa.banco || empresa.cuenta_bancaria);
 
   const catLabel: Record<string, string> = {
     material:  'MATERIAL',
@@ -556,7 +642,8 @@ export default function PresupuestoPDF({
             <Text style={s.folioLabel}>COTIZACIÓN</Text>
             <Text style={s.folioNum}>{folio}</Text>
             <View style={s.folioDivider} />
-            <Text style={s.folioDate}>{today()}</Text>
+            <Text style={s.folioDate}>Emitida {fechaEmisionTxt}</Text>
+            <Text style={[s.folioDate, { color: SPARK, marginTop: 2 }]}>Válida hasta {validaHastaTxt}</Text>
           </View>
         </View>
 
@@ -564,6 +651,7 @@ export default function PresupuestoPDF({
         <View style={s.card}>
           <Text style={s.cardLabel}>PREPARADO PARA</Text>
           <Text style={s.parteNombre}>{cliente.nombre_cliente}</Text>
+          {cliente.contacto_nombre ? <Text style={[s.parteVal, { marginBottom: 0 }]}>Atención: {cliente.contacto_nombre}</Text> : null}
           <View style={{ flexDirection: 'row', marginTop: 4 }}>
             <View style={{ flex: 1 }}>
               {cliente.empresa && (<><Text style={s.parteKey}>Empresa</Text><Text style={s.parteVal}>{cliente.empresa}</Text></>)}
@@ -628,11 +716,37 @@ export default function PresupuestoPDF({
               </View>
             )}
             <View style={s.resTotalRow}>
-              <Text style={s.resTotalLabel}>Subtotal neto</Text>
-              <Text style={s.resTotalVal}>{fmt(items.reduce((sm, it) => sm + brutoItem(it), 0))}</Text>
+              <Text style={s.resTotalLabel}>Subtotal{descuentoR > 0 ? ' (antes de descuento)' : ''}</Text>
+              <Text style={s.resTotalVal}>{fmt(subtotalR)}</Text>
             </View>
           </View>
         )}
+
+        {/* ── INVERSIÓN TOTAL — el cliente ve el valor final en la primera página ── */}
+        <View style={s.inversionBox} wrap={false}>
+          <View style={s.inversionLeft}>
+            <Text style={s.inversionLabel}>INVERSIÓN TOTAL</Text>
+            <Text style={s.inversionTotal}>{fmt(totalR)}</Text>
+            <Text style={s.inversionSub}>
+              {ivaR > 0 ? `Neto ${fmt(netoR)} + ${ivaLabel} ${fmt(ivaR)}` : 'Valor neto (exento de IVA)'}
+            </Text>
+            {moneda === 'UF' && valorUF > 0 && (
+              <Text style={s.inversionSub}>Equivale a {fmtCLP(totalR * valorUF)} (UF = {fmtValorUF(valorUF)})</Text>
+            )}
+          </View>
+          <View style={s.inversionRight}>
+            <Text style={s.inversionKey}>Válida hasta</Text>
+            <Text style={s.inversionVal}>{validaHastaTxt} ({validez} días)</Text>
+            <Text style={s.inversionKey}>Moneda</Text>
+            <Text style={s.inversionVal}>{monedaLabel}</Text>
+            {descuentoR > 0 && (
+              <>
+                <Text style={s.inversionKey}>Ahorro incluido</Text>
+                <Text style={[s.inversionVal, { marginBottom: 0 }]}>{fmt(descuentoR)}</Text>
+              </>
+            )}
+          </View>
+        </View>
 
         {/* ── IMPORTANTE (completa la página 1) ── */}
         <View style={s.importanteBox} wrap={false}>
@@ -681,10 +795,10 @@ export default function PresupuestoPDF({
             <View style={s.tableHeader}>
               <Text style={[s.tableHeaderText, s.colNum]}>#</Text>
               <Text style={[s.tableHeaderText, s.colServicio]}>Servicio / Producto</Text>
-              <Text style={[s.tableHeaderText, s.colDesc]}>Descripción</Text>
-              <Text style={[s.tableHeaderText, s.colQty]}>Cantidad</Text>
-              <Text style={[s.tableHeaderText, s.colValor]}>Valor</Text>
-              <Text style={[s.tableHeaderText, s.colTotal]}>Total</Text>
+              <Text style={[s.tableHeaderText, s.colUnidad]}>Unidad</Text>
+              <Text style={[s.tableHeaderText, s.colQty]}>Cant.</Text>
+              <Text style={[s.tableHeaderText, s.colValor]}>Valor unit.</Text>
+              <Text style={[s.tableHeaderText, s.colTotal]}>Total neto</Text>
             </View>
             {filas.length > 0 && filas[0]}
           </View>
@@ -692,76 +806,60 @@ export default function PresupuestoPDF({
           {/* Resto de filas */}
           {filas.slice(1)}
 
-          {/* ── TOTALES — bloque completo sin corte ── */}
+          {/* ── TOTALES — bloque completo sin corte ──
+              Estructura estándar que CUADRA con la tabla:
+              Subtotal (suma de la columna Total) − Descuento = Neto; + IVA = TOTAL.
+              Antes se listaban netos por categoría (ya descontados) y además se
+              restaba el descuento, y el "IVA total" solo salía si había materiales. */}
           <View wrap={false} style={{ marginBottom: 20 }}>
             <View style={s.totalesBox}>
+              {/* Composición informativa del neto */}
+              {composicion.length > 1 && (
+                <View style={s.composicionBox}>
+                  <Text style={s.composicionTitulo}>COMPOSICIÓN DEL NETO</Text>
+                  {composicion.map(c => (
+                    <View key={c.label} style={s.composicionRow}>
+                      <Text style={s.composicionLabel}>{c.label}</Text>
+                      <Text style={s.composicionVal}>{fmt(c.v)}</Text>
+                    </View>
+                  ))}
+                </View>
+              )}
               <View style={s.totalesInner}>
                 <View style={s.totalesRow}>
-                  <Text style={s.totalesLabel}>Moneda</Text>
-                  <Text style={s.totalesValue}>{monedaLabel}</Text>
+                  <Text style={s.totalesLabel}>Subtotal</Text>
+                  <Text style={s.totalesValue}>{fmt(subtotalR)}</Text>
                 </View>
-                {totals.netoMateriales > 0 && (
+                {descuentoR > 0 && (
                   <View style={s.totalesRow}>
-                    <Text style={s.totalesLabel}>Neto Materiales{descTxt(totals.porCategoria.material.descuentoPromedio)}</Text>
-                    <Text style={s.totalesValue}>{fmt(totals.netoMateriales)}</Text>
-                  </View>
-                )}
-                {totals.ivaMateriales > 0 && (
-                  <View style={s.totalesRow}>
-                    <Text style={s.totalesLabel}>IVA Materiales</Text>
-                    <Text style={s.totalesValue}>{fmt(totals.ivaMateriales)}</Text>
-                  </View>
-                )}
-                {totals.netoMO > 0 && (
-                  <View style={s.totalesRow}>
-                    <Text style={s.totalesLabel}>Mano de Obra{descTxt(totals.porCategoria.mano_obra.descuentoPromedio)}</Text>
-                    <Text style={s.totalesValue}>{fmt(totals.netoMO)}</Text>
-                  </View>
-                )}
-                {totals.netoServicios > 0 && (
-                  <View style={s.totalesRow}>
-                    <Text style={s.totalesLabel}>Servicios{descTxt(totals.porCategoria.servicio.descuentoPromedio)}</Text>
-                    <Text style={s.totalesValue}>{fmt(totals.netoServicios)}</Text>
-                  </View>
-                )}
-                {totals.netoOperacion > 0 && (
-                  <View style={s.totalesRow}>
-                    <Text style={s.totalesLabel}>Operación y Extras{descTxt(totals.porCategoria.operacion.descuentoPromedio)}</Text>
-                    <Text style={s.totalesValue}>{fmt(totals.netoOperacion)}</Text>
-                  </View>
-                )}
-                {(totals.ivaMO + totals.ivaServicios + totals.ivaOperacion) > 0 && (
-                  <View style={s.totalesRow}>
-                    <Text style={s.totalesLabel}>IVA mano de obra, servicios y operación</Text>
-                    <Text style={s.totalesValue}>{fmt(totals.ivaMO + totals.ivaServicios + totals.ivaOperacion)}</Text>
-                  </View>
-                )}
-                {totals.montoDescuentoTotal > 0 && (
-                  <View style={s.totalesRow}>
-                    <Text style={s.totalesLabel}>Descuento aplicado</Text>
-                    <Text style={s.totalesValue}>- {fmt(totals.montoDescuentoTotal)}</Text>
+                    <Text style={s.totalesLabel}>Descuento</Text>
+                    <Text style={s.totalesValue}>- {fmt(descuentoR)}</Text>
                   </View>
                 )}
                 <View style={s.totalesRow}>
                   <Text style={s.totalesLabel}>Neto</Text>
-                  <Text style={s.totalesValue}>{fmt(totals.netoGeneral)}</Text>
+                  <Text style={s.totalesValue}>{fmt(netoR)}</Text>
                 </View>
-                {totals.ivaMateriales > 0 && (
+                {ivaR > 0 && (
                   <View style={s.totalesRow}>
-                    <Text style={s.totalesLabel}>IVA total</Text>
-                    <Text style={s.totalesValue}>{fmt(totals.ivaGeneral)}</Text>
+                    <Text style={s.totalesLabel}>{ivaLabel}</Text>
+                    <Text style={s.totalesValue}>{fmt(ivaR)}</Text>
                   </View>
                 )}
                 <View style={s.totalFinalRow}>
                   <Text style={s.totalFinalLabel}>TOTAL</Text>
-                  <Text style={s.totalFinalValue}>{fmt(totals.total)}</Text>
+                  <Text style={s.totalFinalValue}>{fmt(totalR)}</Text>
                 </View>
                 {moneda === 'UF' && valorUF > 0 && (
                   <View style={s.totalesRow}>
-                    <Text style={s.totalesLabel}>Equivalente en CLP (UF {fmtCLP(valorUF)})</Text>
-                    <Text style={s.totalesValue}>{fmtCLP(totals.total * valorUF)}</Text>
+                    <Text style={s.totalesLabel}>En pesos (UF = {fmtValorUF(valorUF)})</Text>
+                    <Text style={s.totalesValue}>{fmtCLP(totalR * valorUF)}</Text>
                   </View>
                 )}
+                <View style={[s.totalesRow, { borderBottomWidth: 0 }]}>
+                  <Text style={s.totalesLabel}>Moneda</Text>
+                  <Text style={s.totalesValue}>{monedaLabel}</Text>
+                </View>
               </View>
             </View>
           </View>
@@ -828,6 +926,30 @@ export default function PresupuestoPDF({
           )}
         </View>
 
+        {/* ── CÓMO ACEPTAR + DATOS DE PAGO ──
+            Cierra la venta: el cliente sabe cómo aceptar y dónde transferir.
+            (Los datos bancarios estaban guardados en la empresa pero nunca se imprimían.) */}
+        <View style={s.pagoBox} wrap={false}>
+          <View style={s.pagoCol}>
+            <Text style={s.pagoTitulo}>CÓMO ACEPTAR ESTA COTIZACIÓN</Text>
+            <Text style={s.aceptaText}>
+              Firme este documento y envíelo a {empresa.email || 'nuestro correo'}, o responda indicando el folio {folio}.
+              {'\n'}Oferta válida hasta el {validaHastaTxt}.
+            </Text>
+          </View>
+          {tieneDatosPago && (
+            <View style={[s.pagoCol, { paddingRight: 0, borderLeftWidth: 1, borderLeftColor: LINE, paddingLeft: 12 }]}>
+              <Text style={s.pagoTitulo}>DATOS PARA TRANSFERENCIA</Text>
+              {empresa.banco ? (<><Text style={s.pagoKey}>Banco</Text><Text style={s.pagoVal}>{empresa.banco}</Text></>) : null}
+              {empresa.tipo_cuenta || empresa.cuenta_bancaria ? (
+                <><Text style={s.pagoKey}>{empresa.tipo_cuenta || 'Cuenta'}</Text><Text style={s.pagoVal}>{empresa.cuenta_bancaria || '—'}</Text></>
+              ) : null}
+              <Text style={s.pagoKey}>Titular · RUT</Text>
+              <Text style={[s.pagoVal, { marginBottom: 0 }]}>{empresa.nombre} · {empresa.rut}</Text>
+            </View>
+          )}
+        </View>
+
         {/* ── FIRMA — fluye tras las cláusulas con un espacio fijo (no se descoloca) ── */}
         <View style={s.firmaContainer} wrap={false}>
 
@@ -836,7 +958,7 @@ export default function PresupuestoPDF({
             <View style={s.firmaLinea} />
             <Text style={s.firmaNombreText}>{cliente.nombre_cliente}</Text>
             <Text style={s.firmaMutedText}>RUT: {cliente.rut || '________________'}</Text>
-            <Text style={s.firmaMutedText}>Firma Cliente</Text>
+            <Text style={s.firmaMutedText}>Firma y fecha de aceptación: ____/____/______</Text>
           </View>
 
           {/* Firma Empresa */}
