@@ -28,5 +28,8 @@ export interface CotizacionPublica {
   vigente: boolean;
   respondida_at: string | null;
   respondida_por: string | null;
+  respondida_rut: string | null;
+  /** Firma del cliente (PNG data URI), solo si la aceptó online. */
+  respuesta_firma: string | null;
   fotos: FotoPublica[];
 }

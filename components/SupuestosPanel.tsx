@@ -15,8 +15,7 @@ import type { Supuestos, CategoriaItem } from '@/types';
 import { CATEGORIA_LABELS, CATEGORIAS_ORDEN, CATEGORIA_COLORS, SUPUESTOS_DEFAULT } from '@/types';
 
 const sectionLabel: React.CSSProperties = {
-  fontFamily: 'var(--font-display)', fontWeight: 700, fontSize: '0.58rem',
-  letterSpacing: '0.3em', textTransform: 'uppercase', color: 'var(--y)',
+  fontFamily: 'var(--font-display)', fontWeight: 700, fontSize: '0.76rem', color: 'var(--y)',
   display: 'flex', alignItems: 'center', gap: '0.5rem',
 };
 
@@ -27,8 +26,7 @@ const numInput: React.CSSProperties = {
 };
 
 const headCell: React.CSSProperties = {
-  fontFamily: 'var(--font-display)', fontWeight: 700, fontSize: '0.5rem',
-  letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--muted)',
+  fontFamily: 'var(--font-display)', fontWeight: 700, fontSize: '0.72rem', color: 'var(--muted)',
   textAlign: 'center',
 };
 
@@ -116,8 +114,7 @@ export default function SupuestosPanel({ supuestos, onChange, onAplicarATodos }:
               style={{
                 flex: 1, background: 'var(--bg3)', border: '1px solid var(--border2)',
                 color: 'var(--y)', cursor: 'pointer', padding: '0.45rem',
-                fontFamily: 'var(--font-display)', fontWeight: 700, fontSize: '0.58rem',
-                letterSpacing: '0.1em', textTransform: 'uppercase', borderRadius: 'var(--r-sm)',
+                fontFamily: 'var(--font-display)', fontWeight: 700, fontSize: '0.76rem', borderRadius: 'var(--r-sm)',
               }}
             >
               Aplicar a todos los ítems

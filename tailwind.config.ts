@@ -21,6 +21,8 @@ const config: Config = {
         content: 'rgb(var(--content) / <alpha-value>)',
         'content-muted': 'rgb(var(--content-muted) / <alpha-value>)',
         line: 'rgb(var(--line) / <alpha-value>)',
+        // Acento InnVolt según tema: ámbar oscuro legible sobre blanco, amarillo sobre oscuro.
+        accent: 'var(--y)',
       },
       fontFamily: {
         sans: ['var(--font-body)', 'system-ui', 'sans-serif'],

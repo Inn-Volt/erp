@@ -80,7 +80,7 @@ export default function CotizarIAModal({
 
   const chip = (cat: CategoriaItem) => (
     <span style={{
-      fontSize: '0.5rem', fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase',
+      fontSize: '0.72rem', fontWeight: 700,
       color: CATEGORIA_COLORS[cat], border: `1px solid ${CATEGORIA_COLORS[cat]}44`,
       padding: '0.05rem 0.3rem', borderRadius: 'var(--r-sm)', whiteSpace: 'nowrap',
     }}>{CATEGORIA_LABELS[cat]}</span>
@@ -92,7 +92,7 @@ export default function CotizarIAModal({
 
         {/* Encabezado */}
         <div style={{ padding: '1.1rem 1.4rem', borderBottom: '1px solid var(--border2)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-          <span style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontFamily: 'var(--font-display)', fontWeight: 700, fontSize: '0.62rem', letterSpacing: '0.2em', textTransform: 'uppercase', color: 'var(--y)' }}>
+          <span style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontFamily: 'var(--font-display)', fontWeight: 700, fontSize: '0.78rem', color: 'var(--y)' }}>
             <Sparkles size={14} /> Cotizar con IA
           </span>
           <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--muted)' }}><X size={16} /></button>
@@ -190,7 +190,7 @@ export default function CotizarIAModal({
             <button
               onClick={generar}
               disabled={cargando}
-              style={{ background: resueltas ? 'var(--bg3)' : 'var(--y-brand)', color: resueltas ? 'var(--muted)' : 'var(--on-accent)', border: resueltas ? '1px solid var(--border2)' : 'none', cursor: cargando ? 'not-allowed' : 'pointer', height: 40, borderRadius: 'var(--r)', padding: '0 1rem', fontFamily: 'var(--font-display)', fontWeight: 700, fontSize: '0.66rem', letterSpacing: '0.08em', textTransform: 'uppercase', display: 'inline-flex', alignItems: 'center', gap: '0.4rem', opacity: cargando ? 0.6 : 1 }}
+              style={{ background: resueltas ? 'var(--bg3)' : 'var(--y-brand)', color: resueltas ? 'var(--muted)' : 'var(--on-accent)', border: resueltas ? '1px solid var(--border2)' : 'none', cursor: cargando ? 'not-allowed' : 'pointer', height: 40, borderRadius: 'var(--r)', padding: '0 1rem', fontFamily: 'var(--font-display)', fontWeight: 700, fontSize: '0.66rem', display: 'inline-flex', alignItems: 'center', gap: '0.4rem', opacity: cargando ? 0.6 : 1 }}
             >
               {cargando ? <Loader2 size={13} className="iv-spin" /> : <Wand2 size={13} />}
               {cargando ? 'Generando…' : (resueltas ? 'Regenerar' : 'Generar')}
@@ -198,7 +198,7 @@ export default function CotizarIAModal({
             {resueltas && (
               <button
                 onClick={() => { onInsertar(resueltas); }}
-                style={{ background: 'var(--success)', color: '#04210f', border: 'none', cursor: 'pointer', height: 40, borderRadius: 'var(--r)', padding: '0 1rem', fontFamily: 'var(--font-display)', fontWeight: 700, fontSize: '0.66rem', letterSpacing: '0.08em', textTransform: 'uppercase', display: 'inline-flex', alignItems: 'center', gap: '0.4rem' }}
+                style={{ background: 'var(--success)', color: '#04210f', border: 'none', cursor: 'pointer', height: 40, borderRadius: 'var(--r)', padding: '0 1rem', fontFamily: 'var(--font-display)', fontWeight: 700, fontSize: '0.66rem', display: 'inline-flex', alignItems: 'center', gap: '0.4rem' }}
               >
                 <PackagePlus size={14} /> Insertar en la cotización
               </button>

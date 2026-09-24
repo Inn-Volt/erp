@@ -25,20 +25,22 @@ import LevantamientoPDF from '@/components/pdf/LevantamientoPDF';
 
 const FL = ({ children, req }: { children: React.ReactNode; req?: boolean }) => (
   <p style={{
-    fontFamily: 'var(--font-display)', fontWeight: 700, fontSize: '0.6rem',
-    letterSpacing: '0.28em', textTransform: 'uppercase', color: 'var(--y)',
-    marginBottom: 5,
+    fontFamily: 'var(--font-body)', fontWeight: 500, fontSize: '0.85rem',
+    color: 'var(--text)', marginBottom: 6,
   }}>
     {children}{req && <span style={{ color: 'var(--danger)', marginLeft: 3 }}>★</span>}
   </p>
 );
 
 const inputBase: React.CSSProperties = {
-  width: '100%', background: 'var(--bg3)', border: '1px solid var(--border2)',
-  color: 'var(--text)', padding: '11px 14px', fontSize: '0.92rem',
-  fontFamily: 'var(--font-body)', outline: 'none', transition: 'border-color .15s',
+  width: '100%', background: 'var(--input-bg)', border: '1px solid var(--input-border)',
+  color: 'var(--text)', padding: '10px 12px', fontSize: '0.95rem', borderRadius: 8,
+  fontFamily: 'var(--font-body)', outline: 'none', transition: 'border-color .15s, box-shadow .15s',
   boxSizing: 'border-box',
 };
+/** Foco con el anillo amarillo de marca (igual que .input). */
+const enfocar = (e: React.FocusEvent<HTMLElement>) => { e.currentTarget.style.borderColor = 'var(--y-brand)'; e.currentTarget.style.boxShadow = '0 0 0 3px var(--focus-ring)'; };
+const desenfocar = (e: React.FocusEvent<HTMLElement>) => { e.currentTarget.style.borderColor = 'var(--input-border)'; e.currentTarget.style.boxShadow = 'none'; };
 
 const F = ({
   label, req, span, type = 'text', ...p
@@ -46,8 +48,7 @@ const F = ({
   <div style={{ marginBottom: 16, ...(span ? { gridColumn: `span ${span}` } : {}) }}>
     {label && <FL req={req}>{label}</FL>}
     <input type={type} {...p} style={{ ...inputBase, ...p.style }}
-      onFocus={e => (e.target.style.borderColor = 'var(--y)')}
-      onBlur={e => (e.target.style.borderColor = 'var(--border2)')} />
+      onFocus={enfocar} onBlur={desenfocar} />
   </div>
 );
 
@@ -59,8 +60,7 @@ const T = ({
     <textarea rows={rows} {...p} style={{
       ...inputBase, resize: 'vertical', ...p.style,
     } as React.CSSProperties}
-      onFocus={e => (e.target.style.borderColor = 'var(--y)')}
-      onBlur={e => (e.target.style.borderColor = 'var(--border2)')} />
+      onFocus={enfocar} onBlur={desenfocar} />
   </div>
 );
 
@@ -74,8 +74,7 @@ const S = ({
         ...inputBase, appearance: 'none', paddingRight: 32, cursor: 'pointer',
         color: p.value ? 'var(--text)' : 'var(--muted)', ...p.style,
       } as React.CSSProperties}
-        onFocus={e => (e.target.style.borderColor = 'var(--y)')}
-        onBlur={e => (e.target.style.borderColor = 'var(--border2)')}>
+        onFocus={enfocar} onBlur={desenfocar}>
         <option value="">— Seleccionar —</option>
         {options.map(o => <option key={o} value={o}>{o}</option>)}
       </select>
@@ -92,12 +91,11 @@ const Radio = ({ label, options, value, onChange }: {
     <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
       {options.map(o => (
         <button key={o} onClick={() => onChange(o)} type="button" style={{
-          padding: '8px 16px', fontSize: '0.78rem',
-          fontFamily: 'var(--font-display)', fontWeight: 700,
-          letterSpacing: '0.1em', textTransform: 'uppercase',
-          border: `1px solid ${value === o ? 'var(--y)' : 'var(--border2)'}`,
-          background: value === o ? 'var(--y-soft)' : 'transparent',
-          color: value === o ? 'var(--y)' : 'var(--muted)',
+          padding: '9px 14px', fontSize: '0.86rem', borderRadius: 999, minHeight: 40,
+          fontFamily: 'var(--font-body)', fontWeight: value === o ? 600 : 500,
+          border: `1px solid ${value === o ? 'var(--y-brand)' : 'var(--border2)'}`,
+          background: value === o ? 'var(--y-soft)' : 'var(--bg2)',
+          color: value === o ? 'var(--text)' : 'var(--muted)',
           cursor: 'pointer', transition: 'all .15s',
         }}>{o}</button>
       ))}
@@ -108,13 +106,13 @@ const Radio = ({ label, options, value, onChange }: {
 const Toggle = ({ label, checked, onChange }: { label: string; checked: boolean; onChange: (v: boolean) => void }) => (
   <div onClick={() => onChange(!checked)} style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 14, cursor: 'pointer', userSelect: 'none' }}>
     <div style={{
-      width: 44, height: 24, background: checked ? 'var(--y-brand)' : 'var(--bg3)',
-      border: `1px solid ${checked ? 'var(--y)' : 'var(--border2)'}`,
+      width: 44, height: 26, borderRadius: 999, background: checked ? 'var(--y-brand)' : 'var(--bg3)',
+      border: `1px solid ${checked ? 'var(--y-brand)' : 'var(--border2)'}`,
       position: 'relative', transition: 'all .2s', flexShrink: 0,
     }}>
-      <div style={{ position: 'absolute', top: 3, left: checked ? 22 : 3, width: 16, height: 16, background: checked ? 'var(--on-accent)' : 'var(--muted)', transition: 'left .2s' }} />
+      <div style={{ position: 'absolute', top: 3, left: checked ? 21 : 3, width: 18, height: 18, borderRadius: '50%', background: checked ? 'var(--on-accent)' : 'var(--muted)', transition: 'left .2s' }} />
     </div>
-    <span style={{ fontSize: '0.88rem', color: checked ? 'var(--y)' : 'var(--muted)' }}>{label}</span>
+    <span style={{ fontSize: '0.9rem', color: checked ? 'var(--text)' : 'var(--muted)', fontWeight: checked ? 500 : 400 }}>{label}</span>
   </div>
 );
 
@@ -324,32 +322,32 @@ export default function LevantamientoPage() {
 
         /* ── Section ─────────────────────────── */
         .lev-section{
-          background:var(--bg);
+          background:var(--bg2);
           border:1px solid var(--border2);
-          margin-bottom:18px;
+          border-radius:14px; overflow:hidden;
+          box-shadow:var(--shadow-card);
+          margin-bottom:14px;
+          scroll-margin-top:12px;
         }
         .lev-sec-head{
           display:flex; align-items:center; gap:12px;
-          padding:13px 20px; border-bottom:1px solid var(--border-soft);
-          background:linear-gradient(90deg,var(--bg2) 0%,var(--bg) 100%);
+          padding:14px 18px; border-bottom:1px solid var(--border-soft);
         }
         .lev-sec-icon{
-          width:30px; height:30px; background:var(--y-soft);
-          border:1px solid var(--border);
-          display:flex; align-items:center; justify-content:center; font-size:.9rem; flex-shrink:0;
+          width:34px; height:34px; background:var(--bg3); border-radius:9px;
+          display:flex; align-items:center; justify-content:center; font-size:1rem; flex-shrink:0;
         }
         .lev-sec-num{
-          font-family:var(--font-display);
-          font-weight:700;
-          font-size:.5rem; letter-spacing:.35em; text-transform:uppercase;
-          color:var(--y); margin-bottom:2px;
+          font-family:var(--font-body); font-weight:500;
+          font-size:.7rem; letter-spacing:.06em; text-transform:uppercase;
+          color:var(--faint); margin-bottom:1px;
         }
         .lev-sec-title{
-          font-family:var(--font-display);
-          font-weight:900;
-          font-size:.88rem; letter-spacing:.1em; text-transform:uppercase; color:var(--text);
+          font-family:var(--font-display); font-weight:700;
+          font-size:1rem; letter-spacing:-.01em; color:var(--text);
         }
-        .lev-sec-body{ padding:20px 20px 6px; }
+        .lev-sec-body{ padding:18px 18px 4px; }
+        @media(max-width:640px){ .lev-sec-body{ padding:16px 14px 2px; } .lev-sec-head{ padding:12px 14px; } }
 
         /* ── Table ───────────────────────────── */
         .lev-dyntable-wrap{ margin-bottom:4px; }
@@ -357,16 +355,15 @@ export default function LevantamientoPage() {
         .lev-dyntable th{
           padding:7px 9px;
           text-align:left; white-space:nowrap;
-          font-family:var(--font-display); font-weight:700;
-          font-size:.52rem; letter-spacing:.2em; text-transform:uppercase;
-          color:var(--y); background:var(--bg2); border-bottom:1px solid var(--border-soft);
+          font-family:var(--font-body); font-weight:500;
+          font-size:.74rem; color:var(--muted); background:var(--bg3); border-bottom:1px solid var(--border-soft);
         }
         .lev-dyntable td{ padding:5px 5px; border-bottom:1px solid var(--border-soft); }
         .lev-dyntable tr:nth-child(even) td{ background:var(--hover-bg); }
         .lev-cell-input,.lev-cell-select{
-          width:100%; background:var(--bg3);
-          border:1px solid var(--border2);
-          color:var(--text); padding:6px 8px; font-size:.8rem;
+          width:100%; background:var(--input-bg); border-radius:6px;
+          border:1px solid var(--input-border);
+          color:var(--text); padding:7px 8px; font-size:.84rem;
           font-family:var(--font-body); outline:none; box-sizing:border-box;
         }
         .lev-cell-select{ appearance:none; cursor:pointer; }
@@ -379,9 +376,9 @@ export default function LevantamientoPage() {
         .lev-add-btn{
           margin-top:8px;
           padding:7px 16px;
-          border:1px dashed var(--border); background:transparent;
-          color:var(--y); font-family:var(--font-display); font-weight:700;
-          font-size:.65rem; letter-spacing:.12em; text-transform:uppercase;
+          border:1px dashed var(--border2); background:transparent; border-radius:8px;
+          color:var(--text); font-family:var(--font-body); font-weight:500;
+          font-size:.84rem;
           cursor:pointer; transition:background .15s;
         }
         .lev-add-btn:hover{ background:var(--y-soft); }
@@ -395,14 +392,14 @@ export default function LevantamientoPage() {
         .lev-nav::-webkit-scrollbar{ height:2px; }
         .lev-nav button{
           flex-shrink:0;
-          padding:6px 12px; font-family:var(--font-display);
-          font-weight:700; font-size:.6rem; letter-spacing:.1em; text-transform:uppercase;
-          border:1px solid var(--border2); background:transparent;
+          padding:7px 13px; font-family:var(--font-body); border-radius:999px;
+          font-weight:500; font-size:.8rem;
+          border:1px solid var(--border2); background:var(--bg2);
           color:var(--muted); cursor:pointer; transition:all .15s; white-space:nowrap;
         }
         .lev-nav button.active{
-          border-color:var(--y);
-          background:var(--y-soft); color:var(--y);
+          border-color:var(--y-brand);
+          background:var(--y-soft); color:var(--text); font-weight:600;
         }
 
         /* ── Checklist ───────────────────────── */
@@ -415,9 +412,9 @@ export default function LevantamientoPage() {
         .lev-check-item{
           display:flex;
           align-items:center; gap:10px; cursor:pointer;
-          padding:10px 12px;
+          padding:11px 12px; border-radius:10px;
           border:1px solid var(--border2);
-          background:transparent; transition:all .15s;
+          background:var(--bg2); transition:all .15s;
         }
         .lev-check-item.on{
           border-color:rgba(248,113,113,.4);
@@ -427,19 +424,20 @@ export default function LevantamientoPage() {
           width:20px; height:20px;
           flex-shrink:0;
           display:flex; align-items:center; justify-content:center;
-          background:var(--bg3); border:1px solid var(--border2);
+          background:var(--bg3); border:1px solid var(--border2); border-radius:5px;
           font-size:.7rem; color:#fff; transition:all .15s;
         }
         .lev-check-box.on{ background:#ef4444; border-color:#ef4444; }
         .lev-check-label{ font-size:.82rem; color:var(--muted); transition:color .15s; }
-        .lev-check-label.on{ color:#fca5a5; }
+        .lev-check-label.on{ color:var(--danger); font-weight:500; }
 
         /* ── Saved toast ─────────────────────── */
         .lev-toast{
           position:fixed;
           bottom:24px; right:24px; z-index:999;
-          background:var(--bg2); border:1px solid rgba(74,222,128,.4);
-          padding:10px 20px; display:flex; align-items:center; gap:8px;
+          background:var(--bg2); border:1px solid rgba(74,222,128,.4); border-radius:12px;
+          box-shadow:var(--shadow-pop);
+          padding:10px 18px; display:flex; align-items:center; gap:8px;
           animation:fadeInUp .3s ease;
         }
         @keyframes fadeInUp{
@@ -510,30 +508,28 @@ export default function LevantamientoPage() {
         </div>
 
         {/* ── Page header (screen) ── */}
-        <div className="iv-page-header" data-no-print>
-          <div>
-            <p className="label-muted" style={{ marginBottom:'0.35rem', letterSpacing:'0.4em' }}>Módulo técnico</p>
-            <h1 style={{ fontFamily:'var(--font-display)', fontWeight:900, fontSize:'clamp(1.6rem,4vw,2.8rem)', textTransform:'uppercase', lineHeight:0.9, color:'var(--text)' }}>
-              LEVANTA<span style={{ color:'var(--y)' }}>MIENTO</span>
-            </h1>
+        <div className="pg-header iv-page-header" data-no-print>
+          <div style={{ minWidth: 0 }}>
+            <p className="pg-eyebrow">Visita técnica{folio ? ` · LV-${String(folio).padStart(4, '0')}` : ''}</p>
+            <h1 className="pg-title">Levantamiento</h1>
+            {data.cliente_nombre && <p className="pg-subtitle">{data.cliente_nombre}{data.direccion ? ` · ${data.direccion}` : ''}</p>}
           </div>
-          <div className="iv-header-actions">
+          <div className="pg-actions iv-header-actions">
             <button onClick={() => router.push('/levantamiento/historial')} className="btn btn-ghost btn-sm">
               <ArrowLeft size={13} /> Historial
             </button>
             <div style={{ position:'relative' }}>
-              <select value={estado} onChange={e => setEstado(e.target.value as EstadoLevantamiento)} style={{
-                background:'var(--bg2)', border:'1px solid var(--border2)',
-                color:'var(--text)', padding:'8px 28px 8px 12px', fontSize:'0.8rem',
-                fontFamily:'var(--font-display)', fontWeight:700, letterSpacing:'0.1em',
-                textTransform:'uppercase', outline:'none', appearance:'none', cursor:'pointer',
+              <select value={estado} onChange={e => setEstado(e.target.value as EstadoLevantamiento)} aria-label="Estado del levantamiento" style={{
+                background:'var(--bg2)', border:'1px solid var(--border2)', borderRadius: 8, height: 32,
+                color:'var(--text)', padding:'0 28px 0 12px', fontSize:'0.8rem', fontWeight:500,
+                outline:'none', appearance:'none', cursor:'pointer',
               }}>
                 {['Borrador','Completado','Enviado','Archivado'].map(e => <option key={e} value={e}>{e}</option>)}
               </select>
               <span style={{ position:'absolute', right:10, top:'50%', transform:'translateY(-50%)', color:'var(--muted)', pointerEvents:'none', fontSize:'.6rem' }}>▼</span>
             </div>
       
-            <button onClick={handleSave} disabled={saving} className="btn btn-primary">
+            <button onClick={handleSave} disabled={saving} className="btn btn-ghost btn-sm">
               <Save size={13} /> {saving ? 'Guardando…' : 'Guardar'}
             </button>
             <button onClick={triggerPrint} className="btn btn-ghost btn-sm">

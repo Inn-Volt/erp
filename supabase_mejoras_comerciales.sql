@@ -27,6 +27,7 @@ ALTER TABLE public.cotizaciones ADD COLUMN IF NOT EXISTS respondida_at        TI
 ALTER TABLE public.cotizaciones ADD COLUMN IF NOT EXISTS respondida_por       TEXT;
 ALTER TABLE public.cotizaciones ADD COLUMN IF NOT EXISTS respondida_rut       TEXT;
 ALTER TABLE public.cotizaciones ADD COLUMN IF NOT EXISTS respuesta_comentario TEXT;
+ALTER TABLE public.cotizaciones ADD COLUMN IF NOT EXISTS respuesta_firma      TEXT;        -- firma con el dedo (PNG data URI)
 
 -- ─── 3. Motivo de pérdida ────────────────────────────────────────────────────
 ALTER TABLE public.cotizaciones ADD COLUMN IF NOT EXISTS motivo_perdida      TEXT;

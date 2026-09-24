@@ -16,6 +16,13 @@ export const dynamic = 'force-dynamic';
 
 const limpio = (v: unknown, max: number) => String(v ?? '').trim().slice(0, max);
 
+/** Firma como PNG en base64 (data URI). Cualquier otra cosa se descarta. */
+const FIRMA_MAX = 250_000;
+function firmaValida(v: unknown): string | null {
+  if (typeof v !== 'string' || v.length > FIRMA_MAX) return null;
+  return /^data:image\/png;base64,[A-Za-z0-9+/]+={0,2}$/.test(v) ? v : null;
+}
+
 export async function POST(req: Request, ctx: { params: Promise<{ token: string }> }) {
   const { token } = await ctx.params;
   if (!esTokenValido(token)) return NextResponse.json({ error: 'Link inválido' }, { status: 404 });
@@ -30,6 +37,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ token: string 
   const rut = limpio(body?.rut, 20);
   const comentario = limpio(body?.comentario, 1000);
   const motivo = MOTIVOS_PERDIDA.includes(body?.motivo) ? body.motivo as string : 'Otro';
+  const firma = accion === 'aceptar' ? firmaValida(body?.firma) : null;
 
   if (accion === 'aceptar' && nombre.length < 3) {
     return NextResponse.json({ error: 'Indica el nombre de quien acepta la cotización.' }, { status: 400 });
@@ -49,19 +57,24 @@ export async function POST(req: Request, ctx: { params: Promise<{ token: string 
     const admin = getSupabaseAdmin();
     const ahora = new Date().toISOString();
     const nuevoEstado = accion === 'aceptar' ? 'Aceptado' : 'Rechazado';
-    const { data: act, error } = await admin.from('cotizaciones')
-      .update({
-        estado: nuevoEstado,
-        respondida_at: ahora,
-        respondida_por: nombre || null,
-        respondida_rut: rut || null,
-        respuesta_comentario: comentario || null,
-        ...(accion === 'rechazar' ? { motivo_perdida: motivo, motivo_perdida_nota: comentario || null } : {}),
-        updated_at: ahora,
-      })
-      .eq('id', cot.id)
-      .eq('estado', 'Pendiente')
-      .select('id');
+    const cambios: Record<string, unknown> = {
+      estado: nuevoEstado,
+      respondida_at: ahora,
+      respondida_por: nombre || null,
+      respondida_rut: rut || null,
+      respuesta_comentario: comentario || null,
+      ...(accion === 'rechazar' ? { motivo_perdida: motivo, motivo_perdida_nota: comentario || null } : {}),
+      ...(firma ? { respuesta_firma: firma } : {}),
+      updated_at: ahora,
+    };
+    const actualizar = (c: Record<string, unknown>) => admin.from('cotizaciones')
+      .update(c).eq('id', cot.id).eq('estado', 'Pendiente').select('id');
+    let { data: act, error } = await actualizar(cambios);
+    // Si aún no se corrió el SQL de la firma, la aceptación NO se pierde: se guarda sin firma.
+    if (error && firma && /respuesta_firma/.test(error.message || '')) {
+      delete cambios.respuesta_firma;
+      ({ data: act, error } = await actualizar(cambios));
+    }
     if (error) throw error;
     if (!act?.length) return NextResponse.json({ error: 'Esta cotización ya fue respondida.' }, { status: 409 });
 

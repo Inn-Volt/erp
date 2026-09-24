@@ -10,11 +10,12 @@
  */
 
 import { useState, useEffect, useMemo } from 'react';
-import { X, Search, Package, Layers, Plus, Loader2, ExternalLink, ShoppingCart } from 'lucide-react';
+import { X, Search, Package, Layers, Plus, Loader2, ExternalLink, ShoppingCart, ScanLine } from 'lucide-react';
 import { catalogoService, recetasService } from '@/services/catalogo';
 import { itemDesdeCatalogo, costoReceta, formatCLP } from '@/utils';
 import type { CatalogoItem, RecetaConComponentes, CotizacionItem, Supuestos } from '@/types';
 import { CATEGORIA_COLORS, CATEGORIA_LABELS } from '@/types';
+import LectorDeCodigo, { type ResultadoLectura } from '@/components/LectorDeCodigo';
 
 interface Props {
   supuestos: Supuestos;
@@ -40,6 +41,7 @@ export default function BuscadorBiblioteca({ supuestos, onInsertar, onInsertarRe
   const [grupoSel, setGrupoSel] = useState<string>('__todas__');
   const [cant, setCant] = useState<Record<string, number>>({});
   const [cesta, setCesta] = useState<Record<string, number>>({}); // itemId → cantidad
+  const [escaneando, setEscaneando] = useState(false);
 
   const TOPE = 60; // ítems renderizados como máximo (hay miles)
 
@@ -136,6 +138,33 @@ export default function BuscadorBiblioteca({ supuestos, onInsertar, onInsertarRe
     return next;
   });
 
+  // Índice por código (y por link, para QR que traen la URL del producto).
+  const porCodigo = useMemo(() => {
+    const m = new Map<string, CatalogoItem>();
+    for (const i of items) {
+      const c = (i.codigo || '').trim().toLowerCase();
+      if (c) { m.set(c, i); const sinCeros = c.replace(/^0+/, ''); if (sinCeros) m.set(sinCeros, i); }
+      if (i.link) m.set(i.link.trim().toLowerCase(), i);
+    }
+    return m;
+  }, [items]);
+
+  /** Código leído por la cámara → +1 en la cesta si está en la biblioteca. */
+  const alLeerCodigo = (codigo: string): ResultadoLectura => {
+    if (loading) return { ok: false, mensaje: 'Cargando la biblioteca, intenta de nuevo en un segundo.' };
+    const k = codigo.trim().toLowerCase();
+    const it = porCodigo.get(k) || porCodigo.get(k.replace(/^0+/, '') || k);
+    setTab('items');
+    if (!it) {
+      setBusca(codigo);
+      return { ok: false, mensaje: `«${codigo}» no está en la biblioteca. Lo dejé en el buscador.` };
+    }
+    setBusca('');
+    addCesta(it.id, 1);
+    const n = (cesta[it.id] || 0) + 1;
+    return { ok: true, mensaje: `+1 ${it.descripcion.length > 48 ? it.descripcion.slice(0, 48) + '…' : it.descripcion} (${n} en la cesta)` };
+  };
+
   const agregarCesta = () => {
     const nuevos = cestaEntries
       .map(([id, n]) => { const it = itemById.get(id); return it ? itemDesdeCatalogo(it, n, supuestos) : null; })
@@ -146,21 +175,24 @@ export default function BuscadorBiblioteca({ supuestos, onInsertar, onInsertarRe
   };
 
   const tabBtn = (activo: boolean): React.CSSProperties => ({
-    padding: '0.45rem 0.9rem', background: activo ? 'var(--y-brand)' : 'var(--bg3)',
-    color: activo ? 'var(--on-accent)' : 'var(--muted)', border: '1px solid var(--border2)',
-    cursor: 'pointer', fontFamily: 'var(--font-display)', fontWeight: 700,
-    fontSize: '0.62rem', letterSpacing: '0.1em', textTransform: 'uppercase',
-    borderRadius: 'var(--r-sm)', display: 'inline-flex', alignItems: 'center', gap: '0.35rem',
+    padding: '0 0.8rem', height: 34, background: activo ? 'var(--bg2)' : 'transparent',
+    color: activo ? 'var(--text)' : 'var(--muted)', border: 'none',
+    boxShadow: activo ? 'var(--shadow-card)' : 'none',
+    cursor: 'pointer', fontFamily: 'var(--font-body)', fontWeight: activo ? 600 : 500,
+    fontSize: '0.84rem', borderRadius: 7, display: 'inline-flex', alignItems: 'center', gap: '0.35rem',
   });
 
   const chip = (activo: boolean): React.CSSProperties => ({
-    padding: '0.22rem 0.5rem', background: activo ? 'var(--y-soft)' : 'var(--bg3)',
-    color: activo ? 'var(--y)' : 'var(--muted)', border: `1px solid ${activo ? 'var(--y)' : 'var(--border2)'}`,
-    cursor: 'pointer', fontSize: '0.58rem', fontWeight: 600, whiteSpace: 'nowrap', borderRadius: 'var(--r-sm)',
+    padding: '0.25rem 0.6rem', background: activo ? 'var(--y-soft)' : 'var(--bg2)',
+    color: activo ? 'var(--text)' : 'var(--muted)', border: `1px solid ${activo ? 'var(--y-brand)' : 'var(--border2)'}`,
+    cursor: 'pointer', fontSize: '0.75rem', fontWeight: activo ? 600 : 500, whiteSpace: 'nowrap', borderRadius: 999,
   });
 
   return (
     <div className="modal-overlay" onClick={e => { if (e.target === e.currentTarget) onClose(); }} style={{ zIndex: 200 }}>
+      {escaneando && (
+        <LectorDeCodigo titulo="Escanear material" onLeido={alLeerCodigo} onCerrar={() => setEscaneando(false)} />
+      )}
       <div className="modal-box" style={{ maxWidth: 680, width: '96%', maxHeight: '90vh', display: 'flex', flexDirection: 'column' }}>
         {/* Header */}
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '1rem 1.3rem', borderBottom: '1px solid var(--border2)' }}>
@@ -170,13 +202,18 @@ export default function BuscadorBiblioteca({ supuestos, onInsertar, onInsertarRe
 
         {/* Tabs + búsqueda */}
         <div style={{ padding: '0.8rem 1.3rem', display: 'flex', gap: '0.4rem', alignItems: 'center', borderBottom: '1px solid var(--border2)', flexWrap: 'wrap' }}>
-          <button style={tabBtn(tab === 'recetas')} onClick={() => setTab('recetas')}><Layers size={12} /> Recetas ({recetas.length})</button>
-          <button style={tabBtn(tab === 'items')} onClick={() => setTab('items')}><Package size={12} /> Ítems ({items.length})</button>
-          <div style={{ position: 'relative', flex: 1, minWidth: 160 }}>
-            <Search size={13} style={{ position: 'absolute', left: 9, top: '50%', transform: 'translateY(-50%)', color: 'var(--muted)' }} />
-            <input autoFocus value={busca} onChange={e => setBusca(e.target.value)} placeholder="Buscar…"
-              style={{ width: '100%', background: 'var(--input-bg)', border: '1px solid var(--input-border)', color: 'var(--text)', padding: '0.4rem 0.5rem 0.4rem 1.8rem', borderRadius: 'var(--r-sm)', outline: 'none', fontSize: '0.82rem' }} />
+          <div style={{ display: 'flex', gap: 2, background: 'var(--bg3)', borderRadius: 9, padding: 2 }}>
+            <button style={tabBtn(tab === 'recetas')} onClick={() => setTab('recetas')}><Layers size={13} /> Recetas ({recetas.length})</button>
+            <button style={tabBtn(tab === 'items')} onClick={() => setTab('items')}><Package size={13} /> Ítems ({items.length})</button>
           </div>
+          <div style={{ position: 'relative', flex: 1, minWidth: 160 }}>
+            <Search size={14} style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)', color: 'var(--muted)' }} />
+            <input autoFocus className="input" value={busca} onChange={e => setBusca(e.target.value)} placeholder="Nombre, código o proveedor…"
+              style={{ paddingLeft: '2rem' }} />
+          </div>
+          <button onClick={() => setEscaneando(true)} className="btn btn-ghost" title="Leer el código de barras o QR del material con la cámara">
+            <ScanLine size={15} /> Escanear
+          </button>
         </div>
 
         {/* Chips de filtro (solo Ítems). Al buscar por texto, busca en todo. */}
@@ -184,16 +221,16 @@ export default function BuscadorBiblioteca({ supuestos, onInsertar, onInsertarRe
           <div style={{ padding: '0.5rem 1.3rem', borderBottom: '1px solid var(--border2)' }}>
             {/* Selector de dimensión: Categoría o Proveedor */}
             <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.4rem' }}>
-              <span style={{ fontSize: '0.55rem', color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.12em', fontWeight: 700 }}>Filtrar por</span>
-              <div style={{ display: 'flex', border: '1px solid var(--border2)', borderRadius: 'var(--r-sm)', overflow: 'hidden' }}>
+              <span style={{ fontSize: '0.78rem', color: 'var(--muted)', fontWeight: 500 }}>Filtrar por</span>
+              <div style={{ display: 'flex', border: '1px solid var(--border2)', borderRadius: 8, overflow: 'hidden' }}>
                 {(['familia', 'proveedor'] as const).map(m => (
                   <button key={m}
                     onClick={() => { setModoFiltro(m); setGrupoSel('__todas__'); }}
                     style={{
-                      background: modoFiltro === m ? 'var(--y-brand)' : 'transparent',
-                      color: modoFiltro === m ? 'var(--on-accent)' : 'var(--muted)',
-                      border: 'none', cursor: 'pointer', padding: '0.22rem 0.6rem',
-                      fontSize: '0.58rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em',
+                      background: modoFiltro === m ? 'var(--bg3)' : 'transparent',
+                      color: modoFiltro === m ? 'var(--text)' : 'var(--muted)',
+                      border: 'none', cursor: 'pointer', padding: '0.25rem 0.7rem',
+                      fontSize: '0.75rem', fontWeight: modoFiltro === m ? 600 : 500,
                     }}>
                     {m === 'familia' ? 'Categoría' : 'Proveedor'}
                   </button>
@@ -255,7 +292,7 @@ export default function BuscadorBiblioteca({ supuestos, onInsertar, onInsertarRe
                   <p style={{ fontFamily: 'var(--font-display)', fontWeight: 700, fontSize: '0.9rem', color: 'var(--text)', margin: 0, whiteSpace: 'nowrap' }}>
                     {formatCLP(it.costo)}<span style={{ color: 'var(--muted)', fontWeight: 400, fontSize: '0.62rem' }}> /{it.unidad}</span>
                   </p>
-                  <span style={{ fontSize: '0.52rem', color: CATEGORIA_COLORS[it.categoria], fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase' }}>{CATEGORIA_LABELS[it.categoria]}</span>
+                  <span style={{ fontSize: '0.68rem', color: CATEGORIA_COLORS[it.categoria], fontWeight: 600 }}>{CATEGORIA_LABELS[it.categoria]}</span>
                 </div>
                 {it.link ? (
                   <a href={it.link} target="_blank" rel="noopener noreferrer" className="btn btn-ghost btn-xs" title="Ver producto" onClick={e => e.stopPropagation()} style={{ flexShrink: 0 }}><ExternalLink size={11} /></a>

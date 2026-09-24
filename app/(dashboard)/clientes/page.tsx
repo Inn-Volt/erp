@@ -7,6 +7,8 @@ import type { Cliente } from '@/types';
 import { useToast } from '@/hooks/useToast';
 import { formatDate } from '@/utils';
 import { useRouter } from 'next/navigation';
+import PageHeader from '@/components/PageHeader';
+import LinksMapa from '@/components/LinksMapa';
 
 const EMPTY_CLIENTE: Omit<Cliente, 'id' | 'created_at' | 'updated_at'> = {
   nombre_cliente: '',
@@ -163,19 +165,15 @@ export default function ClientesPage() {
         />
       )}
 
-      <div className="iv-page-header">
-        <div>
-          <p className="label-muted" style={{ marginBottom: '0.35rem', letterSpacing: '0.4em' }}>Base de datos</p>
-          <h1 style={{ fontFamily: 'var(--font-display)', fontWeight: 900, fontSize: 'clamp(2rem,5vw,3.2rem)', textTransform: 'uppercase', lineHeight: 0.9, color: 'var(--text)' }}>
-            CLIEN<span style={{ color: 'var(--y)' }}>TES</span>
-          </h1>
-        </div>
-        <div className="iv-header-actions">
+      <PageHeader
+        eyebrow="Base de datos"
+        title="Clientes"
+        actions={<>
           <button onClick={() => setModal({ open: true, cliente: null })} className="btn btn-primary">
             <Plus size={14} /> Nuevo cliente
           </button>
-        </div>
-      </div>
+        </>}
+      />
 
       {/* ── Detail panel: mobile overlay / desktop inline ── */}
       {selected && (
@@ -189,27 +187,30 @@ export default function ClientesPage() {
             </div>
             <div style={{ padding: '1.25rem', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
               <div>
-                <p style={{ fontFamily: 'var(--font-display)', fontWeight: 900, fontSize: '1.2rem', textTransform: 'uppercase', color: 'var(--text)', lineHeight: 1.1 }}>{selected.nombre_cliente}</p>
+                <p style={{ fontFamily: 'var(--font-display)', fontWeight: 700, fontSize: '1.2rem', letterSpacing: '-0.01em', color: 'var(--text)', lineHeight: 1.2 }}>{selected.nombre_cliente}</p>
                 {selected.empresa && <p style={{ color: 'var(--muted)', fontSize: '0.82rem', marginTop: '0.25rem' }}>{selected.empresa}</p>}
               </div>
               <div className="iv-divider" />
               {[
-                { Icon: Building2, label: 'RUT',       val: selected.rut       || '—' },
-                { Icon: Phone,     label: 'Teléfono',  val: selected.telefono  || '—' },
-                { Icon: Mail,      label: 'Correo',    val: selected.email     || '—' },
-                { Icon: MapPin,    label: 'Dirección', val: selected.direccion || '—' },
-              ].map(({ Icon, label, val }) => (
+                { Icon: Building2, label: 'RUT',       val: selected.rut       || '—', href: '' },
+                { Icon: Phone,     label: 'Teléfono',  val: selected.telefono  || '—', href: selected.telefono ? `tel:${selected.telefono.replace(/[^\d+]/g, '')}` : '' },
+                { Icon: Mail,      label: 'Correo',    val: selected.email     || '—', href: selected.email ? `mailto:${selected.email}` : '' },
+                { Icon: MapPin,    label: 'Dirección', val: selected.direccion || '—', href: '' },
+              ].map(({ Icon, label, val, href }) => (
                 <div key={label} style={{ display: 'flex', gap: '0.75rem', alignItems: 'flex-start' }}>
-                  <span style={{ color: 'var(--y)', marginTop: 2, flexShrink: 0, display: 'flex' }}><Icon size={12} /></span>
-                  <div>
-                    <p className="label-muted" style={{ fontSize: '0.55rem', marginBottom: '0.15rem' }}>{label}</p>
-                    <p style={{ fontSize: '0.82rem', color: 'var(--text)', wordBreak: 'break-all' }}>{val}</p>
+                  <span style={{ color: 'var(--muted)', marginTop: 3, flexShrink: 0, display: 'flex' }}><Icon size={14} /></span>
+                  <div style={{ minWidth: 0 }}>
+                    <p className="label-muted" style={{ marginBottom: '0.15rem' }}>{label}</p>
+                    {href
+                      ? <a href={href} style={{ fontSize: '0.88rem', color: 'var(--text)', wordBreak: 'break-word', textDecoration: 'underline', textDecorationColor: 'var(--border2)', textUnderlineOffset: 3 }}>{val}</a>
+                      : <p style={{ fontSize: '0.88rem', color: 'var(--text)', wordBreak: 'break-word' }}>{val}</p>}
+                    {label === 'Dirección' && selected.direccion && <div style={{ marginTop: '0.45rem' }}><LinksMapa direccion={selected.direccion} compacto /></div>}
                   </div>
                 </div>
               ))}
               {selected.notas && (
-                <div style={{ background: 'var(--bg3)', padding: '0.75rem', borderLeft: '2px solid var(--border)' }}>
-                  <p className="label-muted" style={{ fontSize: '0.55rem', marginBottom: '0.35rem' }}>Notas</p>
+                <div style={{ background: 'var(--bg3)', padding: '0.75rem', borderRadius: 10 }}>
+                  <p className="label-muted" style={{ marginBottom: '0.35rem' }}>Notas</p>
                   <p style={{ fontSize: '0.82rem', color: 'var(--muted)', lineHeight: 1.5 }}>{selected.notas}</p>
                 </div>
               )}
@@ -298,7 +299,7 @@ export default function ClientesPage() {
                   <span style={{ fontSize: '0.82rem', color: 'var(--muted)' }}>{c.telefono || '—'}</span>
                   <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.3rem' }}>
                     <span style={{ width: 6, height: 6, borderRadius: '50%', background: c.estado === 'activo' ? 'var(--success)' : 'var(--danger)', flexShrink: 0 }} />
-                    <span style={{ fontSize: '0.72rem', color: c.estado === 'activo' ? 'var(--success)' : 'var(--danger)', fontFamily: 'var(--font-display)', letterSpacing: '0.2em', textTransform: 'uppercase' }}>{c.estado}</span>
+                    <span style={{ fontSize: '0.72rem', color: c.estado === 'activo' ? 'var(--success)' : 'var(--danger)', fontFamily: 'var(--font-display)' }}>{c.estado}</span>
                   </span>
                   <ChevronRight size={13} color="var(--muted)" style={{ marginLeft: 'auto' }} />
                 </div>
@@ -322,27 +323,30 @@ export default function ClientesPage() {
             </div>
             <div style={{ padding: '1.25rem', display: 'flex', flexDirection: 'column', gap: '1rem', flex: 1 }}>
               <div>
-                <p style={{ fontFamily: 'var(--font-display)', fontWeight: 900, fontSize: '1.2rem', textTransform: 'uppercase', color: 'var(--text)', lineHeight: 1.1 }}>{selected.nombre_cliente}</p>
+                <p style={{ fontFamily: 'var(--font-display)', fontWeight: 700, fontSize: '1.2rem', letterSpacing: '-0.01em', color: 'var(--text)', lineHeight: 1.2 }}>{selected.nombre_cliente}</p>
                 {selected.empresa && <p style={{ color: 'var(--muted)', fontSize: '0.82rem', marginTop: '0.25rem' }}>{selected.empresa}</p>}
               </div>
               <div className="iv-divider" />
               {[
-                { Icon: Building2, label: 'RUT',       val: selected.rut       || '—' },
-                { Icon: Phone,     label: 'Teléfono',  val: selected.telefono  || '—' },
-                { Icon: Mail,      label: 'Correo',    val: selected.email     || '—' },
-                { Icon: MapPin,    label: 'Dirección', val: selected.direccion || '—' },
-              ].map(({ Icon, label, val }) => (
+                { Icon: Building2, label: 'RUT',       val: selected.rut       || '—', href: '' },
+                { Icon: Phone,     label: 'Teléfono',  val: selected.telefono  || '—', href: selected.telefono ? `tel:${selected.telefono.replace(/[^\d+]/g, '')}` : '' },
+                { Icon: Mail,      label: 'Correo',    val: selected.email     || '—', href: selected.email ? `mailto:${selected.email}` : '' },
+                { Icon: MapPin,    label: 'Dirección', val: selected.direccion || '—', href: '' },
+              ].map(({ Icon, label, val, href }) => (
                 <div key={label} style={{ display: 'flex', gap: '0.75rem', alignItems: 'flex-start' }}>
-                  <span style={{ color: 'var(--y)', marginTop: 2, flexShrink: 0, display: 'flex' }}><Icon size={12} /></span>
-                  <div>
-                    <p className="label-muted" style={{ fontSize: '0.55rem', marginBottom: '0.15rem' }}>{label}</p>
-                    <p style={{ fontSize: '0.82rem', color: 'var(--text)', wordBreak: 'break-all' }}>{val}</p>
+                  <span style={{ color: 'var(--muted)', marginTop: 3, flexShrink: 0, display: 'flex' }}><Icon size={14} /></span>
+                  <div style={{ minWidth: 0 }}>
+                    <p className="label-muted" style={{ marginBottom: '0.15rem' }}>{label}</p>
+                    {href
+                      ? <a href={href} style={{ fontSize: '0.88rem', color: 'var(--text)', wordBreak: 'break-word', textDecoration: 'underline', textDecorationColor: 'var(--border2)', textUnderlineOffset: 3 }}>{val}</a>
+                      : <p style={{ fontSize: '0.88rem', color: 'var(--text)', wordBreak: 'break-word' }}>{val}</p>}
+                    {label === 'Dirección' && selected.direccion && <div style={{ marginTop: '0.45rem' }}><LinksMapa direccion={selected.direccion} compacto /></div>}
                   </div>
                 </div>
               ))}
               {selected.notas && (
-                <div style={{ background: 'var(--bg3)', padding: '0.75rem', borderLeft: '2px solid var(--border)' }}>
-                  <p className="label-muted" style={{ fontSize: '0.55rem', marginBottom: '0.35rem' }}>Notas</p>
+                <div style={{ background: 'var(--bg3)', padding: '0.75rem', borderRadius: 10 }}>
+                  <p className="label-muted" style={{ marginBottom: '0.35rem' }}>Notas</p>
                   <p style={{ fontSize: '0.82rem', color: 'var(--muted)', lineHeight: 1.5 }}>{selected.notas}</p>
                 </div>
               )}

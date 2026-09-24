@@ -40,6 +40,8 @@ export interface FilaCotizacion {
   vista_at: string | null;
   respondida_at: string | null;
   respondida_por: string | null;
+  respondida_rut?: string | null;
+  respuesta_firma?: string | null;   // puede no existir si falta correr el SQL
   clientes: {
     nombre_cliente: string; empresa: string | null; rut: string; email: string | null;
     telefono: string | null; direccion: string | null; contacto_nombre: string | null;
@@ -141,6 +143,8 @@ export async function aPublica(cot: FilaCotizacion): Promise<CotizacionPublica> 
     vigente,
     respondida_at: cot.respondida_at,
     respondida_por: cot.respondida_por,
+    respondida_rut: cot.respondida_rut ?? null,
+    respuesta_firma: cot.estado === 'Aceptado' ? (cot.respuesta_firma ?? null) : null,
     fotos,
   };
 }

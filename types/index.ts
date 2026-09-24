@@ -237,6 +237,7 @@ export interface Cotizacion {
   respondida_por?: string | null;
   respondida_rut?: string | null;
   respuesta_comentario?: string | null;
+  respuesta_firma?: string | null;  // firma del cliente (PNG data URI) al aceptar online
 
   // ── Motivo de pérdida (si fue Rechazada) ──
   motivo_perdida?: string | null;

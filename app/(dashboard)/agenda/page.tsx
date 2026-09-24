@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback, Suspense } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import {
   Calendar, Plus, X, Loader2, Search, Trash2, MapPin, User,
-  CalendarPlus, Download, Inbox,
+  CalendarPlus, Download, Inbox, AlertTriangle,
 } from 'lucide-react';
 import { agendaService } from '@/services/agenda';
 import { clientesService } from '@/services/clientes';
@@ -20,6 +20,9 @@ import { TIPO_SERVICIO_OPCIONES } from '@/types/solicitud';
 import type { TipoServicio } from '@/types/solicitud';
 import { googleCalendarUrl, descargarICS, type EventoCalendario } from '@/lib/calendario';
 import { fechaLocal } from '@/utils';
+import PageHeader from '@/components/PageHeader';
+import LinksMapa from '@/components/LinksMapa';
+import { tipoDia } from '@/lib/feriados';
 
 // ─── Utilidades de fecha ──────────────────────────────────────────────────────
 const DIAS = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'];
@@ -97,6 +100,7 @@ function AgendaModal({ cita, clientes, createdBy, prefill, onClose, onSaved, onD
   })();
 
   const evento = eventoDe({ titulo, direccion, fecha, hora_inicio: horaIni, hora_fin: horaFin, notas, folio: cita?.folio });
+  const diaFecha = fecha ? tipoDia(fecha) : { tipo: 'laboral' as const, nombre: null };
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -176,6 +180,7 @@ function AgendaModal({ cita, clientes, createdBy, prefill, onClose, onSaved, onD
             <div>
               <label className="label-muted" style={{ display: 'block', marginBottom: '0.4rem' }}>Dirección</label>
               <input className="input" value={direccion} onChange={e => setDireccion(e.target.value)} placeholder="Dónde es la visita" />
+              {direccion.trim() && <div style={{ marginTop: '0.45rem' }}><LinksMapa direccion={direccion} compacto /></div>}
             </div>
 
             <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr 1fr', gap: '0.75rem' }}>
@@ -192,6 +197,12 @@ function AgendaModal({ cita, clientes, createdBy, prefill, onClose, onSaved, onD
                 <input className="input" type="time" value={horaFin} onChange={e => setHoraFin(e.target.value)} />
               </div>
             </div>
+            {(diaFecha.tipo === 'feriado' || diaFecha.tipo === 'domingo') && (
+              <p style={{ display: 'flex', alignItems: 'center', gap: '0.45rem', fontSize: '0.8rem', color: 'var(--text)', background: 'var(--y-soft)', border: '1px solid var(--border2)', borderRadius: 8, padding: '0.5rem 0.7rem', marginTop: '-0.25rem' }}>
+                <AlertTriangle size={14} color="var(--y)" style={{ flexShrink: 0 }} />
+                {diaFecha.tipo === 'feriado' ? `Es feriado: ${diaFecha.nombre}.` : 'Es domingo.'} Confirma que el cliente pueda recibirlos.
+              </p>
+            )}
 
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
               <div>
@@ -230,7 +241,7 @@ function AgendaModal({ cita, clientes, createdBy, prefill, onClose, onSaved, onD
 
             {/* Exportar a calendario */}
             <div style={{ borderTop: '1px dashed var(--border2)', paddingTop: '0.9rem' }}>
-              <p className="label-muted" style={{ fontSize: '0.55rem', marginBottom: '0.5rem' }}>Agregar a mi calendario (recordatorio en el teléfono)</p>
+              <p className="label-muted" style={{ marginBottom: '0.5rem' }}>Agregar a mi calendario (recordatorio en el teléfono)</p>
               <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
                 <a href={googleCalendarUrl(evento)} target="_blank" rel="noreferrer" style={btnCal}><CalendarPlus size={14} /> Google Calendar</a>
                 <button type="button" onClick={() => descargarICS(evento)} style={btnCal}><Download size={14} /> Apple / .ics</button>
@@ -332,17 +343,14 @@ function AgendaContent() {
         />
       )}
 
-      <div className="iv-page-header">
-        <div>
-          <p className="label-muted" style={{ marginBottom: '0.35rem', letterSpacing: '0.4em' }}>Visitas y citas</p>
-          <h1 style={{ fontFamily: 'var(--font-display)', fontWeight: 900, fontSize: 'clamp(2rem,5vw,3.2rem)', textTransform: 'uppercase', lineHeight: 0.9, color: 'var(--text)' }}>
-            AGEN<span style={{ color: 'var(--y)' }}>DA</span>
-          </h1>
-        </div>
-        <div className="iv-header-actions">
+      <PageHeader
+        eyebrow="Visitas y citas"
+        title="Agenda"
+        subtitle="Visitas técnicas y citas de César y Joaquín"
+        actions={<>
           <button onClick={() => setModal({ open: true, cita: null })} className="btn btn-primary"><Plus size={14} /> Nueva cita</button>
-        </div>
-      </div>
+        </>}
+      />
 
       <div className="panel-y">
         {/* Filtros */}
@@ -379,10 +387,15 @@ function AgendaContent() {
           <div style={{ padding: '0.5rem 0' }}>
             {grupos.map(g => (
               <div key={g.fecha}>
-                <div style={{ padding: '0.6rem 1rem 0.4rem', position: 'sticky', top: 0, background: 'var(--bg2)', zIndex: 1 }}>
-                  <span style={{ fontFamily: 'var(--font-display)', fontWeight: 800, fontSize: '0.72rem', letterSpacing: '0.1em', textTransform: 'uppercase', color: g.fecha === hoy ? 'var(--y)' : 'var(--muted)' }}>
+                <div style={{ padding: '0.65rem 1rem 0.45rem', position: 'sticky', top: 0, background: 'var(--bg2)', zIndex: 1, display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
+                  <span style={{ fontFamily: 'var(--font-display)', fontWeight: 700, fontSize: '0.88rem', color: g.fecha === hoy ? 'var(--y)' : 'var(--text)' }}>
                     {etiquetaDia(g.fecha)}
                   </span>
+                  {(() => {
+                    const d = tipoDia(g.fecha);
+                    if (d.tipo !== 'feriado') return null;
+                    return <span className="badge" style={{ background: 'var(--y-soft)', color: 'var(--y)' }}>Feriado · {d.nombre}</span>;
+                  })()}
                 </div>
                 {g.items.map(c => {
                   const rm = RESPONSABLE_META[c.responsable];
@@ -401,9 +414,10 @@ function AgendaContent() {
                           {c.direccion && <span style={{ display: 'inline-flex', alignItems: 'center', gap: 3, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 240 }}><MapPin size={11} /> {c.direccion}</span>}
                         </div>
                         <div style={{ display: 'flex', gap: '0.35rem', marginTop: '0.4rem', flexWrap: 'wrap', alignItems: 'center' }}>
-                          <span style={{ fontSize: '0.62rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', padding: '0.15rem 0.45rem', borderRadius: 5, background: rm.bg, color: rm.color }}>{RESPONSABLE_LABEL[c.responsable]}</span>
-                          <span style={{ fontSize: '0.62rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', padding: '0.15rem 0.45rem', borderRadius: 5, background: em.bg, color: em.color }}>{c.estado}</span>
-                          {c.solicitudes?.folio && <span style={{ fontSize: '0.62rem', color: 'var(--faint)', display: 'inline-flex', alignItems: 'center', gap: 3 }}><Inbox size={10} /> SOL #{String(c.solicitudes.folio).padStart(4, '0')}</span>}
+                          <span style={{ fontSize: '0.72rem', fontWeight: 600, padding: '0.15rem 0.5rem', borderRadius: 999, background: rm.bg, color: rm.color }}>{RESPONSABLE_LABEL[c.responsable]}</span>
+                          <span style={{ fontSize: '0.72rem', fontWeight: 600, padding: '0.15rem 0.5rem', borderRadius: 999, background: em.bg, color: em.color }}>{c.estado}</span>
+                          {c.solicitudes?.folio && <span style={{ fontSize: '0.7rem', color: 'var(--faint)', display: 'inline-flex', alignItems: 'center', gap: 3 }}><Inbox size={10} /> SOL #{String(c.solicitudes.folio).padStart(4, '0')}</span>}
+                          {c.direccion && c.estado !== 'Realizada' && c.estado !== 'Cancelada' && <LinksMapa direccion={c.direccion} compacto />}
                         </div>
                       </div>
                       <div style={{ display: 'flex', gap: '0.3rem', flexShrink: 0 }} onClick={e => e.stopPropagation()}>

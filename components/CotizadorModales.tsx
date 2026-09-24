@@ -49,13 +49,12 @@ function FmtBar({ onBold, onBullet }: { onBold: () => void; onBullet: () => void
 }
 
 const sectionLabel: React.CSSProperties = {
-  fontFamily: 'var(--font-display)', fontWeight: 700, fontSize: '0.58rem',
-  letterSpacing: '0.2em', textTransform: 'uppercase', color: 'var(--y)',
+  fontFamily: 'var(--font-display)', fontWeight: 700, fontSize: '0.76rem', color: 'var(--y)',
   display: 'flex', alignItems: 'center', gap: '0.45rem',
 };
 const fieldLabel: React.CSSProperties = {
-  fontSize: '0.62rem', color: 'var(--muted)', marginBottom: '0.3rem', display: 'block',
-  fontFamily: 'var(--font-display)', fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase',
+  fontSize: '0.78rem', color: 'var(--muted)', marginBottom: '0.3rem', display: 'block',
+  fontFamily: 'var(--font-display)', fontWeight: 700,
 };
 const ta: React.CSSProperties = {
   width: '100%', background: 'var(--input-bg)', border: '1px solid var(--input-border)',
@@ -270,7 +269,7 @@ function PreviewAclaraciones({ garantia, condiciones }: { garantia: string; cond
   const bloqueHeader: React.CSSProperties = { fontWeight: 700, fontSize: '0.6rem', letterSpacing: '0.08em', color: '#1a1a1a', margin: '9px 0 4px', paddingBottom: 2, borderBottom: '0.75px solid #dcdcdc' };
   return (
     <div style={{ marginBottom: 11 }}>
-      <p style={{ fontWeight: 700, fontSize: '0.62rem', textTransform: 'uppercase', letterSpacing: '0.04em', margin: '0 0 4px', paddingBottom: 3, borderBottom: '1.5px solid #1a1a1a', color: '#1a1a1a' }}>Aclaraciones de servicios y garantías</p>
+      <p style={{ fontWeight: 700, fontSize: '0.78rem', margin: '0 0 4px', paddingBottom: 3, borderBottom: '1.5px solid #1a1a1a', color: '#1a1a1a' }}>Aclaraciones de servicios y garantías</p>
       {gar.length > 0 && <p style={bloqueHeader}>GARANTÍA</p>}
       {gar.map((l, i) => <FilaPreview key={`g-${i}`} linea={l} />)}
       {con.length > 0 && <p style={{ ...bloqueHeader, marginTop: 12 }}>CONDICIONES COMERCIALES</p>}

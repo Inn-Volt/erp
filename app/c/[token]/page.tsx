@@ -14,6 +14,7 @@ import { CheckCircle2, Download, XCircle, Loader2, Clock, AlertTriangle, Message
 import type { CotizacionPublica } from '@/types/publico';
 import { MOTIVOS_PERDIDA } from '@/types';
 import { calcularTotals, formatMoneda, formatDate, formatFolio, nombreArchivo, boldPorLinea } from '@/utils';
+import FirmaPad from '@/components/FirmaPad';
 
 const C = {
   bg: '#f3f3f1', paper: '#ffffff', ink: '#1a1a1a', muted: '#5c5c5c', faint: '#8d8d8d',
@@ -58,7 +59,7 @@ export default function CotizacionClientePage() {
   const [enviando, setEnviando] = useState(false);
   const [genPDF, setGenPDF] = useState(false);
   const [verCond, setVerCond] = useState(false);
-  const [form, setForm] = useState({ nombre: '', rut: '', comentario: '', motivo: '', acepto: false });
+  const [form, setForm] = useState({ nombre: '', rut: '', comentario: '', motivo: '', acepto: false, firma: '' });
   const [msgFinal, setMsgFinal] = useState('');
 
   const cargar = useCallback(async () => {
@@ -101,6 +102,9 @@ export default function CotizacionClientePage() {
           ocultarSuministros={cot.ocultar_suministros} empresa={cot.empresa}
           moneda={cot.moneda} valorUF={cot.valor_uf || 0} partidas={cot.partidas}
           mostrarDetalle={cot.mostrar_detalle} fechaEmision={cot.created_at} fotos={cot.fotos}
+          aceptacion={cot.estado === 'Aceptado' && cot.respondida_por && cot.respondida_at
+            ? { nombre: cot.respondida_por, rut: cot.respondida_rut, fecha: cot.respondida_at, firma: cot.respuesta_firma }
+            : null}
         />,
       ).toBlob();
       saveAs(blob, `Cotizacion_${formatFolio(cot.folio)}_${nombreArchivo(cot.cliente.nombre_cliente)}.pdf`);
@@ -113,7 +117,7 @@ export default function CotizacionClientePage() {
     try {
       const res = await fetch(`/api/publico/cotizacion/${token}/responder`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ accion, nombre: form.nombre, rut: form.rut, comentario: form.comentario, motivo: form.motivo }),
+        body: JSON.stringify({ accion, nombre: form.nombre, rut: form.rut, comentario: form.comentario, motivo: form.motivo, firma: accion === 'aceptar' ? form.firma : '' }),
       });
       const data = await res.json();
       if (!res.ok) { alert(data?.error || 'No se pudo enviar tu respuesta.'); return; }
@@ -294,6 +298,10 @@ export default function CotizacionClientePage() {
               <input style={input} placeholder="Nombre de quien acepta *" value={form.nombre} onChange={e => setForm(f => ({ ...f, nombre: e.target.value }))} />
               <input style={input} placeholder="RUT (opcional)" value={form.rut} onChange={e => setForm(f => ({ ...f, rut: e.target.value }))} />
               <textarea style={{ ...input, resize: 'vertical' }} rows={3} placeholder="Comentario o fecha preferida de inicio (opcional)" value={form.comentario} onChange={e => setForm(f => ({ ...f, comentario: e.target.value }))} />
+              <div>
+                <p style={{ fontSize: 14, fontWeight: 600, color: C.ink, marginBottom: 6 }}>Firma <span style={{ fontWeight: 400, color: C.muted }}>(opcional)</span></p>
+                <FirmaPad onChange={firma => setForm(f => ({ ...f, firma }))} colorBorde="#c4c4c0" colorTexto={C.muted} />
+              </div>
               <label style={{ display: 'flex', gap: 8, alignItems: 'flex-start', fontSize: 13, color: C.muted }}>
                 <input type="checkbox" checked={form.acepto} onChange={e => setForm(f => ({ ...f, acepto: e.target.checked }))} style={{ marginTop: 3 }} />
                 Acepto la cotización {formatFolio(cot.folio)} por {fmt(t.total)} y sus condiciones comerciales.

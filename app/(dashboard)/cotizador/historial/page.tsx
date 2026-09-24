@@ -21,6 +21,7 @@ import { ESTADO_COLORS, ESTADOS_TODOS, SUPUESTOS_DEFAULT } from '@/types';
 import PresupuestoPDF from '@/components/pdf/PresupuestoPDF';
 import { supabase } from '@/lib/supabase';
 import type { EmpresaInfo } from '@/components/pdf/PresupuestoPDF';
+import PageHeader from '@/components/PageHeader';
 
 type SortKey = 'folio' | 'cliente' | 'total' | 'fecha' | 'estado';
 type SortDir = 'asc' | 'desc';
@@ -170,6 +171,9 @@ const [empresas, setEmpresas] = useState<EmpresaInfo[]>([]);
           mostrarDetalle={cot.mostrar_detalle || false}
           fechaEmision={cot.created_at}
           fotos={fotos}
+          aceptacion={cot.estado === 'Aceptado' && cot.respondida_por && cot.respondida_at
+            ? { nombre: cot.respondida_por, rut: cot.respondida_rut, fecha: cot.respondida_at, firma: cot.respuesta_firma }
+            : null}
         />
       ).toBlob();
       saveAs(blob, `Cotizacion_${formatFolio(cot.folio)}_${nombreArchivo(cot.clientes.nombre_cliente)}.pdf`);
@@ -228,8 +232,7 @@ const [empresas, setEmpresas] = useState<EmpresaInfo[]>([]);
     : <ArrowUpDown size={10} style={{ opacity: 0.3 }} />;
 
   const thStyle: React.CSSProperties = {
-    fontFamily: 'var(--font-display)', fontWeight: 700, fontSize: '0.55rem',
-    letterSpacing: '0.22em', textTransform: 'uppercase', color: 'var(--muted)',
+    fontFamily: 'var(--font-display)', fontWeight: 700, fontSize: '0.74rem', color: 'var(--muted)',
     padding: '0.5rem 0.875rem', textAlign: 'left', whiteSpace: 'nowrap',
     cursor: 'pointer', userSelect: 'none', borderBottom: '1px solid var(--border2)',
     background: 'var(--bg3)',
@@ -244,19 +247,15 @@ const [empresas, setEmpresas] = useState<EmpresaInfo[]>([]);
         <MotivoPerdidaModal folio={formatFolio(rechazo.folio)} onConfirm={confirmarRechazo} onClose={() => setRechazo(null)} />
       )}
       {/* Header */}
-      <div className="iv-page-header">
-        <div>
-          <p className="label-muted" style={{ marginBottom: '0.35rem', letterSpacing: '0.4em' }}>Registro completo</p>
-          <h1 style={{ fontFamily: 'var(--font-display)', fontWeight: 900, fontSize: 'clamp(2rem,5vw,3.2rem)', textTransform: 'uppercase', lineHeight: 0.9, color: 'var(--text)' }}>
-            HISTO<span style={{ color: 'var(--y)' }}>RIAL</span>
-          </h1>
-        </div>
-        <div className="iv-header-actions">
-          <button onClick={() => router.push('/cotizador')} style={{ background: 'var(--y-brand)', color: 'var(--on-accent)', border: 'none', cursor: 'pointer', padding: '0 1.25rem', height: 36, fontFamily: 'var(--font-display)', fontWeight: 900, fontSize: '0.72rem', letterSpacing: '0.12em', textTransform: 'uppercase', display: 'inline-flex', alignItems: 'center', gap: '0.4rem' }}>
+      <PageHeader
+        eyebrow="Registro completo"
+        title="Historial de cotizaciones"
+        actions={<>
+          <button onClick={() => router.push('/cotizador')} className="btn btn-primary">
             <FileText size={13} /> Nueva cotización
           </button>
-        </div>
-      </div>
+        </>}
+      />
 
       {/* KPI strip */}
       <div className="historial-kpis" style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '2px', marginBottom: '2px' }}>
@@ -290,17 +289,17 @@ const [empresas, setEmpresas] = useState<EmpresaInfo[]>([]);
           )}
         </div>
 
-        <button onClick={() => setShowFilters(f => !f)} style={{ background: showFilters ? 'var(--y-soft)' : 'var(--bg3)', border: `1px solid ${showFilters ? 'var(--border)' : 'var(--border2)'}`, cursor: 'pointer', padding: '0 0.75rem', height: 32, display: 'inline-flex', alignItems: 'center', gap: '0.4rem', fontFamily: 'var(--font-display)', fontWeight: 700, fontSize: '0.62rem', letterSpacing: '0.15em', textTransform: 'uppercase', color: showFilters ? 'var(--y)' : 'var(--muted)' }}>
+        <button onClick={() => setShowFilters(f => !f)} style={{ background: showFilters ? 'var(--y-soft)' : 'var(--bg3)', border: `1px solid ${showFilters ? 'var(--border)' : 'var(--border2)'}`, cursor: 'pointer', padding: '0 0.75rem', height: 32, display: 'inline-flex', alignItems: 'center', gap: '0.4rem', fontFamily: 'var(--font-display)', fontWeight: 700, fontSize: '0.78rem', color: showFilters ? 'var(--y)' : 'var(--muted)' }}>
           <Filter size={12} /> Filtros
         </button>
 
         <button onClick={() => setSoloPorSeguir(v => !v)} title={`Pendientes sin movimiento hace 3 días o más`}
-          style={{ background: soloPorSeguir ? 'rgba(251,146,60,0.14)' : 'var(--bg3)', border: `1px solid ${soloPorSeguir ? 'var(--orange)' : 'var(--border2)'}`, cursor: 'pointer', padding: '0 0.75rem', height: 32, display: 'inline-flex', alignItems: 'center', gap: '0.4rem', fontFamily: 'var(--font-display)', fontWeight: 700, fontSize: '0.62rem', letterSpacing: '0.15em', textTransform: 'uppercase', color: porSeguir > 0 ? 'var(--orange)' : 'var(--muted)' }}>
+          style={{ background: soloPorSeguir ? 'rgba(251,146,60,0.14)' : 'var(--bg3)', border: `1px solid ${soloPorSeguir ? 'var(--orange)' : 'var(--border2)'}`, cursor: 'pointer', padding: '0 0.75rem', height: 32, display: 'inline-flex', alignItems: 'center', gap: '0.4rem', fontFamily: 'var(--font-display)', fontWeight: 700, fontSize: '0.78rem', color: porSeguir > 0 ? 'var(--orange)' : 'var(--muted)' }}>
           <BellRing size={12} /> Por seguir ({porSeguir})
         </button>
 
         {filterEstado !== 'Todos' && (
-          <button onClick={() => setFilterEstado('Todos')} style={{ background: 'rgba(248,113,113,0.1)', border: '1px solid rgba(248,113,113,0.2)', cursor: 'pointer', padding: '0 0.75rem', height: 32, display: 'inline-flex', alignItems: 'center', gap: '0.4rem', fontFamily: 'var(--font-display)', fontWeight: 700, fontSize: '0.6rem', letterSpacing: '0.15em', textTransform: 'uppercase', color: 'var(--danger)' }}>
+          <button onClick={() => setFilterEstado('Todos')} style={{ background: 'rgba(248,113,113,0.1)', border: '1px solid rgba(248,113,113,0.2)', cursor: 'pointer', padding: '0 0.75rem', height: 32, display: 'inline-flex', alignItems: 'center', gap: '0.4rem', fontFamily: 'var(--font-display)', fontWeight: 700, fontSize: '0.78rem', color: 'var(--danger)' }}>
             <X size={11} /> {filterEstado}
           </button>
         )}
@@ -321,8 +320,7 @@ const [empresas, setEmpresas] = useState<EmpresaInfo[]>([]);
                   border: `1px solid ${active ? (ec ? ec.color : 'var(--y)') : 'var(--border2)'}`,
                   color: active ? (ec ? ec.color : 'var(--y)') : 'var(--muted)',
                   cursor: 'pointer', padding: '0.2rem 0.75rem',
-                  fontFamily: 'var(--font-display)', fontWeight: 700, fontSize: '0.6rem',
-                  letterSpacing: '0.15em', textTransform: 'uppercase',
+                  fontFamily: 'var(--font-display)', fontWeight: 700, fontSize: '0.78rem',
                 }}
               >
                 {est}

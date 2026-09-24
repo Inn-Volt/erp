@@ -72,7 +72,7 @@ export default function PlantillasCard() {
   return (
     <div style={{ background: 'var(--bg2)', border: '1px solid var(--border2)', padding: '1.5rem', gridColumn: '1 / -1' }}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.5rem', gap: '0.5rem', flexWrap: 'wrap' }}>
-        <p style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontFamily: 'var(--font-display)', fontWeight: 700, fontSize: '0.62rem', letterSpacing: '0.2em', textTransform: 'uppercase', color: 'var(--y)', margin: 0 }}>
+        <p style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontFamily: 'var(--font-display)', fontWeight: 700, fontSize: '0.78rem', color: 'var(--y)', margin: 0 }}>
           <LayoutTemplate size={13} /> Plantillas por tipo de servicio
         </p>
         {!sinTabla && <button onClick={nueva} className="btn btn-ghost btn-sm"><Plus size={13} /> Nueva plantilla</button>}

@@ -7,6 +7,7 @@ import { levantamientosService } from '@/services/levantamientos';
 import type { Levantamiento, EstadoLevantamiento } from '@/types/levantamiento';
 import { ESTADO_LEV_COLORS } from '@/types/levantamiento';
 import { formatDate } from '@/utils';
+import PageHeader from '@/components/PageHeader';
 
 function Skeleton({ h = 48 }: { h?: number }) {
   return <div className="skeleton" style={{ height: h, width: '100%', marginBottom: 2 }} />;
@@ -63,19 +64,16 @@ export default function LevantamientoHistorialPage() {
   return (
     <div className="anim-in">
       {/* Header */}
-      <div className="iv-page-header">
-        <div>
-          <p className="label-muted" style={{ marginBottom: '0.35rem', letterSpacing: '0.4em' }}>Módulo técnico</p>
-          <h1 style={{ fontFamily: 'var(--font-display)', fontWeight: 900, fontSize: 'clamp(1.6rem,4vw,2.8rem)', textTransform: 'uppercase', lineHeight: 0.9, color: 'var(--text)' }}>
-            HISTO<span style={{ color: 'var(--y)' }}>RIAL</span>
-          </h1>
-        </div>
-        <div className="iv-header-actions">
+      <PageHeader
+        eyebrow="Módulo técnico"
+        title="Levantamientos"
+        subtitle="Visitas técnicas en terreno"
+        actions={<>
           <button onClick={() => router.push('/levantamiento')} className="btn btn-primary">
             <Plus size={14} /> Nuevo levantamiento
           </button>
-        </div>
-      </div>
+        </>}
+      />
 
       {/* Filters */}
       <div style={{ display: 'flex', gap: 8, marginBottom: 16, flexWrap: 'wrap' }}>
@@ -105,7 +103,7 @@ export default function LevantamientoHistorialPage() {
           return (
             <div key={e} style={{ padding: '6px 14px', background: bg, border: `1px solid ${color}33`, display: 'flex', alignItems: 'center', gap: 8 }}>
               <span style={{ fontFamily: 'var(--font-display)', fontWeight: 900, fontSize: '1rem', color }}>{count}</span>
-              <span style={{ fontFamily: 'var(--font-display)', fontWeight: 700, fontSize: '0.6rem', letterSpacing: '0.15em', textTransform: 'uppercase', color: 'var(--muted)' }}>{e}</span>
+              <span style={{ fontFamily: 'var(--font-display)', fontWeight: 700, fontSize: '0.78rem', color: 'var(--muted)' }}>{e}</span>
             </div>
           );
         })}
@@ -117,7 +115,7 @@ export default function LevantamientoHistorialPage() {
       ) : filtered.length === 0 ? (
         <div style={{ textAlign: 'center', padding: '60px 20px', color: 'var(--muted)' }}>
           <FileText size={32} style={{ margin: '0 auto 12px', opacity: 0.3 }} />
-          <p style={{ fontFamily: 'var(--font-display)', fontWeight: 700, fontSize: '0.85rem', letterSpacing: '0.2em', textTransform: 'uppercase' }}>
+          <p style={{ fontFamily: 'var(--font-display)', fontWeight: 700, fontSize: '0.85rem' }}>
             {search || filterEstado ? 'Sin resultados' : 'Sin levantamientos'}
           </p>
           <p style={{ fontSize: '0.78rem', marginTop: 6 }}>
@@ -129,7 +127,7 @@ export default function LevantamientoHistorialPage() {
           {/* Table header */}
           <div style={{ display: 'grid', gridTemplateColumns: '80px 1fr 1fr 120px 100px 130px 90px', gap: 0, background: 'var(--bg2)', borderBottom: '1px solid var(--border2)', padding: '8px 16px' }}>
             {['Folio','Cliente','Técnico','Tipo proyecto','Estado','Fecha',''].map((h, i) => (
-              <div key={i} style={{ fontFamily: 'var(--font-display)', fontWeight: 700, fontSize: '0.52rem', letterSpacing: '0.25em', textTransform: 'uppercase', color: 'var(--y)' }}>{h}</div>
+              <div key={i} style={{ fontFamily: 'var(--font-display)', fontWeight: 700, fontSize: '0.72rem', color: 'var(--y)' }}>{h}</div>
             ))}
           </div>
 

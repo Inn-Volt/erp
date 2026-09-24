@@ -268,6 +268,10 @@ const s = StyleSheet.create({
   firmaLinea: { width: '100%', borderTopWidth: 1, borderTopColor: INK, marginBottom: 8 },
   firmaNombreText: { color: INK, fontSize: 8.5, fontFamily: 'Helvetica-Bold' },
   firmaMutedText: { color: MUTED, fontSize: 7 },
+  // Alto reservado sobre la línea: la firma digital del cliente (o un espacio igual en la
+  // columna de la empresa, para que ambas líneas queden a la misma altura).
+  firmaImagen: { height: 48, width: 170, objectFit: 'contain', marginBottom: 2 },
+  firmaEspacio: { height: 50 },
 
   // ── Footer ──
   footer: {
@@ -422,6 +426,15 @@ interface Props {
   fechaEmision?: string | null;
   /** Fotos del levantamiento (URL firmada temporal + leyenda). Vacío = sin página de fotos. */
   fotos?: { url: string; caption: string }[];
+  /** Aceptación online del cliente: llena el bloque de firma (nombre, RUT, fecha y firma). */
+  aceptacion?: AceptacionPDF | null;
+}
+
+export interface AceptacionPDF {
+  nombre: string;
+  rut?: string | null;
+  fecha: string;            // ISO de respondida_at
+  firma?: string | null;    // PNG data URI
 }
 
 // ─── Componente fila de tabla (reutilizable) ──────────────────────────────────
@@ -504,7 +517,7 @@ export default function PresupuestoPDF({
   cliente, items, totals,
   folio, descripcionGeneral, garantia, condicionesComerciales,
   ocultarSuministros, empresa, moneda = 'CLP', valorUF = 0,
-  partidas = [], mostrarDetalle = false, fechaEmision, fotos = [],
+  partidas = [], mostrarDetalle = false, fechaEmision, fotos = [], aceptacion = null,
 }: Props) {
 
   // Formateador de moneda de todo el documento (CLP o UF).
@@ -980,16 +993,28 @@ export default function PresupuestoPDF({
         {/* ── FIRMA — fluye tras las cláusulas con un espacio fijo (no se descoloca) ── */}
         <View style={s.firmaContainer} wrap={false}>
 
-          {/* Firma Cliente */}
-          <View style={s.firmaCol}>
-            <View style={s.firmaLinea} />
-            <Text style={s.firmaNombreText}>{cliente.nombre_cliente}</Text>
-            <Text style={s.firmaMutedText}>RUT: {cliente.rut || '________________'}</Text>
-            <Text style={s.firmaMutedText}>Firma y fecha de aceptación: ____/____/______</Text>
-          </View>
+          {/* Firma Cliente (llena si aceptó online) */}
+          {aceptacion ? (
+            <View style={s.firmaCol}>
+              {/* eslint-disable-next-line jsx-a11y/alt-text -- <Image> de @react-pdf no admite alt */}
+              {aceptacion.firma ? <Image src={aceptacion.firma} style={s.firmaImagen} /> : <View style={s.firmaEspacio} />}
+              <View style={s.firmaLinea} />
+              <Text style={s.firmaNombreText}>{aceptacion.nombre}</Text>
+              <Text style={s.firmaMutedText}>RUT: {aceptacion.rut || cliente.rut || '—'}</Text>
+              <Text style={s.firmaMutedText}>Aceptada en línea el {formatDate(aceptacion.fecha)}</Text>
+            </View>
+          ) : (
+            <View style={s.firmaCol}>
+              <View style={s.firmaLinea} />
+              <Text style={s.firmaNombreText}>{cliente.nombre_cliente}</Text>
+              <Text style={s.firmaMutedText}>RUT: {cliente.rut || '________________'}</Text>
+              <Text style={s.firmaMutedText}>Firma y fecha de aceptación: ____/____/______</Text>
+            </View>
+          )}
 
           {/* Firma Empresa */}
           <View style={s.firmaCol}>
+            {aceptacion && <View style={s.firmaEspacio} />}
             <View style={s.firmaLinea} />
             <Text style={s.firmaNombreText}>{empresa.nombre}</Text>
             <Text style={s.firmaMutedText}>RUT: {empresa.rut}</Text>

@@ -50,9 +50,7 @@ const panelStyle: React.CSSProperties = {
 const labelStyle: React.CSSProperties = {
   fontFamily: 'var(--font-display)',
   fontWeight: 700,
-  fontSize: '0.58rem',
-  letterSpacing: '0.3em',
-  textTransform: 'uppercase' as const,
+  fontSize: '0.76rem',
   color: 'var(--y)',
   display: 'flex',
   alignItems: 'center',
@@ -73,13 +71,11 @@ const inputStyle: React.CSSProperties = {
 };
 
 const fieldLabel: React.CSSProperties = {
-  fontSize: '0.68rem',
+  fontSize: '0.8rem',
   color: 'var(--muted)',
   marginBottom: '0.2rem',
   display: 'block',
   fontFamily: 'var(--font-display)',
-  letterSpacing: '0.08em',
-  textTransform: 'uppercase' as const,
 };
 
 const gridTwo: React.CSSProperties = {
@@ -290,7 +286,6 @@ export default function EmpresaModal({ empresa, onSave, onClose }: Props) {
                     cursor: uploading ? 'not-allowed' : 'pointer',
                     padding: '0.4rem 0.8rem', fontSize: '0.75rem',
                     fontFamily: 'var(--font-display)', fontWeight: 700,
-                    letterSpacing: '0.08em', textTransform: 'uppercase',
                     display: 'flex', alignItems: 'center', gap: '0.4rem',
                     borderRadius: 'var(--r)',
                   }}
@@ -309,7 +304,6 @@ export default function EmpresaModal({ empresa, onSave, onClose }: Props) {
                       color: 'var(--danger)', cursor: 'pointer',
                       padding: '0.4rem 0.8rem', fontSize: '0.7rem',
                       fontFamily: 'var(--font-display)', fontWeight: 700,
-                      letterSpacing: '0.08em', textTransform: 'uppercase',
                       display: 'flex', alignItems: 'center', gap: '0.4rem',
                       borderRadius: 'var(--r)',
                     }}
@@ -478,7 +472,7 @@ export default function EmpresaModal({ empresa, onSave, onClose }: Props) {
                 color: 'var(--muted)', cursor: 'pointer',
                 padding: '0 1.2rem', height: 40, borderRadius: 'var(--r)',
                 fontFamily: 'var(--font-display)', fontWeight: 700,
-                fontSize: '0.68rem', letterSpacing: '0.12em', textTransform: 'uppercase',
+                fontSize: '0.8rem',
               }}
             >
               Cancelar
@@ -491,7 +485,7 @@ export default function EmpresaModal({ empresa, onSave, onClose }: Props) {
                 cursor: (saving || uploading) ? 'not-allowed' : 'pointer',
                 padding: '0 1.5rem', height: 40, borderRadius: 'var(--r)',
                 fontFamily: 'var(--font-display)', fontWeight: 900,
-                fontSize: '0.68rem', letterSpacing: '0.12em', textTransform: 'uppercase',
+                fontSize: '0.8rem',
                 display: 'flex', alignItems: 'center', gap: '0.4rem',
                 opacity: (saving || uploading) ? 0.6 : 1,
               }}

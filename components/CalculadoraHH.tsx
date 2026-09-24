@@ -21,14 +21,12 @@ import type { HHInput } from '@/utils';
 import NumeroInput from '@/components/NumeroInput';
 
 const label: React.CSSProperties = {
-  fontFamily: 'var(--font-display)', fontWeight: 700, fontSize: '0.58rem',
-  letterSpacing: '0.3em', textTransform: 'uppercase', color: 'var(--y)',
+  fontFamily: 'var(--font-display)', fontWeight: 700, fontSize: '0.76rem', color: 'var(--y)',
   display: 'flex', alignItems: 'center', gap: '0.4rem', marginBottom: '0.75rem',
 };
 const fieldLabel: React.CSSProperties = {
-  fontSize: '0.65rem', color: 'var(--muted)', marginBottom: '0.2rem',
+  fontSize: '0.8rem', color: 'var(--muted)', marginBottom: '0.2rem',
   display: 'block', fontFamily: 'var(--font-display)',
-  letterSpacing: '0.08em', textTransform: 'uppercase',
 };
 const input: React.CSSProperties = {
   background: 'var(--input-bg)', border: '1px solid var(--input-border)', color: 'var(--text)',
@@ -158,8 +156,7 @@ export default function CalculadoraHH({ descripcionInicial = '', onConfirm, onCl
               display: 'flex', justifyContent: 'space-between', alignItems: 'center',
             }}>
               <span style={{
-                fontSize: '0.62rem', color: 'var(--muted)', fontFamily: 'var(--font-display)',
-                letterSpacing: '0.15em', textTransform: 'uppercase',
+                fontSize: '0.78rem', color: 'var(--muted)', fontFamily: 'var(--font-display)',
               }}>
                 Costo mano de obra
               </span>
@@ -181,7 +178,7 @@ export default function CalculadoraHH({ descripcionInicial = '', onConfirm, onCl
               color: 'var(--muted)', cursor: 'pointer',
               padding: '0 1.2rem', height: 40, borderRadius: 'var(--r)',
               fontFamily: 'var(--font-display)', fontWeight: 700,
-              fontSize: '0.68rem', letterSpacing: '0.12em', textTransform: 'uppercase',
+              fontSize: '0.8rem',
             }}>
               Cancelar
             </button>
@@ -198,7 +195,7 @@ export default function CalculadoraHH({ descripcionInicial = '', onConfirm, onCl
                 border: 'none', cursor: r.costoTotal > 0 ? 'pointer' : 'not-allowed',
                 padding: '0 1.5rem', height: 40, borderRadius: 'var(--r)',
                 fontFamily: 'var(--font-display)', fontWeight: 900,
-                fontSize: '0.68rem', letterSpacing: '0.12em', textTransform: 'uppercase',
+                fontSize: '0.8rem',
                 display: 'flex', alignItems: 'center', gap: '0.4rem',
               }}
             >

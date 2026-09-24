@@ -11,6 +11,7 @@ import { agendaService } from '@/services/agenda';
 import type { KpiData, Cotizacion, Moneda } from '@/types';
 import { ESTADO_COLORS, INNVOLT_INFO } from '@/types';
 import { formatCLP, formatMoneda, formatFolio, formatDate, fechaLocal } from '@/utils';
+import PageHeader from '@/components/PageHeader';
 
 /** Embudo comercial: cuántos casos hay en cada etapa del flujo. */
 interface Embudo { solicitudes: number | null; citas: number | null; pendientes: number; ventas: number; }
@@ -94,19 +95,16 @@ export default function DashboardPage() {
         <EnviarCotizacionModal cot={enviar} empresaNombre={INNVOLT_INFO.nombre} onClose={() => setEnviar(null)} onCambio={cargarSeguimiento} />
       )}
       {/* Header */}
-      <div className="iv-page-header">
-        <div>
-          <p className="label-muted" style={{ marginBottom: '0.35rem', letterSpacing: '0.4em' }}>Resumen del sistema</p>
-          <h1 style={{ fontFamily: 'var(--font-display)', fontWeight: 900, fontSize: 'clamp(2rem,5vw,3.2rem)', textTransform: 'uppercase', lineHeight: 0.9, color: 'var(--text)' }}>
-            DASH<span style={{ color: 'var(--y)' }}>BOARD</span>
-          </h1>
-        </div>
-        <div className="iv-header-actions">
+      <PageHeader
+        eyebrow="Resumen del sistema"
+        title="Panel comercial"
+        subtitle="Del requerimiento a la venta, de un vistazo"
+        actions={<>
           <button onClick={() => router.push('/cotizador')} className="btn btn-primary">
             <Plus size={14} /> Nueva Cotización
           </button>
-        </div>
-      </div>
+        </>}
+      />
 
       {/* KPIs */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '2px', marginBottom: '2px' }}>
@@ -271,7 +269,7 @@ export default function DashboardPage() {
                 ['Email', INNVOLT_INFO.email],
               ].map(([k, v]) => (
                 <div key={k} style={{ display: 'flex', flexDirection: 'column', gap: '0.15rem', paddingBottom: '0.5rem', borderBottom: '1px solid var(--border2)' }}>
-                  <span style={{ fontSize: '0.65rem', color: 'var(--muted)', fontFamily: 'var(--font-display)', letterSpacing: '0.2em', textTransform: 'uppercase' }}>{k}</span>
+                  <span style={{ fontSize: '0.8rem', color: 'var(--muted)', fontFamily: 'var(--font-display)' }}>{k}</span>
                   <span style={{ fontSize: '0.82rem', color: 'var(--text)' }}>{v}</span>
                 </div>
               ))}
@@ -322,9 +320,7 @@ export default function DashboardPage() {
 const badgeStyle: React.CSSProperties = {
   fontFamily: 'var(--font-display)',
   fontWeight: 700,
-  fontSize: '0.58rem',
-  letterSpacing: '0.18em',
-  textTransform: 'uppercase',
+  fontSize: '0.76rem',
   padding: '0.2rem 0.5rem',
   whiteSpace: 'nowrap',
 };

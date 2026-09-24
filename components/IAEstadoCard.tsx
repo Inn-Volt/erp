@@ -50,7 +50,7 @@ export default function IAEstadoCard() {
 
   return (
     <div style={{ background: 'var(--bg2)', border: '1px solid var(--border2)', borderTop: '2px solid var(--y-brand)', padding: '1.5rem', gridColumn: '1 / -1' }}>
-      <p style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontFamily: 'var(--font-display)', fontWeight: 700, fontSize: '0.62rem', letterSpacing: '0.2em', textTransform: 'uppercase', color: 'var(--y)', marginBottom: '0.5rem' }}>
+      <p style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontFamily: 'var(--font-display)', fontWeight: 700, fontSize: '0.78rem', color: 'var(--y)', marginBottom: '0.5rem' }}>
         <Sparkles size={13} /> Inteligencia artificial
       </p>
       <p style={{ fontSize: '0.78rem', color: 'var(--muted)', marginBottom: '1rem', lineHeight: 1.5 }}>
