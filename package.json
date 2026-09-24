@@ -12,6 +12,7 @@
     "@anthropic-ai/sdk": "^0.117.1",
     "@react-pdf/renderer": "^4.3.2",
     "@supabase/supabase-js": "^2.49.0",
+    "@zxing/library": "^0.21.3",
     "file-saver": "^2.0.5",
     "lucide-react": "^0.475.0",
     "next": "^16.2.6",

@@ -9,7 +9,7 @@ import {
   Loader2, RefreshCcw, Check, FileUp,
   Copy, Package, Settings2, X, ArrowUp, ArrowDown,
   Building2, ChevronDown, Pencil, Handshake, HardHat, BrickWall,
-  Calculator, Truck, Library, Sparkles, Inbox, ExternalLink,
+  Calculator, Truck, Library, Sparkles, Inbox, ExternalLink, Send,
 } from 'lucide-react';
 import { pdf } from '@react-pdf/renderer';
 import { saveAs } from 'file-saver';
@@ -20,15 +20,18 @@ import { clientesService } from '@/services/clientes';
 import { cotizacionesService } from '@/services/cotizaciones';
 import { catalogoService } from '@/services/catalogo';
 import { solicitudesService } from '@/services/solicitudes';
+import { levantamientosService } from '@/services/levantamientos';
 import type { Solicitud } from '@/types/solicitud';
 import { useToast } from '@/hooks/useToast';
+import { marcarSinGuardar, confirmarSalida } from '@/hooks/useSinGuardar';
 import {
-  formatCLP, formatMoneda, redondearMoneda, formatFolio, cleanNumber, calcularTotals, calcularItem,
+  formatMoneda, redondearMoneda, formatFolio, cleanNumber, calcularTotals, calcularItem,
   newItem, newId, normalizarItem, precioDesdeMargen,
   margenDesdePrecio, itemsToExcelRows, parseCategoria,
   calcularPartida, partidaDesdeReceta, borradorDesdeAnalisis,
+  convertirItemsMoneda, formatMiles, nombreArchivo, formatDate,
 } from '@/utils';
-import type { CotizacionItem, Cliente, CategoriaItem, Supuestos, Moneda, Partida, RecetaConComponentes, PartidaIAResuelta, CatalogoItem } from '@/types';
+import type { CotizacionItem, Cliente, CategoriaItem, Supuestos, Moneda, Partida, RecetaConComponentes, PartidaIAResuelta, CatalogoItem, Cotizacion } from '@/types';
 import {
   CATEGORIA_LABELS, CATEGORIAS_ORDEN, CATEGORIA_COLORS,
   SUPUESTOS_DEFAULT, UNIDADES,
@@ -40,23 +43,26 @@ import EmpresaModal from '@/components/EmpresaModal';
 import CalculadoraHH from '@/components/CalculadoraHH';
 import BuscadorBiblioteca from '@/components/BuscadorBiblioteca';
 import CotizarIAModal from '@/components/CotizarIAModal';
+import NumeroInput from '@/components/NumeroInput';
+import EnviarCotizacionModal from '@/components/EnviarCotizacionModal';
+import { fotosService } from '@/services/fotos';
 import { DescripcionModal, OpcionesModal } from '@/components/CotizadorModales';
 
 // ─── Estilos base ─────────────────────────────────────────────────────────────
 const panelY: React.CSSProperties = {
   background: 'var(--bg2)', border: '1px solid var(--border2)', borderTop: '2px solid var(--y-brand)',
 };
+// Estilos compartidos (lenguaje TecApp: sobrio, sentence case, legible)
 const sectionLabel: React.CSSProperties = {
-  fontFamily: 'var(--font-display)', fontWeight: 700, fontSize: '0.58rem',
-  letterSpacing: '0.3em', textTransform: 'uppercase', color: 'var(--y)',
-  display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.875rem',
+  fontFamily: 'var(--font-display)', fontWeight: 700, fontSize: '0.95rem',
+  letterSpacing: '-0.01em', color: 'var(--text)',
+  display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.75rem',
 };
 const btnGhost: React.CSSProperties = {
-  background: 'var(--bg2)', border: '1px solid var(--border2)', color: 'var(--muted)',
-  cursor: 'pointer', padding: '0 0.875rem', height: 36,
-  fontFamily: 'var(--font-display)', fontWeight: 700, fontSize: '0.68rem',
-  letterSpacing: '0.12em', textTransform: 'uppercase',
-  display: 'inline-flex', alignItems: 'center', gap: '0.4rem',
+  background: 'var(--bg2)', border: '1px solid var(--border2)', color: 'var(--text)',
+  cursor: 'pointer', padding: '0 0.8rem', height: 36, borderRadius: 8,
+  fontFamily: 'var(--font-body)', fontWeight: 500, fontSize: '0.84rem',
+  display: 'inline-flex', alignItems: 'center', gap: '0.4rem', whiteSpace: 'nowrap',
 };
 
 // Textos base (editables por cotización en el modal Descripción/Condiciones).
@@ -180,7 +186,6 @@ function EmpresaSelector({
                 borderTop: '1px solid var(--border2)',
                 color: 'var(--y)', fontSize: '0.78rem',
                 fontFamily: 'var(--font-display)', fontWeight: 700,
-                letterSpacing: '0.1em', textTransform: 'uppercase',
                 display: 'flex', alignItems: 'center', gap: '0.4rem',
               }}
             >
@@ -209,7 +214,7 @@ function EmpresaSelector({
                   }}
                 />
               )}
-              <p style={{ fontFamily: 'var(--font-display)', fontWeight: 700, fontSize: '0.8rem', color: 'var(--y)', textTransform: 'uppercase', margin: 0 }}>
+              <p style={{ fontFamily: 'var(--font-display)', fontWeight: 700, fontSize: '0.8rem', color: 'var(--y)', margin: 0 }}>
                 {selected.nombre}
               </p>
               {selected.slogan && <p style={{ fontSize: '0.68rem', color: 'var(--muted)', margin: '0.1rem 0 0' }}>{selected.slogan}</p>}
@@ -226,8 +231,8 @@ function EmpresaSelector({
                 cursor: 'pointer', color: 'var(--muted)',
                 padding: '0.25rem 0.5rem', borderRadius: 'var(--r-sm)',
                 display: 'flex', alignItems: 'center', gap: '0.3rem',
-                fontSize: '0.6rem', fontFamily: 'var(--font-display)',
-                fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase',
+                fontSize: '0.78rem', fontFamily: 'var(--font-display)',
+                fontWeight: 700,
                 flexShrink: 0,
               }}
             >
@@ -245,21 +250,45 @@ function PDFModal({
   folio, cliente, items, totals, descuentoPorcentajeMO,
   descripcionGeneral, garantia, condicionesComerciales,
   ocultarSuministros, empresa, moneda, valorUF, partidas, mostrarDetalle, onClose,
+  fechaEmision, hayCambios, onGuardar, levantamientoId, incluirFotos, onEnviar,
 }: {
-  folio: number; cliente: any; items: CotizacionItem[];
+  folio: number; cliente: Cliente; items: CotizacionItem[];
   totals: ReturnType<typeof calcularTotals>; descuentoPorcentajeMO: number;
   descripcionGeneral: string; garantia: string; condicionesComerciales: string;
   ocultarSuministros: boolean; empresa: EmpresaInfo; moneda: Moneda; valorUF: number;
   partidas: Partida[]; mostrarDetalle: boolean; onClose: () => void;
+  fechaEmision: string | null; hayCambios: boolean; onGuardar: () => void;
+  levantamientoId: string | null; incluirFotos: boolean;
+  /** Abre "Enviar al cliente" (link, WhatsApp, correo). */
+  onEnviar?: () => void;
 }) {
   const [gen, setGen] = useState(false);
+  const { error: toastError } = useToast();
   const folioStr = formatFolio(folio);
   const fmt = (v: number) => formatMoneda(v, moneda);
+
+  // Revisión previa: lo que un cliente notaría en el PDF.
+  const avisos: string[] = [];
+  const sinPrecio = items.filter(i => !(i.precio > 0)).length;
+  if (sinPrecio > 0) avisos.push(`${sinPrecio} ítem${sinPrecio > 1 ? 's' : ''} con precio $0`);
+  const sinDesc = items.filter(i => !i.descripcion.trim()).length;
+  if (sinDesc > 0) avisos.push(`${sinDesc} ítem${sinDesc > 1 ? 's' : ''} sin descripción`);
+  const partidasSinNombre = partidas.filter(p => !p.nombre.trim()).length;
+  if (partidasSinNombre > 0) avisos.push(`${partidasSinNombre} partida${partidasSinNombre > 1 ? 's' : ''} sin nombre`);
+  if (!cliente.rut) avisos.push('El cliente no tiene RUT');
+  if (!cliente.email) avisos.push('El cliente no tiene correo');
+  if (!descripcionGeneral.trim()) avisos.push('Falta la descripción del trabajo');
 
   const download = async (tipo: 'cliente' | 'interno') => {
     setGen(true);
     try {
       if (tipo === 'cliente') {
+        // Fotos del levantamiento (links firmados temporales) si la opción está activa.
+        let fotos: { url: string; caption: string }[] = [];
+        if (incluirFotos && levantamientoId) {
+          const lev = await levantamientosService.getById(levantamientoId);
+          fotos = await fotosService.paraPDF(lev?.data.fotos);
+        }
         const blob = await pdf(
           <PresupuestoPDF
             cliente={cliente} items={items} totals={totals}
@@ -269,9 +298,10 @@ function PDFModal({
             ocultarSuministros={ocultarSuministros}
             empresa={empresa} moneda={moneda} valorUF={valorUF}
             partidas={partidas} mostrarDetalle={mostrarDetalle}
+            fechaEmision={fechaEmision} fotos={fotos}
           />
         ).toBlob();
-        saveAs(blob, `Cotizacion_${folioStr}_${cliente.nombre_cliente}.pdf`);
+        saveAs(blob, `Cotizacion_${folioStr}_${nombreArchivo(cliente.nombre_cliente)}.pdf`);
       } else {
         const soloMat = items.filter(i => i.categoria === 'material' || i.esMaterial);
         const blob = await pdf(
@@ -284,8 +314,10 @@ function PDFModal({
         ).toBlob();
         saveAs(blob, `Interno_${folioStr}.pdf`);
       }
-    } catch (e) { console.error(e); }
-    finally { setGen(false); }
+    } catch (e) {
+      console.error(e);
+      toastError('No se pudo generar el PDF: ' + (e instanceof Error ? e.message : 'error desconocido'));
+    } finally { setGen(false); }
   };
 
   return (
@@ -318,6 +350,24 @@ function PDFModal({
             </div>
           </div>
 
+          {hayCambios && (
+            <div style={{ background: 'rgba(248,113,113,0.08)', border: '1px solid rgba(248,113,113,0.3)', borderRadius: 'var(--r-sm)', padding: '0.6rem 0.8rem', fontSize: '0.75rem', color: 'var(--text)', display: 'flex', alignItems: 'center', gap: '0.5rem', justifyContent: 'space-between' }}>
+              <span>Hay cambios <b>sin guardar</b>: el PDF no coincidirá con el historial.</span>
+              <button onClick={onGuardar} style={{ ...btnGhost, height: 28, padding: '0 0.6rem', whiteSpace: 'nowrap' }}><Save size={11} /> Guardar</button>
+            </div>
+          )}
+          {avisos.length > 0 && (
+            <div style={{ background: 'var(--y-soft)', border: '1px solid var(--border)', borderRadius: 'var(--r-sm)', padding: '0.6rem 0.8rem', fontSize: '0.74rem', color: 'var(--muted)' }}>
+              <p style={{ margin: '0 0 0.3rem', fontWeight: 700, color: 'var(--y)' }}>Revisa antes de enviar al cliente:</p>
+              {avisos.map(a => <p key={a} style={{ margin: 0 }}>• {a}</p>)}
+            </div>
+          )}
+
+          {onEnviar && (
+            <button onClick={onEnviar} style={{ ...btnGhost, width: '100%', justifyContent: 'center', height: 44, background: 'var(--y-brand)', color: 'var(--on-accent)', borderColor: 'transparent', fontWeight: 700 }}>
+              <Send size={14} /> Enviar al cliente (link para aceptar online)
+            </button>
+          )}
           <button onClick={() => download('cliente')} disabled={gen} style={{ ...btnGhost, width: '100%', justifyContent: 'center', height: 44, borderColor: 'rgba(74,222,128,0.3)', color: 'var(--success)' }}>
             {gen ? <Loader2 size={14} className="iv-spin" /> : <FileText size={14} />}
             PDF Cliente (con IVA)
@@ -345,16 +395,13 @@ function ItemRow({ item, index, onUpdate, onDelete, onDuplicate, onMoveUp, onMov
   isFirst: boolean; isLast: boolean; ocultarCostos: boolean; moneda: Moneda;
 }) {
   const CatIcon = CAT_ICONS[item.categoria];
-  const [isEditingCosto, setIsEditingCosto] = useState(false);
-  const [isEditingPrecio, setIsEditingPrecio] = useState(false);
   const calc = useMemo(() => calcularItem(item), [item]);
   /** Formatea según la moneda de la cotización (CLP o UF). */
   const fmt = (v: number) => formatMoneda(v, moneda);
 
   // Cadena del Excel: costo → (1+imprevistos) → ÷(1−margen) → ×(1+IVA)
   // El redondeo respeta la moneda: CLP a peso entero, UF a 2 decimales.
-  const handleCostoChange = (v: string) => {
-    const costo = cleanNumber(v);
+  const handleCostoChange = (costo: number) => {
     const precio = precioDesdeMargen(costo, item.margen, item.imprevistos);
     onUpdate(index, { costo, precio: redondearMoneda(precio, moneda) });
   };
@@ -368,8 +415,7 @@ function ItemRow({ item, index, onUpdate, onDelete, onDuplicate, onMoveUp, onMov
     const precio = precioDesdeMargen(item.costo || 0, margen, item.imprevistos);
     onUpdate(index, { margen, precio: redondearMoneda(precio, moneda) });
   };
-  const handlePrecioChange = (v: string) => {
-    const precio = cleanNumber(v);
+  const handlePrecioChange = (precio: number) => {
     const margen = margenDesdePrecio(item.costo || 0, precio, item.imprevistos);
     onUpdate(index, { precio, margen: Math.round(margen * 10) / 10 });
   };
@@ -402,7 +448,7 @@ function ItemRow({ item, index, onUpdate, onDelete, onDuplicate, onMoveUp, onMov
         <div className="iv-item-inputs-group">
           <div className="input-field-wrapper min-w-50">
             <span className="mobile-label">Cant.</span>
-            <input type="number" min="0" step="0.01" value={item.cantidad || ''} onChange={e => onUpdate(index, { cantidad: parseFloat(e.target.value) || 0 })} className="no-spin-arrows input-row-focus" style={{ ...inputStyle, textAlign: 'center', fontWeight: 'bold' }} placeholder="0" />
+            <NumeroInput value={item.cantidad || 0} onChange={v => onUpdate(index, { cantidad: v })} min={0} className="input-row-focus" style={{ ...inputStyle, textAlign: 'center', fontWeight: 'bold' }} placeholder="0" ariaLabel="Cantidad" />
           </div>
           <div className="input-field-wrapper min-w-60">
             <span className="mobile-label">Unid.</span>
@@ -413,7 +459,7 @@ function ItemRow({ item, index, onUpdate, onDelete, onDuplicate, onMoveUp, onMov
           {!ocultarCostos && (
             <div className="input-field-wrapper">
               <span className="mobile-label">Costo Unit.</span>
-              <input type={isEditingCosto ? 'number' : 'text'} className="no-spin-arrows input-row-focus" value={isEditingCosto ? (item.costo || '') : fmt(item.costo || 0)} onChange={e => handleCostoChange(e.target.value)} onFocus={() => setIsEditingCosto(true)} onBlur={() => setIsEditingCosto(false)} placeholder="$ 0" style={{ ...inputStyle, color: 'var(--muted)', fontSize: '0.8rem' }} />
+              <NumeroInput value={item.costo || 0} onChange={handleCostoChange} min={0} formatear={fmt} className="input-row-focus" placeholder="$ 0" ariaLabel="Costo unitario" style={{ ...inputStyle, color: 'var(--muted)', fontSize: '0.8rem' }} />
             </div>
           )}
           {!ocultarCostos && (
@@ -436,7 +482,7 @@ function ItemRow({ item, index, onUpdate, onDelete, onDuplicate, onMoveUp, onMov
           )}
           <div className="input-field-wrapper">
             <span className="mobile-label">Precio Venta</span>
-            <input type={isEditingPrecio ? 'number' : 'text'} className="no-spin-arrows input-row-focus" value={isEditingPrecio ? (item.precio || '') : fmt(item.precio || 0)} onChange={e => handlePrecioChange(e.target.value)} onFocus={() => setIsEditingPrecio(true)} onBlur={() => setIsEditingPrecio(false)} placeholder="$ 0" style={{ ...inputStyle, color: 'var(--y)', fontWeight: '700' }} />
+            <NumeroInput value={item.precio || 0} onChange={handlePrecioChange} min={0} formatear={fmt} className="input-row-focus" placeholder="$ 0" ariaLabel="Precio de venta" style={{ ...inputStyle, color: 'var(--y)', fontWeight: '700' }} />
           </div>
           <div className="input-field-wrapper min-w-55">
             <span className="mobile-label">Desc.</span>
@@ -481,8 +527,7 @@ function ItemRow({ item, index, onUpdate, onDelete, onDuplicate, onMoveUp, onMov
             <button key={cat} onClick={() => onUpdate(index, { categoria: cat })}
               style={{
                 background: 'none', border: 'none', cursor: 'pointer', padding: '0.2rem 0.5rem',
-                fontSize: '0.6rem', fontFamily: 'var(--font-display)', fontWeight: 700,
-                letterSpacing: '0.12em', textTransform: 'uppercase',
+                fontSize: '0.78rem', fontFamily: 'var(--font-display)', fontWeight: 700,
                 color: item.categoria === cat ? CAT_COLORS[cat] : 'var(--faint)',
                 transition: 'all 0.1s ease',
               }}
@@ -549,18 +594,20 @@ function PartidaCard({
       {/* Encabezado */}
       <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'flex-start', marginBottom: '0.6rem', flexWrap: 'wrap' }}>
         <div style={{ flex: 1, minWidth: 180 }}>
-          <span style={{ fontFamily: 'var(--font-display)', fontWeight: 700, fontSize: '0.55rem', letterSpacing: '0.18em', textTransform: 'uppercase', color: 'var(--y)' }}>Partida de proyecto</span>
+          <span style={{ fontFamily: 'var(--font-display)', fontWeight: 700, fontSize: '0.74rem', color: 'var(--y)' }}>Partida de proyecto</span>
           <input value={partida.nombre} onChange={e => onUpdatePartida(partida.id, { nombre: e.target.value })} placeholder="Nombre comercial (ej. Habilitación de tableros)"
             style={{ ...inp, width: '100%', fontWeight: 700, fontSize: '0.95rem', marginTop: '0.2rem' }} />
         </div>
         <div style={{ display: 'flex', alignItems: 'flex-end', gap: '0.4rem' }}>
           <div>
-            <span style={{ display: 'block', fontSize: '0.55rem', color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: '0.15rem' }}>Cantidad</span>
-            <input type="number" min="0" step="1" value={partida.cantidad || ''} onChange={e => onUpdatePartida(partida.id, { cantidad: parseFloat(e.target.value) || 0 })}
-              className="no-spin-arrows" style={{ ...inp, width: 70, textAlign: 'center', fontWeight: 700 }} />
+            <span style={{ display: 'block', fontSize: '0.74rem', color: 'var(--muted)', marginBottom: '0.15rem' }}>Cantidad</span>
+            <div style={{ width: 70 }}>
+              <NumeroInput value={partida.cantidad || 0} onChange={v => onUpdatePartida(partida.id, { cantidad: v })} min={0} ariaLabel="Cantidad de la partida"
+                style={{ ...inp, width: '100%', textAlign: 'center', fontWeight: 700 }} />
+            </div>
           </div>
           <div>
-            <span style={{ display: 'block', fontSize: '0.55rem', color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: '0.15rem' }}>Unidad</span>
+            <span style={{ display: 'block', fontSize: '0.74rem', color: 'var(--muted)', marginBottom: '0.15rem' }}>Unidad</span>
             <select value={partida.unidad} onChange={e => onUpdatePartida(partida.id, { unidad: e.target.value })} style={{ ...inp, cursor: 'pointer' }}>
               {['local', 'un', 'global', 'm²', 'depto', 'piso', 'mes'].map(u => <option key={u} value={u}>{u}</option>)}
             </select>
@@ -577,14 +624,14 @@ function PartidaCard({
       {/* Modo de precio (interno) */}
       {!ocultarCostos && (
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.6rem', flexWrap: 'wrap' }}>
-          <span style={{ fontSize: '0.6rem', color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.1em' }}>Precio</span>
+          <span style={{ fontSize: '0.78rem', color: 'var(--muted)' }}>Precio</span>
           <div style={{ display: 'flex', border: '1px solid var(--border2)', borderRadius: 'var(--r-sm)', overflow: 'hidden' }}>
             {(['items', 'margen'] as const).map(m => (
               <button key={m}
                 onClick={() => m === 'margen'
                   ? onSetMargen(partida.id, { margen: partida.margen ?? 30, imprevistos: partida.imprevistos ?? 0, iva: partida.iva ?? 19 })
                   : onUpdatePartida(partida.id, { modoPrecio: 'items' })}
-                style={{ background: modo === m ? 'var(--y-brand)' : 'transparent', color: modo === m ? 'var(--on-accent)' : 'var(--muted)', border: 'none', cursor: 'pointer', padding: '0.3rem 0.6rem', fontSize: '0.6rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+                style={{ background: modo === m ? 'var(--y-brand)' : 'transparent', color: modo === m ? 'var(--on-accent)' : 'var(--muted)', border: 'none', cursor: 'pointer', padding: '0.3rem 0.6rem', fontSize: '0.78rem', fontWeight: 700 }}>
                 {m === 'items' ? 'Por ítem' : 'Margen único'}
               </button>
             ))}
@@ -622,7 +669,7 @@ function PartidaCard({
 
       {/* Acciones para agregar a la partida */}
       <div style={{ display: 'flex', gap: '4px', flexWrap: 'wrap', marginTop: '0.4rem', alignItems: 'center' }}>
-        <span style={{ fontSize: '0.5rem', color: 'var(--faint)', textTransform: 'uppercase', letterSpacing: '0.12em', fontWeight: 700, marginRight: '0.1rem' }}>Agregar</span>
+        <span style={{ fontSize: '0.72rem', color: 'var(--faint)', fontWeight: 700, marginRight: '0.1rem' }}>Agregar</span>
         {CATEGORIAS_ORDEN.map(cat => {
           const CatIcon = CAT_ICONS[cat];
           return (
@@ -663,6 +710,7 @@ function CotizadorContent() {
   const cloneId       = searchParams.get('clone');
   const clienteParam  = searchParams.get('cliente');
   const solicitudParam = searchParams.get('solicitud');
+  const levantamientoParam = searchParams.get('levantamiento');
   const fileInputRef  = useRef<HTMLInputElement>(null);
 
   // ── Estado formulario ──
@@ -692,6 +740,16 @@ function CotizadorContent() {
   // Solicitud de origen (flujo Solicitud → IA → Cotización). Vacío en cotización directa.
   const [solicitudOrigen,        setSolicitudOrigen]        = useState<Solicitud | null>(null);
   const [generandoIA,            setGenerandoIA]            = useState(false);
+  // Levantamiento de origen (sus fotos pueden ir al PDF) y la fila guardada (para "Enviar").
+  const [levantamientoId,        setLevantamientoId]        = useState<string | null>(null);
+  const [incluirFotos,           setIncluirFotos]           = useState(false);
+  const [cotGuardada,            setCotGuardada]            = useState<Cotizacion | null>(null);
+  const [showEnviar,             setShowEnviar]             = useState(false);
+  // Fecha de emisión real (created_at) para el PDF; null = cotización nueva (hoy).
+  const [fechaEmision,           setFechaEmision]           = useState<string | null>(null);
+  // Huella del contenido guardado, para detectar "cambios sin guardar".
+  const [firmaGuardada,          setFirmaGuardada]          = useState<string | null>(null);
+  const [capturarFirma,          setCapturarFirma]          = useState(false);
   const [showDescripcion,        setShowDescripcion]        = useState(false);
   const [showOpciones,           setShowOpciones]           = useState(false);
   const [moneda,                 setMoneda]                 = useState<Moneda>('CLP');
@@ -747,6 +805,29 @@ const [empresaEditing, setEmpresaEditing] = useState<EmpresaInfo | null>(null);
           await generarBorradorDesdeSolicitud(sol);
         }
       } catch { /* si falla la carga, el cotizador sigue funcionando normal */ }
+    }
+
+    // Flujo Levantamiento (visita técnica) → Cotización: precarga el cliente y
+    // usa el alcance levantado en terreno como descripción del trabajo.
+    if (levantamientoParam && !editId && !cloneId) {
+      try {
+        const lev = await levantamientosService.getById(levantamientoParam);
+        if (lev) {
+          setLevantamientoId(lev.id);
+          setIncluirFotos((lev.data.fotos || []).length > 0);
+          if (lev.cliente_id) {
+            const c = dataClientes.find((x: Cliente) => x.id === lev.cliente_id);
+            if (c) { setClienteSeleccionado(c); setSearchCliente(c.nombre_cliente); }
+          }
+          const d = lev.data;
+          const lv = `LV-${String(lev.folio || 0).padStart(4, '0')}`;
+          const partes = [`Según levantamiento técnico ${lv}${d.fecha ? ` del ${formatDate(d.fecha)}` : ''}${d.direccion ? `, ${d.direccion}` : ''}.`];
+          if (d.alcance_trabajos?.trim()) partes.push(`**Trabajos a ejecutar:**\n${d.alcance_trabajos.trim()}`);
+          if (d.alcance_mejoras?.trim())  partes.push(`**Mejoras recomendadas:**\n${d.alcance_mejoras.trim()}`);
+          setDescripcionGeneral(partes.join('\n\n'));
+          success(`Cotización iniciada desde el levantamiento ${lv}`);
+        }
+      } catch { /* sin levantamiento: cotización normal */ }
     }
   }
 
@@ -826,13 +907,44 @@ const [empresaEditing, setEmpresaEditing] = useState<EmpresaInfo | null>(null);
       if (cot.solicitud_id && !isCloning) {
         try { const sol = await solicitudesService.getById(cot.solicitud_id); if (sol) setSolicitudOrigen(sol); } catch { /* opcional */ }
       }
-      if (!isCloning) setFolioGenerado(cot.folio);
-      else            obtenerUltimoFolio();
+      setLevantamientoId(cot.levantamiento_id || null);
+      setIncluirFotos(!!cot.incluir_fotos);
+      setCotGuardada(isCloning ? null : cot);
+      if (!isCloning) { setFolioGenerado(cot.folio); setFechaEmision(cot.created_at); setCapturarFirma(true); }
+      else            { obtenerUltimoFolio(); setFechaEmision(null); setFirmaGuardada(null); }
     }
     setLoading(false);
   }
 
   const totals = useMemo(() => calcularTotals(items, descuentoPorcentajeMO), [items, descuentoPorcentajeMO]);
+
+  // ── Cambios sin guardar ──
+  // Huella del contenido que importa. Si difiere de lo último guardado/cargado,
+  // se avisa antes de cerrar la pestaña o salir por el menú (antes se perdía la
+  // cotización sin aviso).
+  const firmaContenido = useMemo(() => JSON.stringify({
+    c: clienteSeleccionado?.id || null, items, partidas,
+    d: descripcionGeneral, g: garantia, cc: condicionesComerciales,
+    m: moneda, uf: valorUF, dmo: descuentoPorcentajeMO,
+    os: ocultarSuministros, md: mostrarDetalle, s: supuestos,
+  }), [clienteSeleccionado, items, partidas, descripcionGeneral, garantia, condicionesComerciales,
+       moneda, valorUF, descuentoPorcentajeMO, ocultarSuministros, mostrarDetalle, supuestos]);
+
+  // Tras cargar una cotización existente, su contenido cuenta como "guardado".
+  useEffect(() => {
+    if (capturarFirma && !loading) { setFirmaGuardada(firmaContenido); setCapturarFirma(false); }
+  }, [capturarFirma, loading, firmaContenido]);
+
+  const hayCambios = items.length > 0 && firmaGuardada !== firmaContenido;
+
+  useEffect(() => {
+    marcarSinGuardar(hayCambios);
+    if (!hayCambios) return;
+    const h = (e: BeforeUnloadEvent) => { e.preventDefault(); e.returnValue = ''; };
+    window.addEventListener('beforeunload', h);
+    return () => window.removeEventListener('beforeunload', h);
+  }, [hayCambios]);
+  useEffect(() => () => marcarSinGuardar(false), []);
 
   /** Formatea un monto en la moneda seleccionada (CLP o UF). */
   const fmt = useCallback((v: number) => formatMoneda(v, moneda), [moneda]);
@@ -847,21 +959,64 @@ const [empresaEditing, setEmpresaEditing] = useState<EmpresaInfo | null>(null);
   const itemsSueltos = useMemo(() => items.filter(i => !i.partidaId), [items]);
   const itemsDe = useCallback((pid: string) => items.filter(i => i.partidaId === pid), [items]);
 
-  /** Trae el valor de la UF de hoy desde mindicador.cl (API pública, sin key). */
-  const traerUF = useCallback(async () => {
-    setCargandoUF(true);
+  /** Valor de la UF de hoy desde mindicador.cl (API pública, sin key). 0 si falla. */
+  const obtenerUFHoy = useCallback(async (): Promise<number> => {
     try {
       const res = await fetch('https://mindicador.cl/api/uf');
       const data = await res.json();
-      const val = Math.round((data?.serie?.[0]?.valor || 0));
-      if (val > 0) { setValorUF(val); success(`UF de hoy: ${formatCLP(val)}`); }
-      else warning('No se pudo obtener la UF; ingrésala manualmente.');
+      const v = Number(data?.serie?.[0]?.valor || 0);
+      return v > 0 ? Math.round(v * 100) / 100 : 0;   // la UF tiene 2 decimales
     } catch {
-      warning('No se pudo obtener la UF; ingrésala manualmente.');
-    } finally {
-      setCargandoUF(false);
+      return 0;
     }
-  }, [success, warning]);
+  }, []);
+
+  const traerUF = useCallback(async () => {
+    setCargandoUF(true);
+    const val = await obtenerUFHoy();
+    setCargandoUF(false);
+    if (val > 0) { setValorUF(val); success(`UF de hoy: ${formatMoneda(val, 'CLP')} (${formatMiles(val)})`); }
+    else warning('No se pudo obtener la UF; ingrésala manualmente.');
+  }, [obtenerUFHoy, success, warning]);
+
+  /**
+   * Cambia la moneda CONVIRTIENDO los montos ya cargados con el valor de la UF.
+   * Antes solo cambiaba la etiqueta: un ítem de $45.000 pasaba a mostrarse como
+   * "UF 45.000,00". Si no hay valor de UF lo trae de internet o lo pide.
+   */
+  const cambiarMoneda = useCallback(async (nueva: Moneda) => {
+    if (nueva === moneda) return;
+    if (items.length === 0) { setMoneda(nueva); return; }
+    let uf = valorUF;
+    if (!(uf > 0)) {
+      setCargandoUF(true);
+      uf = await obtenerUFHoy();
+      setCargandoUF(false);
+      if (!(uf > 0)) {
+        const txt = typeof window !== 'undefined' ? window.prompt('No se pudo obtener la UF de hoy. Ingresa el valor de la UF en pesos (ej: 39.485,65):') : null;
+        uf = cleanNumber(txt || '');
+      }
+      if (!(uf > 0)) { warning('Sin valor de UF no se pueden convertir los montos. No se cambió la moneda.'); return; }
+      setValorUF(uf);
+    }
+    setItems(prev => convertirItemsMoneda(prev, moneda, nueva, uf));
+    setMoneda(nueva);
+    success(`Montos convertidos a ${nueva} (UF = ${formatMoneda(uf, 'CLP')}). Revisa los precios.`);
+  }, [moneda, items.length, valorUF, obtenerUFHoy, success, warning]);
+
+  /**
+   * Los precios de la biblioteca/recetas están en pesos. Si la cotización está en
+   * UF se convierten; sin valor de UF se bloquea (evita mezclar monedas). Devuelve
+   * null cuando no se debe insertar.
+   */
+  const aMonedaCotizacion = useCallback((nuevos: CotizacionItem[]): CotizacionItem[] | null => {
+    if (moneda !== 'UF') return nuevos;
+    if (!(valorUF > 0)) {
+      warning('La cotización está en UF: carga el valor de la UF (botón "Hoy") antes de agregar desde la biblioteca.');
+      return null;
+    }
+    return convertirItemsMoneda(nuevos, 'CLP', 'UF', valorUF);
+  }, [moneda, valorUF, warning]);
 
   const addItem = useCallback((categoria: CategoriaItem = 'material') => {
     // Se agrega AL FINAL (donde están los botones), para que aparezca justo
@@ -870,31 +1025,34 @@ const [empresaEditing, setEmpresaEditing] = useState<EmpresaInfo | null>(null);
   }, [supuestos]);
 
   /** Inserta ítems del catálogo (a una partida destino si hay, o sueltos). */
-  const insertarDesdeBiblioteca = useCallback((nuevos: CotizacionItem[], mensaje: string) => {
-    if (nuevos.length === 0) return;
+  const insertarDesdeBiblioteca = useCallback((nuevosCLP: CotizacionItem[], mensaje: string) => {
+    if (nuevosCLP.length === 0) return;
+    const nuevos = aMonedaCotizacion(nuevosCLP);
+    if (!nuevos) return;
     const conPartida = partidaDestino ? nuevos.map(i => ({ ...i, partidaId: partidaDestino })) : nuevos;
     setItems(prev => [...prev, ...conPartida]);
     setShowBiblioteca(false);
     setPartidaDestino(null);
     success(mensaje);
-  }, [success, partidaDestino]);
+  }, [success, partidaDestino, aMonedaCotizacion]);
 
   /** Inserta una receta: como partida nueva, o dentro de la partida destino. */
   const insertarReceta = useCallback((receta: RecetaConComponentes, cantidad: number) => {
+    const { partida, items: nuevosCLP } = partidaDesdeReceta(receta, cantidad, supuestos);
+    const nuevos = aMonedaCotizacion(nuevosCLP);
+    if (!nuevos) return;
     if (partidaDestino) {
-      const { items: nuevos } = partidaDesdeReceta(receta, cantidad, supuestos);
       const conPartida = nuevos.map(i => ({ ...i, partidaId: partidaDestino }));
       setItems(prev => [...prev, ...conPartida]);
       success(`${nuevos.length} materiales agregados a la partida`);
     } else {
-      const { partida, items: nuevos } = partidaDesdeReceta(receta, cantidad, supuestos);
       setPartidas(prev => [...prev, partida]);
       setItems(prev => [...prev, ...nuevos]);
       success(`Partida "${partida.nombre}" × ${cantidad} agregada (${nuevos.length} materiales internos)`);
     }
     setShowBiblioteca(false);
     setPartidaDestino(null);
-  }, [partidaDestino, supuestos, success]);
+  }, [partidaDestino, supuestos, success, aMonedaCotizacion]);
 
   /**
    * Inserta el borrador generado por IA: cada partida se crea como Partida de
@@ -903,6 +1061,11 @@ const [empresaEditing, setEmpresaEditing] = useState<EmpresaInfo | null>(null);
    * venta se deriva con los márgenes/imprevistos de los supuestos por categoría.
    */
   const insertarDesdeIA = useCallback((partidasIA: PartidaIAResuelta[]) => {
+    // Los costos vienen en pesos: en UF sin valor de UF se mezclarían monedas.
+    if (moneda === 'UF' && !(valorUF > 0)) {
+      warning('La cotización está en UF: carga el valor de la UF (botón "Hoy") y vuelve a insertar.');
+      return;
+    }
     const nuevasPartidas: Partida[] = [];
     const nuevosItems: CotizacionItem[] = [];
     for (const p of partidasIA) {
@@ -931,7 +1094,7 @@ const [empresaEditing, setEmpresaEditing] = useState<EmpresaInfo | null>(null);
     setItems(prev => [...prev, ...nuevosItems]);
     setShowIA(false);
     success(`IA: ${nuevasPartidas.length} ${nuevasPartidas.length === 1 ? 'partida' : 'partidas'} y ${nuevosItems.length} ítems agregados`);
-  }, [moneda, valorUF, supuestos, success]);
+  }, [moneda, valorUF, supuestos, success, warning]);
 
   /**
    * Flujo Solicitud → Cotización: toma el ANÁLISIS de IA que YA hizo la solicitud
@@ -1251,7 +1414,10 @@ const [empresaEditing, setEmpresaEditing] = useState<EmpresaInfo | null>(null);
     if (!clienteSeleccionado) { warning('Selecciona un cliente antes de guardar'); return; }
     if (items.length === 0)   { warning('Agrega al menos un ítem'); return; }
     if (!empresaSelec)        { warning('Selecciona una empresa emisora'); return; }
+    // Sin valor de UF el total en pesos quedaba en 0 y la venta no contaba en el dashboard.
+    if (moneda === 'UF' && !(valorUF > 0)) { warning('Ingresa el valor de la UF (botón "Hoy") antes de guardar.'); return; }
     setLoading(true);
+    const firmaAlGuardar = firmaContenido;
     const payload = {
       cliente_id: clienteSeleccionado.id,
       empresa_id: empresaSelec.id ?? null,
@@ -1270,18 +1436,32 @@ const [empresaEditing, setEmpresaEditing] = useState<EmpresaInfo | null>(null);
       descripcion_general: descripcionGeneral,
       condiciones_servicio: garantia,
       condiciones_comerciales: condicionesComerciales,
-      estado: 'Pendiente' as const,
+      // OJO: el estado NO va aquí. Al editar se conserva el actual; antes se
+      // forzaba 'Pendiente' y una cotización Aceptada (venta) volvía a Pendiente.
       ocultar_suministros: ocultarSuministros,
       // Relación con la solicitud de origen (solo si vino de ese flujo).
       ...(solicitudOrigen ? { solicitud_id: solicitudOrigen.id } : {}),
     };
+    // Campos nuevos (requieren supabase_mejoras_comerciales.sql). Si la base aún no
+    // los tiene, se guarda igual sin ellos y se avisa.
+    const extras = levantamientoId ? { levantamiento_id: levantamientoId, incluir_fotos: incluirFotos } : {};
+    const esEdicion = !!(editId && !cloneId);
+    const persistir = (p: typeof payload & Partial<typeof extras>) =>
+      esEdicion ? cotizacionesService.update(editId as string, p) : cotizacionesService.create({ ...p, estado: 'Pendiente' });
     try {
-      let result;
-      if (editId && !cloneId) {
-        result = await cotizacionesService.update(editId, payload);
+      let result: Cotizacion;
+      try {
+        result = await persistir({ ...payload, ...extras });
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String((err as { message?: string })?.message || '');
+        if (!Object.keys(extras).length || !/column|schema cache/i.test(msg)) throw err;
+        result = await persistir(payload);
+        warning('Guardada sin el vínculo al levantamiento: ejecuta supabase_mejoras_comerciales.sql en Supabase.');
+      }
+      setCotGuardada(result);
+      if (esEdicion) {
         success('Cotización actualizada correctamente');
       } else {
-        result = await cotizacionesService.create(payload);
         success('Cotización guardada correctamente');
         // Vincula la cotización recién creada a su solicitud de origen.
         if (solicitudOrigen) {
@@ -1292,6 +1472,8 @@ const [empresaEditing, setEmpresaEditing] = useState<EmpresaInfo | null>(null);
         }
       }
       setFolioGenerado(result.folio);
+      setFirmaGuardada(firmaAlGuardar);
+      if (!fechaEmision) setFechaEmision(result.created_at);
       if (!editId || cloneId) router.replace(`/cotizador?edit=${result.id}`);
     } catch (e: any) {
       toastError('Error al guardar: ' + (e?.message || 'Error desconocido'));
@@ -1301,6 +1483,9 @@ const [empresaEditing, setEmpresaEditing] = useState<EmpresaInfo | null>(null);
   };
 
   const nuevoPresupuesto = () => {
+    if (!confirmarSalida()) return;
+    setFechaEmision(null);
+    setFirmaGuardada(null);
     setItems([]);
     setPartidas([]);
     setMostrarDetalle(false);
@@ -1314,6 +1499,9 @@ const [empresaEditing, setEmpresaEditing] = useState<EmpresaInfo | null>(null);
     setCondicionesComerciales(defCondiciones);
     setSupuestos({ ...SUPUESTOS_DEFAULT });
     setSolicitudOrigen(null);
+    setLevantamientoId(null);
+    setIncluirFotos(false);
+    setCotGuardada(null);
     obtenerUltimoFolio();
     router.push('/cotizador');
   };
@@ -1394,6 +1582,9 @@ const [empresaEditing, setEmpresaEditing] = useState<EmpresaInfo | null>(null);
           ocultarSuministros={ocultarSuministros}
           empresa={empresaPDF} moneda={moneda} valorUF={valorUF}
           partidas={partidas} mostrarDetalle={mostrarDetalle}
+          fechaEmision={fechaEmision} hayCambios={hayCambios} onGuardar={handleGuardar}
+          levantamientoId={levantamientoId} incluirFotos={incluirFotos}
+          onEnviar={cotGuardada ? () => { setShowPDFModal(false); setShowEnviar(true); } : undefined}
           onClose={() => setShowPDFModal(false)}
         />
       )}
@@ -1448,14 +1639,25 @@ const [empresaEditing, setEmpresaEditing] = useState<EmpresaInfo | null>(null);
         />
       )}
 
+      {showEnviar && cotGuardada && clienteSeleccionado && (
+        <EnviarCotizacionModal
+          cot={{ ...cotGuardada, total: totals.total, moneda, clientes: clienteSeleccionado }}
+          empresaNombre={empresaSelec?.nombre || 'InnVolt'}
+          onClose={() => setShowEnviar(false)}
+          onCambio={() => { if (editId) cotizacionesService.getById(editId).then(c => c && setCotGuardada(c)); }}
+        />
+      )}
+
       {showOpciones && (
         <OpcionesModal
           ocultarSuministros={ocultarSuministros}
           ocultarCostos={ocultarCostos}
           mostrarDetalle={mostrarDetalle}
+          incluirFotos={levantamientoId ? incluirFotos : null}
           onToggle={(campo) => {
             if (campo === 'ocultarSuministros') setOcultarSuministros(v => !v);
             else if (campo === 'ocultarCostos') setOcultarCostos(v => !v);
+            else if (campo === 'incluirFotos') setIncluirFotos(v => !v);
             else setMostrarDetalle(v => !v);
           }}
           onClose={() => setShowOpciones(false)}
@@ -1477,31 +1679,28 @@ const [empresaEditing, setEmpresaEditing] = useState<EmpresaInfo | null>(null);
       )}
 
       {/* ══ HEADER ══ */}
-      <div className="iv-page-header" style={{ marginBottom: '1.25rem', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-        <div style={{ width: '100%' }}>
-          <p className="label-muted" style={{ marginBottom: '0.25rem', letterSpacing: '0.4em', fontSize: '0.65rem' }}>
-            {cloneId ? 'Clonando' : (isEditing ? 'Editando' : 'Nueva')} cotización
-          </p>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap', justifyContent: 'space-between' }}>
-            <h1 style={{ fontFamily: 'var(--font-display)', fontWeight: 900, fontSize: 'clamp(1.6rem, 5vw, 2.4rem)', textTransform: 'uppercase', lineHeight: 1, color: 'var(--text)', margin: 0 }}>
-              COTIZA<span style={{ color: 'var(--y)' }}>DOR</span>
-            </h1>
-            <span style={{ background: hasFolio ? 'var(--y-brand)' : 'var(--bg3)', color: hasFolio ? 'var(--on-accent)' : 'var(--muted)', fontFamily: 'var(--font-display)', fontWeight: 900, fontSize: '0.75rem', letterSpacing: '0.12em', padding: '0.3rem 0.75rem', borderRadius: 'var(--r)', border: hasFolio ? 'none' : '1px solid var(--border2)' }}>
+      <div className="pg-header">
+        <div style={{ minWidth: 0 }}>
+          <p className="pg-eyebrow">{cloneId ? 'Clonando' : (isEditing ? 'Editando' : 'Nueva')} cotización</p>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', flexWrap: 'wrap' }}>
+            <h1 className="pg-title">Cotizador</h1>
+            <span className="tabular" style={{ marginTop: 4, background: hasFolio ? 'var(--y-brand)' : 'var(--bg3)', color: hasFolio ? 'var(--on-accent)' : 'var(--muted)', fontWeight: 700, fontSize: '0.8rem', padding: '0.25rem 0.65rem', borderRadius: 999, border: hasFolio ? 'none' : '1px solid var(--border2)' }}>
               {formatFolio(folioGenerado || proximoFolio)}
             </span>
           </div>
+          {clienteSeleccionado && <p className="pg-subtitle">{clienteSeleccionado.nombre_cliente}{clienteSeleccionado.empresa ? ` · ${clienteSeleccionado.empresa}` : ''}</p>}
         </div>
 
-        <div className="iv-header-actions" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(90px, 1fr))', gap: '6px', width: '100%' }}>
-          <button onClick={nuevoPresupuesto} style={{ ...btnGhost, justifyContent: 'center', margin: 0 }}><RefreshCcw size={12} /> Nuevo</button>
-          <Link href="/cotizador/historial" style={{ ...btnGhost, textDecoration: 'none', justifyContent: 'center', margin: 0 }}>
-            <History size={12} /> Historial
+        <div className="pg-actions">
+          <button onClick={nuevoPresupuesto} className="btn btn-ghost btn-sm"><RefreshCcw size={13} /> Nuevo</button>
+          <Link href="/cotizador/historial" onClick={e => { if (!confirmarSalida()) e.preventDefault(); }} className="btn btn-ghost btn-sm">
+            <History size={13} /> Historial
           </Link>
-          <button onClick={() => fileInputRef.current?.click()} style={{ ...btnGhost, justifyContent: 'center', margin: 0 }} title="Importar partidas e ítems desde Excel">
-            <FileUp size={12} /> Excel
+          <button onClick={() => fileInputRef.current?.click()} className="btn btn-ghost btn-sm" title="Importar partidas e ítems desde Excel">
+            <FileUp size={13} /> Excel
           </button>
-          <button onClick={descargarPlantilla} style={{ ...btnGhost, justifyContent: 'center', margin: 0 }} title="Descargar plantilla Excel (partidas + ítems)">
-            <FileText size={12} /> Plantilla
+          <button onClick={descargarPlantilla} className="btn btn-ghost btn-sm" title="Descargar plantilla Excel (partidas + ítems)">
+            <FileText size={13} /> Plantilla
           </button>
           {hasFolio && (
             <button
@@ -1509,17 +1708,17 @@ const [empresaEditing, setEmpresaEditing] = useState<EmpresaInfo | null>(null);
                 if (!empresaSelec) { warning('Selecciona una empresa emisora primero'); return; }
                 setShowPDFModal(true);
               }}
-              style={{ ...btnGhost, color: 'var(--success)', borderColor: 'rgba(74,222,128,0.3)', justifyContent: 'center', margin: 0 }}
+              className="btn btn-ghost btn-sm"
             >
-              <Download size={12} /> PDF
+              <Download size={13} /> PDF y envío
             </button>
           )}
-          <button
-            onClick={handleGuardar} disabled={loading}
-            style={{ background: 'var(--y-brand)', color: 'var(--on-accent)', border: 'none', borderRadius: 'var(--r)', cursor: loading ? 'not-allowed' : 'pointer', padding: '0 0.75rem', height: 36, fontFamily: 'var(--font-display)', fontWeight: 900, fontSize: '0.68rem', letterSpacing: '0.12em', textTransform: 'uppercase', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: '0.4rem', opacity: loading ? 0.5 : 1, gridColumn: 'span 2 / auto' }}
-          >
-            {loading ? <Loader2 size={12} className="iv-spin" /> : <Save size={12} />}
-            {isEditing ? 'Actualizar' : 'Guardar Cotización'}
+          <button onClick={handleGuardar} disabled={loading} className="btn btn-primary btn-sm">
+            {loading ? <Loader2 size={13} className="iv-spin" /> : <Save size={13} />}
+            {isEditing ? 'Actualizar' : 'Guardar cotización'}
+            {hayCambios && !loading && (
+              <span title="Hay cambios sin guardar" style={{ width: 7, height: 7, borderRadius: '50%', background: 'var(--danger)', boxShadow: '0 0 0 2px var(--on-accent)', marginLeft: 2 }} />
+            )}
           </button>
         </div>
       </div>
@@ -1583,7 +1782,7 @@ const [empresaEditing, setEmpresaEditing] = useState<EmpresaInfo | null>(null);
             </div>
             {clienteSeleccionado && (
               <div style={{ marginTop: '0.5rem', padding: '0.5rem', background: 'var(--bg3)', borderRadius: 'var(--r-sm)', display: 'flex', flexDirection: 'column', gap: '0.2rem' }}>
-                <p style={{ fontFamily: 'var(--font-display)', fontWeight: 700, fontSize: '0.8rem', color: 'var(--y)', textTransform: 'uppercase', margin: 0 }}>{clienteSeleccionado.nombre_cliente}</p>
+                <p style={{ fontFamily: 'var(--font-display)', fontWeight: 700, fontSize: '0.8rem', color: 'var(--y)', margin: 0 }}>{clienteSeleccionado.nombre_cliente}</p>
                 {clienteSeleccionado.empresa   && <p style={{ fontSize: '0.72rem', color: 'var(--muted)', margin: 0 }}>{clienteSeleccionado.empresa}</p>}
                 {clienteSeleccionado.rut       && <p style={{ fontSize: '0.7rem', color: 'var(--muted)', fontFamily: 'monospace', margin: 0 }}>RUT: {clienteSeleccionado.rut}</p>}
               </div>
@@ -1603,10 +1802,10 @@ const [empresaEditing, setEmpresaEditing] = useState<EmpresaInfo | null>(null);
 
           {/* ── Moneda (CLP / UF) ── */}
           <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginLeft: 'auto', flexWrap: 'wrap' }}>
-            <span style={{ fontFamily: 'var(--font-display)', fontWeight: 700, fontSize: '0.58rem', letterSpacing: '0.15em', textTransform: 'uppercase', color: 'var(--muted)' }}>Moneda</span>
+            <span style={{ fontFamily: 'var(--font-display)', fontWeight: 700, fontSize: '0.76rem', color: 'var(--muted)' }}>Moneda</span>
             <div style={{ display: 'flex', border: '1px solid var(--border2)', borderRadius: 'var(--r-sm)', overflow: 'hidden' }}>
               {(['CLP', 'UF'] as Moneda[]).map(m => (
-                <button key={m} onClick={() => setMoneda(m)} style={{
+                <button key={m} onClick={() => cambiarMoneda(m)} disabled={cargandoUF} style={{
                   background: moneda === m ? 'var(--y-brand)' : 'transparent',
                   color: moneda === m ? 'var(--on-accent)' : 'var(--muted)',
                   border: 'none', cursor: 'pointer', padding: '0 0.75rem', height: 32,
@@ -1617,8 +1816,10 @@ const [empresaEditing, setEmpresaEditing] = useState<EmpresaInfo | null>(null);
             {moneda === 'UF' && (
               <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
                 <span style={{ fontSize: '0.62rem', color: 'var(--muted)' }}>UF = $</span>
-                <input type="number" min="0" step="1" value={valorUF || ''} onChange={e => setValorUF(parseFloat(e.target.value) || 0)} placeholder="0" title="Valor de la UF en pesos (para la equivalencia en CLP)"
-                  style={{ width: 82, height: 32, background: 'var(--input-bg)', border: '1px solid var(--input-border)', color: 'var(--text)', borderRadius: 'var(--r-sm)', padding: '0 0.5rem', fontSize: '0.8rem', textAlign: 'right' }} />
+                <div style={{ width: 96 }}>
+                  <NumeroInput value={valorUF} onChange={setValorUF} min={0} placeholder="39.485,65" title="Valor de la UF en pesos (para la equivalencia en CLP)"
+                    style={{ width: '100%', height: 32, background: 'var(--input-bg)', border: '1px solid var(--input-border)', color: 'var(--text)', borderRadius: 'var(--r-sm)', padding: '0 0.5rem', fontSize: '0.8rem', textAlign: 'right' }} />
+                </div>
                 <button onClick={traerUF} disabled={cargandoUF} title="Traer valor UF de hoy" style={{ ...btnGhost, height: 32, padding: '0 0.6rem', fontSize: '0.58rem' }}>
                   {cargandoUF ? <Loader2 size={11} className="iv-spin" /> : <RefreshCcw size={11} />} Hoy
                 </button>
@@ -1632,7 +1833,7 @@ const [empresaEditing, setEmpresaEditing] = useState<EmpresaInfo | null>(null);
 
           {/* Toolbar ítems */}
           <div style={{ background: 'var(--bg2)', border: '1px solid var(--border2)', borderTop: '2px solid var(--y-brand)', padding: '0.75rem', display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap', borderRadius: 'var(--r)' }}>
-            <span style={{ fontFamily: 'var(--font-display)', fontWeight: 700, fontSize: '0.6rem', letterSpacing: '0.2em', textTransform: 'uppercase', color: 'var(--y)' }}>
+            <span style={{ fontFamily: 'var(--font-display)', fontWeight: 700, fontSize: '0.78rem', color: 'var(--y)' }}>
               Presupuesto
             </span>
 
@@ -1640,7 +1841,7 @@ const [empresaEditing, setEmpresaEditing] = useState<EmpresaInfo | null>(null);
             <button
               onClick={addPartida}
               title="Crear una partida de proyecto (agrupa materiales/MO/servicios en una línea comercial)"
-              style={{ background: 'var(--y-brand)', color: 'var(--on-accent)', border: 'none', cursor: 'pointer', height: 32, borderRadius: 'var(--r-sm)', padding: '0 0.85rem', fontFamily: 'var(--font-display)', fontWeight: 700, fontSize: '0.64rem', letterSpacing: '0.08em', textTransform: 'uppercase', display: 'inline-flex', alignItems: 'center', gap: '0.35rem' }}
+              style={{ background: 'var(--y-brand)', color: 'var(--on-accent)', border: 'none', cursor: 'pointer', height: 32, borderRadius: 'var(--r-sm)', padding: '0 0.85rem', fontFamily: 'var(--font-display)', fontWeight: 700, fontSize: '0.8rem', display: 'inline-flex', alignItems: 'center', gap: '0.35rem' }}
             >
               <Plus size={13} /><Package size={13} /> Nueva partida
             </button>
@@ -1661,7 +1862,7 @@ const [empresaEditing, setEmpresaEditing] = useState<EmpresaInfo | null>(null);
 
             {/* ── Secundario: ítems sueltos (fuera de partida) ── */}
             <div style={{ display: 'flex', alignItems: 'center', gap: '4px', flexWrap: 'wrap', paddingLeft: '0.5rem', marginLeft: '0.15rem', borderLeft: '1px solid var(--border2)' }}>
-              <span style={{ fontSize: '0.5rem', color: 'var(--faint)', textTransform: 'uppercase', letterSpacing: '0.14em', fontWeight: 700 }}>Sueltos</span>
+              <span style={{ fontSize: '0.72rem', color: 'var(--faint)', fontWeight: 700 }}>Sueltos</span>
               {CATEGORIAS_ORDEN.map(cat => {
                 const CatIcon = CAT_ICONS[cat];
                 return (
@@ -1722,7 +1923,7 @@ const [empresaEditing, setEmpresaEditing] = useState<EmpresaInfo | null>(null);
               <p style={{ color: 'var(--text)', marginBottom: '0.35rem', fontSize: '0.9rem', fontWeight: 600 }}>Empieza por una partida de proyecto</p>
               <p style={{ color: 'var(--muted)', marginBottom: '1.25rem', fontSize: '0.78rem' }}>Agrupa materiales, mano de obra y servicios en una línea comercial. También puedes agregar ítems sueltos.</p>
               <div style={{ display: 'flex', gap: '8px', justifyContent: 'center', alignItems: 'center', flexWrap: 'wrap' }}>
-                <button onClick={addPartida} style={{ background: 'var(--y-brand)', color: 'var(--on-accent)', border: 'none', cursor: 'pointer', height: 40, borderRadius: 'var(--r-sm)', padding: '0 1.1rem', fontFamily: 'var(--font-display)', fontWeight: 700, fontSize: '0.72rem', letterSpacing: '0.06em', textTransform: 'uppercase', display: 'inline-flex', alignItems: 'center', gap: '0.4rem' }}>
+                <button onClick={addPartida} style={{ background: 'var(--y-brand)', color: 'var(--on-accent)', border: 'none', cursor: 'pointer', height: 40, borderRadius: 'var(--r-sm)', padding: '0 1.1rem', fontFamily: 'var(--font-display)', fontWeight: 700, fontSize: '0.72rem', display: 'inline-flex', alignItems: 'center', gap: '0.4rem' }}>
                   <Plus size={14} /><Package size={14} /> Nueva partida
                 </button>
                 <button onClick={() => setShowIA(true)} style={{ ...btnGhost, height: 40, color: 'var(--y)', borderColor: 'var(--border)', background: 'var(--y-soft)' }}>
@@ -1733,7 +1934,7 @@ const [empresaEditing, setEmpresaEditing] = useState<EmpresaInfo | null>(null);
                 </button>
               </div>
               <div style={{ display: 'flex', gap: '6px', justifyContent: 'center', flexWrap: 'wrap', marginTop: '0.9rem' }}>
-                <span style={{ fontSize: '0.55rem', color: 'var(--faint)', textTransform: 'uppercase', letterSpacing: '0.12em', alignSelf: 'center', fontWeight: 700 }}>o suelto:</span>
+                <span style={{ fontSize: '0.74rem', color: 'var(--faint)', alignSelf: 'center', fontWeight: 700 }}>o suelto:</span>
                 {CATEGORIAS_ORDEN.map(cat => {
                   const CatIcon = CAT_ICONS[cat];
                   return (
@@ -1750,7 +1951,7 @@ const [empresaEditing, setEmpresaEditing] = useState<EmpresaInfo | null>(null);
           {itemsSueltos.length > 0 && (
             <>
               {partidas.length > 0 && (
-                <span style={{ fontFamily: 'var(--font-display)', fontWeight: 700, fontSize: '0.55rem', letterSpacing: '0.18em', textTransform: 'uppercase', color: 'var(--muted)', marginTop: '0.3rem' }}>Ítems sueltos</span>
+                <span style={{ fontFamily: 'var(--font-display)', fontWeight: 700, fontSize: '0.74rem', color: 'var(--muted)', marginTop: '0.3rem' }}>Ítems sueltos</span>
               )}
               <div style={{ display: 'flex', flexDirection: 'column', gap: '1px' }}>
                 {itemsSueltos.map((item, i) => (
@@ -1785,7 +1986,7 @@ const [empresaEditing, setEmpresaEditing] = useState<EmpresaInfo | null>(null);
                     return (
                       <div key={cat} style={{ background: 'var(--bg3)', padding: '0.55rem 0.7rem', borderLeft: `3px solid ${CAT_COLORS[cat]}`, borderRadius: 'var(--r-sm)' }}>
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.3rem' }}>
-                          <span style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', fontFamily: 'var(--font-display)', fontWeight: 700, fontSize: '0.65rem', letterSpacing: '0.08em', textTransform: 'uppercase', color: CAT_COLORS[cat] }}>
+                          <span style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', fontFamily: 'var(--font-display)', fontWeight: 700, fontSize: '0.8rem', color: CAT_COLORS[cat] }}>
                             <CatIcon size={11} /> {CATEGORIA_LABELS[cat]}
                             <span style={{ color: 'var(--muted)', fontWeight: 400 }}>({c.cantidadItems})</span>
                           </span>
@@ -1822,30 +2023,30 @@ const [empresaEditing, setEmpresaEditing] = useState<EmpresaInfo | null>(null);
                   {!ocultarCostos && (
                     <>
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                        <span style={{ fontSize: '0.65rem', color: 'var(--muted)', fontFamily: 'var(--font-display)', letterSpacing: '0.1em', textTransform: 'uppercase' }}>Costo Directo</span>
+                        <span style={{ fontSize: '0.8rem', color: 'var(--muted)', fontFamily: 'var(--font-display)' }}>Costo directo</span>
                         <span style={{ fontFamily: 'var(--font-display)', fontWeight: 700, fontSize: '0.85rem', color: 'var(--muted)' }}>{fmt(totals.costoTotal)}</span>
                       </div>
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                        <span style={{ fontSize: '0.65rem', color: 'var(--orange)', fontFamily: 'var(--font-display)', letterSpacing: '0.1em', textTransform: 'uppercase' }}>+ Imprevistos</span>
+                        <span style={{ fontSize: '0.8rem', color: 'var(--orange)', fontFamily: 'var(--font-display)' }}>+ Imprevistos</span>
                         <span style={{ fontFamily: 'var(--font-display)', fontWeight: 700, fontSize: '0.85rem', color: 'var(--orange)' }}>{fmt(totals.montoImprevistos)}</span>
                       </div>
                     </>
                   )}
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <span style={{ fontSize: '0.65rem', color: 'var(--muted)', fontFamily: 'var(--font-display)', letterSpacing: '0.1em', textTransform: 'uppercase' }}>Total Neto</span>
+                    <span style={{ fontSize: '0.8rem', color: 'var(--muted)', fontFamily: 'var(--font-display)' }}>Total neto</span>
                     <span style={{ fontFamily: 'var(--font-display)', fontWeight: 700, fontSize: '1rem', color: 'var(--text)' }}>{fmt(totals.netoGeneral)}</span>
                   </div>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <span style={{ fontSize: '0.65rem', color: 'var(--muted)', fontFamily: 'var(--font-display)', letterSpacing: '0.1em', textTransform: 'uppercase' }}>IVA</span>
+                    <span style={{ fontSize: '0.8rem', color: 'var(--muted)', fontFamily: 'var(--font-display)' }}>IVA</span>
                     <span style={{ fontFamily: 'var(--font-display)', fontWeight: 700, fontSize: '0.95rem', color: 'var(--muted)' }}>{fmt(totals.ivaGeneral)}</span>
                   </div>
                   <div style={{ padding: '0.6rem 0.75rem', background: 'var(--bg3)', borderTop: '2px solid var(--y-brand)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderRadius: 'var(--r-sm)' }}>
-                    <span style={{ fontSize: '0.65rem', color: 'var(--muted)', fontFamily: 'var(--font-display)', letterSpacing: '0.15em', textTransform: 'uppercase' }}>TOTAL FINAL</span>
+                    <span style={{ fontSize: '0.8rem', color: 'var(--muted)', fontFamily: 'var(--font-display)' }}>Total final</span>
                     <span style={{ fontFamily: 'var(--font-display)', fontWeight: 900, fontSize: '1.4rem', color: 'var(--y)' }}>{fmt(totals.total)}</span>
                   </div>
                   {!ocultarCostos && totals.utilidadEstimada > 0 && (
                     <div style={{ padding: '0.4rem 0.6rem', background: 'rgba(74,222,128,0.05)', border: '1px solid rgba(74,222,128,0.12)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderRadius: 'var(--r-sm)' }}>
-                      <span style={{ fontSize: '0.6rem', color: 'var(--success)', fontFamily: 'var(--font-display)', letterSpacing: '0.1em', textTransform: 'uppercase' }}>Utilidad Estimada</span>
+                      <span style={{ fontSize: '0.78rem', color: 'var(--success)', fontFamily: 'var(--font-display)' }}>Utilidad estimada</span>
                       <span style={{ fontFamily: 'var(--font-display)', fontWeight: 900, fontSize: '0.95rem', color: 'var(--success)' }}>
                         {fmt(totals.utilidadEstimada)} <span style={{ fontSize: '0.68rem', opacity: 0.8, fontWeight: 'normal' }}>({Math.round(totals.margenPromedio)}%)</span>
                       </span>

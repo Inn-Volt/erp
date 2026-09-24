@@ -16,6 +16,8 @@ import type {
 import {
   CATEGORIA_LABELS, CATEGORIAS_ORDEN, CATEGORIA_COLORS, UNIDADES,
 } from '@/types';
+import { fetchConSesion } from '@/lib/fetchConSesion';
+import PageHeader from '@/components/PageHeader';
 
 // ─── Estilos base ─────────────────────────────────────────────────────────────
 const field: React.CSSProperties = {
@@ -24,8 +26,8 @@ const field: React.CSSProperties = {
   outline: 'none', width: '100%', borderRadius: 'var(--r-sm)',
 };
 const fieldLabel: React.CSSProperties = {
-  fontSize: '0.6rem', color: 'var(--muted)', marginBottom: '0.25rem', display: 'block',
-  fontFamily: 'var(--font-display)', fontWeight: 700, letterSpacing: '0.12em', textTransform: 'uppercase',
+  fontSize: '0.78rem', color: 'var(--muted)', marginBottom: '0.25rem', display: 'block',
+  fontFamily: 'var(--font-display)', fontWeight: 700,
 };
 
 // ══════════════════════════════════════════════════════════════════════════════
@@ -160,7 +162,7 @@ function RecetaModal({ receta, catalogo, onClose, onSaved }: {
     setIaCargando(true);
     setIaError(null);
     try {
-      const res = await fetch('/api/receta-ia', {
+      const res = await fetchConSesion('/api/receta-ia', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ descripcion: iaDesc.trim() }),
       });
@@ -239,7 +241,7 @@ function RecetaModal({ receta, catalogo, onClose, onSaved }: {
         <div style={{ padding: '1.25rem 1.4rem', display: 'flex', flexDirection: 'column', gap: '1rem', flex: 1, overflowY: 'auto', minHeight: 0 }}>
           {/* Generar con IA */}
           <div style={{ background: 'var(--y-soft)', border: '1px solid var(--border)', borderRadius: 'var(--r-sm)', padding: '0.75rem 0.85rem' }}>
-            <span style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', fontFamily: 'var(--font-display)', fontWeight: 700, fontSize: '0.58rem', letterSpacing: '0.14em', textTransform: 'uppercase', color: 'var(--y)', marginBottom: '0.45rem' }}>
+            <span style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', fontFamily: 'var(--font-display)', fontWeight: 700, fontSize: '0.76rem', color: 'var(--y)', marginBottom: '0.45rem' }}>
               <Sparkles size={12} /> Generar con IA
             </span>
             <div style={{ display: 'flex', gap: '0.4rem', flexWrap: 'wrap' }}>
@@ -322,7 +324,7 @@ function RecetaModal({ receta, catalogo, onClose, onSaved }: {
 
           {/* Total */}
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '0.6rem 0.8rem', background: 'var(--bg3)', borderRadius: 'var(--r-sm)', borderTop: '2px solid var(--y-brand)' }}>
-            <span style={{ fontSize: '0.65rem', color: 'var(--muted)', fontFamily: 'var(--font-display)', letterSpacing: '0.12em', textTransform: 'uppercase' }}>Costo interno por {unidad}</span>
+            <span style={{ fontSize: '0.8rem', color: 'var(--muted)', fontFamily: 'var(--font-display)' }}>Costo interno por {unidad}</span>
             <span style={{ fontFamily: 'var(--font-display)', fontWeight: 900, fontSize: '1.1rem', color: 'var(--y)' }}>{formatCLP(costoTotal)}</span>
           </div>
 
@@ -382,7 +384,7 @@ export default function BibliotecaPage() {
   const sincronizarSheet = useCallback(async (silent = false) => {
     setSincronizando(true);
     try {
-      const res = await fetch('/api/sync-catalogo');
+      const res = await fetchConSesion('/api/sync-catalogo');
       const data = await res.json();
       if (!res.ok || data.error) throw new Error(data.error || 'No se pudo leer el Google Sheet');
       const { creados, actualizados, borrados } = await catalogoService.syncCatalogo(data.items);
@@ -622,7 +624,7 @@ export default function BibliotecaPage() {
     padding: '0.5rem 1rem', background: activo ? 'var(--y-brand)' : 'var(--bg2)',
     color: activo ? 'var(--on-accent)' : 'var(--muted)', border: '1px solid var(--border2)',
     cursor: 'pointer', fontFamily: 'var(--font-display)', fontWeight: 700,
-    fontSize: '0.68rem', letterSpacing: '0.12em', textTransform: 'uppercase',
+    fontSize: '0.8rem',
     borderRadius: 'var(--r-sm)', display: 'inline-flex', alignItems: 'center', gap: '0.4rem',
   });
 
@@ -645,14 +647,11 @@ export default function BibliotecaPage() {
       )}
 
       {/* Header */}
-      <div className="iv-page-header">
-        <div>
-          <p className="label-muted" style={{ marginBottom: '0.35rem', letterSpacing: '0.4em' }}>Catálogo y ensambles</p>
-          <h1 style={{ fontFamily: 'var(--font-display)', fontWeight: 900, fontSize: 'clamp(2rem,5vw,3.2rem)', textTransform: 'uppercase', lineHeight: 0.9, color: 'var(--text)' }}>
-            BIBLIO<span style={{ color: 'var(--y)' }}>TECA</span>
-          </h1>
-        </div>
-        <div className="iv-header-actions" style={{ alignItems: 'center' }}>
+      <PageHeader
+        eyebrow="Catálogo y ensambles"
+        title="Biblioteca de precios"
+        subtitle="Materiales, mano de obra y recetas con sus costos"
+        actions={<>
           {ultimaSync && (
             <span style={{ fontSize: '0.62rem', color: 'var(--muted)', whiteSpace: 'nowrap' }} title={`Última sincronización: ${new Date(ultimaSync).toLocaleString('es-CL')}`}>
               Sync: {new Date(ultimaSync).toLocaleTimeString('es-CL', { hour: '2-digit', minute: '2-digit' })}
@@ -673,8 +672,8 @@ export default function BibliotecaPage() {
           ) : (
             <button onClick={() => setRecetaModal({ open: true, receta: null })} className="btn btn-primary"><Plus size={14} /> Nueva receta</button>
           )}
-        </div>
-      </div>
+        </>}
+      />
 
       {/* Tabs + búsqueda */}
       <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '1rem', flexWrap: 'wrap', alignItems: 'center' }}>
@@ -749,7 +748,7 @@ export default function BibliotecaPage() {
             <div key={r.id} className="panel-y" style={{ padding: '1rem', display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
               <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '0.5rem' }}>
                 <div style={{ minWidth: 0 }}>
-                  <p style={{ fontFamily: 'var(--font-display)', fontWeight: 900, fontSize: '0.95rem', textTransform: 'uppercase', color: 'var(--text)', lineHeight: 1.1 }}>{r.nombre}</p>
+                  <p style={{ fontFamily: 'var(--font-display)', fontWeight: 900, fontSize: '0.95rem', color: 'var(--text)', lineHeight: 1.1 }}>{r.nombre}</p>
                   <p style={{ fontSize: '0.7rem', color: 'var(--muted)' }}>{r.componentes.length} componente{r.componentes.length !== 1 ? 's' : ''} · por {r.unidad}</p>
                 </div>
                 <div style={{ display: 'flex', gap: '0.25rem', flexShrink: 0 }}>
@@ -766,7 +765,7 @@ export default function BibliotecaPage() {
                 {r.componentes.length > 5 && <span style={{ fontSize: '0.62rem', color: 'var(--muted)' }}>+{r.componentes.length - 5}</span>}
               </div>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 'auto', paddingTop: '0.4rem', borderTop: '1px solid var(--border-soft)' }}>
-                <span style={{ fontSize: '0.6rem', color: 'var(--muted)', fontFamily: 'var(--font-display)', letterSpacing: '0.1em', textTransform: 'uppercase' }}>Costo interno</span>
+                <span style={{ fontSize: '0.78rem', color: 'var(--muted)', fontFamily: 'var(--font-display)' }}>Costo interno</span>
                 <span style={{ fontFamily: 'var(--font-display)', fontWeight: 700, fontSize: '0.9rem', color: 'var(--y)' }}>{formatCLP(costoReceta(r))}</span>
               </div>
             </div>

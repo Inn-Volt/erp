@@ -1,8 +1,8 @@
 'use client';
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { Save, Printer, ArrowLeft, AlertTriangle, CheckCircle, FileDown } from 'lucide-react';
+import { Save, Printer, ArrowLeft, AlertTriangle, CheckCircle, FileDown, FileText, Loader2 } from 'lucide-react';
 import { levantamientosService } from '@/services/levantamientos';
 import { clientesService } from '@/services/clientes';
 import type { Cliente } from '@/types';
@@ -11,30 +11,36 @@ import {
   emptyLevantamiento, CHECKLIST_CRITICO, TIPOS_PROYECTO, TIPOS_EMPALME,
   ESTADOS_GEN, TIPOS_TABLERO, TIPOS_CABLE, TIPOS_CANAL, TIPOS_LUM, SISTEMAS_ELEC,
 } from '@/types/levantamiento';
-import { newId } from '@/utils';
+import { newId, nombreArchivo } from '@/utils';
+import FotosLevantamiento from '@/components/FotosLevantamiento';
+import { fotosService, type FotoLevantamiento } from '@/services/fotos';
+import { useToast } from '@/hooks/useToast';
 
 // Importación del componente de renderizado de PDF estructurado analizado previamente
-import { PDFDownloadLink } from '@react-pdf/renderer';
+import { pdf } from '@react-pdf/renderer';
+import { saveAs } from 'file-saver';
 import LevantamientoPDF from '@/components/pdf/LevantamientoPDF';
 
 // ─── FIELD COMPONENTS ────────────────────────────────────────────────────────
 
 const FL = ({ children, req }: { children: React.ReactNode; req?: boolean }) => (
   <p style={{
-    fontFamily: 'var(--font-display)', fontWeight: 700, fontSize: '0.6rem',
-    letterSpacing: '0.28em', textTransform: 'uppercase', color: 'var(--y)',
-    marginBottom: 5,
+    fontFamily: 'var(--font-body)', fontWeight: 500, fontSize: '0.85rem',
+    color: 'var(--text)', marginBottom: 6,
   }}>
     {children}{req && <span style={{ color: 'var(--danger)', marginLeft: 3 }}>★</span>}
   </p>
 );
 
 const inputBase: React.CSSProperties = {
-  width: '100%', background: 'var(--bg3)', border: '1px solid var(--border2)',
-  color: 'var(--text)', padding: '11px 14px', fontSize: '0.92rem',
-  fontFamily: 'var(--font-body)', outline: 'none', transition: 'border-color .15s',
+  width: '100%', background: 'var(--input-bg)', border: '1px solid var(--input-border)',
+  color: 'var(--text)', padding: '10px 12px', fontSize: '0.95rem', borderRadius: 8,
+  fontFamily: 'var(--font-body)', outline: 'none', transition: 'border-color .15s, box-shadow .15s',
   boxSizing: 'border-box',
 };
+/** Foco con el anillo amarillo de marca (igual que .input). */
+const enfocar = (e: React.FocusEvent<HTMLElement>) => { e.currentTarget.style.borderColor = 'var(--y-brand)'; e.currentTarget.style.boxShadow = '0 0 0 3px var(--focus-ring)'; };
+const desenfocar = (e: React.FocusEvent<HTMLElement>) => { e.currentTarget.style.borderColor = 'var(--input-border)'; e.currentTarget.style.boxShadow = 'none'; };
 
 const F = ({
   label, req, span, type = 'text', ...p
@@ -42,8 +48,7 @@ const F = ({
   <div style={{ marginBottom: 16, ...(span ? { gridColumn: `span ${span}` } : {}) }}>
     {label && <FL req={req}>{label}</FL>}
     <input type={type} {...p} style={{ ...inputBase, ...p.style }}
-      onFocus={e => (e.target.style.borderColor = 'var(--y)')}
-      onBlur={e => (e.target.style.borderColor = 'var(--border2)')} />
+      onFocus={enfocar} onBlur={desenfocar} />
   </div>
 );
 
@@ -55,8 +60,7 @@ const T = ({
     <textarea rows={rows} {...p} style={{
       ...inputBase, resize: 'vertical', ...p.style,
     } as React.CSSProperties}
-      onFocus={e => (e.target.style.borderColor = 'var(--y)')}
-      onBlur={e => (e.target.style.borderColor = 'var(--border2)')} />
+      onFocus={enfocar} onBlur={desenfocar} />
   </div>
 );
 
@@ -70,8 +74,7 @@ const S = ({
         ...inputBase, appearance: 'none', paddingRight: 32, cursor: 'pointer',
         color: p.value ? 'var(--text)' : 'var(--muted)', ...p.style,
       } as React.CSSProperties}
-        onFocus={e => (e.target.style.borderColor = 'var(--y)')}
-        onBlur={e => (e.target.style.borderColor = 'var(--border2)')}>
+        onFocus={enfocar} onBlur={desenfocar}>
         <option value="">— Seleccionar —</option>
         {options.map(o => <option key={o} value={o}>{o}</option>)}
       </select>
@@ -88,12 +91,11 @@ const Radio = ({ label, options, value, onChange }: {
     <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
       {options.map(o => (
         <button key={o} onClick={() => onChange(o)} type="button" style={{
-          padding: '8px 16px', fontSize: '0.78rem',
-          fontFamily: 'var(--font-display)', fontWeight: 700,
-          letterSpacing: '0.1em', textTransform: 'uppercase',
-          border: `1px solid ${value === o ? 'var(--y)' : 'var(--border2)'}`,
-          background: value === o ? 'var(--y-soft)' : 'transparent',
-          color: value === o ? 'var(--y)' : 'var(--muted)',
+          padding: '9px 14px', fontSize: '0.86rem', borderRadius: 999, minHeight: 40,
+          fontFamily: 'var(--font-body)', fontWeight: value === o ? 600 : 500,
+          border: `1px solid ${value === o ? 'var(--y-brand)' : 'var(--border2)'}`,
+          background: value === o ? 'var(--y-soft)' : 'var(--bg2)',
+          color: value === o ? 'var(--text)' : 'var(--muted)',
           cursor: 'pointer', transition: 'all .15s',
         }}>{o}</button>
       ))}
@@ -104,13 +106,13 @@ const Radio = ({ label, options, value, onChange }: {
 const Toggle = ({ label, checked, onChange }: { label: string; checked: boolean; onChange: (v: boolean) => void }) => (
   <div onClick={() => onChange(!checked)} style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 14, cursor: 'pointer', userSelect: 'none' }}>
     <div style={{
-      width: 44, height: 24, background: checked ? 'var(--y-brand)' : 'var(--bg3)',
-      border: `1px solid ${checked ? 'var(--y)' : 'var(--border2)'}`,
+      width: 44, height: 26, borderRadius: 999, background: checked ? 'var(--y-brand)' : 'var(--bg3)',
+      border: `1px solid ${checked ? 'var(--y-brand)' : 'var(--border2)'}`,
       position: 'relative', transition: 'all .2s', flexShrink: 0,
     }}>
-      <div style={{ position: 'absolute', top: 3, left: checked ? 22 : 3, width: 16, height: 16, background: checked ? 'var(--on-accent)' : 'var(--muted)', transition: 'left .2s' }} />
+      <div style={{ position: 'absolute', top: 3, left: checked ? 21 : 3, width: 18, height: 18, borderRadius: '50%', background: checked ? 'var(--on-accent)' : 'var(--muted)', transition: 'left .2s' }} />
     </div>
-    <span style={{ fontSize: '0.88rem', color: checked ? 'var(--y)' : 'var(--muted)' }}>{label}</span>
+    <span style={{ fontSize: '0.9rem', color: checked ? 'var(--text)' : 'var(--muted)', fontWeight: checked ? 500 : 400 }}>{label}</span>
   </div>
 );
 
@@ -188,6 +190,7 @@ const NAV = [
   { id:'s7',  short:'07 Canal.'    }, { id:'s8',  short:'08 Crítico'   },
   { id:'s9',  short:'09 Medic.'    }, { id:'s10', short:'10 Recom.'    },
   { id:'s11', short:'11 Alcance'   },
+  { id:'s12', short:'12 Fotos'     },
 ];
 
 // ─── PRINT HANDLER ────────────────────────────────────────────────────────────
@@ -202,6 +205,14 @@ export default function LevantamientoPage() {
   const [clientes, setClientes] = useState<Cliente[]>([]);
   const [clienteId,setClienteId]= useState('');
   const [estado,   setEstado]   = useState<EstadoLevantamiento>('Borrador');
+  const [folio,    setFolio]    = useState<number | null>(null);
+  const [genPDF,   setGenPDF]   = useState(false);
+  const [yendoCot, setYendoCot] = useState(false);
+  const { success, error: toastError } = useToast();
+  // Refs para el guardado automático de fotos (evitan cierres con datos viejos).
+  const dataRef = useRef(data);
+  useEffect(() => { dataRef.current = data; }, [data]);
+  const idRef = useRef<string | null>(null);
   const [saving,   setSaving]   = useState(false);
   const [saved,    setSaved]    = useState(false);
   const [activeNav,setActiveNav]= useState('s1');
@@ -212,8 +223,10 @@ export default function LevantamientoPage() {
   useEffect(() => { clientesService.getAll().then(setClientes).catch(console.error); }, []);
 
   useEffect(() => {
-    if (editId) levantamientosService.getById(editId).then(lev => {
-      if (lev) { setData(lev.data); setClienteId(lev.cliente_id || ''); setEstado(lev.estado); }
+    // Si el id es el que acabamos de crear, los datos ya están en pantalla:
+    // recargar podría pisar fotos que se están subiendo en ese momento.
+    if (editId && editId !== idRef.current) levantamientosService.getById(editId).then(lev => {
+      if (lev) { setData(lev.data); setClienteId(lev.cliente_id || ''); setEstado(lev.estado); setFolio(lev.folio); }
     });
   }, [editId]);
 
@@ -224,19 +237,67 @@ export default function LevantamientoPage() {
     return () => obs.disconnect();
   }, []);
 
-  const handleSave = async () => {
+  /** Guarda y devuelve el id (null si falló). */
+  const guardar = async (): Promise<string | null> => {
     setSaving(true);
     try {
       const payload = { cliente_id: clienteId || null, data, estado };
+      let id = editId || null;
       if (editId) await levantamientosService.update(editId, payload);
       else {
         const created = await levantamientosService.create(payload);
+        id = created.id;
+        idRef.current = created.id;
+        setFolio(created.folio);
         router.replace(`/levantamiento?id=${created.id}`);
       }
       setSaved(true); setTimeout(() => setSaved(false), 2500);
-    } catch { alert('Error al guardar');
+      return id;
+    } catch (e) {
+      toastError('Error al guardar el levantamiento: ' + (e instanceof Error ? e.message : ''));
+      return null;
+    } finally {
+      setSaving(false);
     }
-    setSaving(false);
+  };
+  const handleSave = async () => { if (await guardar()) success('Levantamiento guardado'); };
+
+  // ── Fotos: la lista se guarda sola en el levantamiento al subir/editar/borrar ──
+  const asegurarId = async (): Promise<string | null> => editId || idRef.current || (await guardar());
+  const cambiarFotos = async (fotos: FotoLevantamiento[]) => {
+    const nueva = { ...dataRef.current, fotos };
+    dataRef.current = nueva;
+    setData(nueva);
+    const id = editId || idRef.current;
+    if (!id) return;
+    try { await levantamientosService.update(id, { data: nueva }); }
+    catch { toastError('No se pudo guardar la lista de fotos. Pulsa "Guardar".'); }
+  };
+
+  /** Levantamiento → Cotización: guarda y abre el cotizador con cliente y alcance precargados. */
+  const cotizar = async () => {
+    if (!clienteId) { toastError('Asocia un cliente al levantamiento antes de cotizar.'); return; }
+    if (!data.alcance_trabajos?.trim() && !data.alcance_mejoras?.trim()) {
+      if (!confirm('La sección "Alcance" está vacía: la cotización no tendrá descripción precargada. ¿Continuar?')) return;
+    }
+    setYendoCot(true);
+    const id = await guardar();
+    if (id) router.push(`/cotizador?levantamiento=${id}`);
+    else setYendoCot(false);
+  };
+
+  /** PDF bajo demanda. Antes <PDFDownloadLink> regeneraba el PDF en cada tecla. */
+  const descargarPDF = async () => {
+    setGenPDF(true);
+    try {
+      const fotosPDF = await fotosService.paraPDF(data.fotos);
+      const blob = await pdf(<LevantamientoPDF data={data} estado={estado} fotos={fotosPDF} />).toBlob();
+      saveAs(blob, `Levantamiento_${folio ? `LV-${String(folio).padStart(4, '0')}_` : ''}${nombreArchivo(data.cliente_nombre || 'sin_nombre')}.pdf`);
+    } catch (e) {
+      toastError('No se pudo generar el PDF: ' + (e instanceof Error ? e.message : ''));
+    } finally {
+      setGenPDF(false);
+    }
   };
 
   // Tables helpers
@@ -261,32 +322,32 @@ export default function LevantamientoPage() {
 
         /* ── Section ─────────────────────────── */
         .lev-section{
-          background:var(--bg);
+          background:var(--bg2);
           border:1px solid var(--border2);
-          margin-bottom:18px;
+          border-radius:14px; overflow:hidden;
+          box-shadow:var(--shadow-card);
+          margin-bottom:14px;
+          scroll-margin-top:12px;
         }
         .lev-sec-head{
           display:flex; align-items:center; gap:12px;
-          padding:13px 20px; border-bottom:1px solid var(--border-soft);
-          background:linear-gradient(90deg,var(--bg2) 0%,var(--bg) 100%);
+          padding:14px 18px; border-bottom:1px solid var(--border-soft);
         }
         .lev-sec-icon{
-          width:30px; height:30px; background:var(--y-soft);
-          border:1px solid var(--border);
-          display:flex; align-items:center; justify-content:center; font-size:.9rem; flex-shrink:0;
+          width:34px; height:34px; background:var(--bg3); border-radius:9px;
+          display:flex; align-items:center; justify-content:center; font-size:1rem; flex-shrink:0;
         }
         .lev-sec-num{
-          font-family:var(--font-display);
-          font-weight:700;
-          font-size:.5rem; letter-spacing:.35em; text-transform:uppercase;
-          color:var(--y); margin-bottom:2px;
+          font-family:var(--font-body); font-weight:500;
+          font-size:.7rem; letter-spacing:.06em; text-transform:uppercase;
+          color:var(--faint); margin-bottom:1px;
         }
         .lev-sec-title{
-          font-family:var(--font-display);
-          font-weight:900;
-          font-size:.88rem; letter-spacing:.1em; text-transform:uppercase; color:var(--text);
+          font-family:var(--font-display); font-weight:700;
+          font-size:1rem; letter-spacing:-.01em; color:var(--text);
         }
-        .lev-sec-body{ padding:20px 20px 6px; }
+        .lev-sec-body{ padding:18px 18px 4px; }
+        @media(max-width:640px){ .lev-sec-body{ padding:16px 14px 2px; } .lev-sec-head{ padding:12px 14px; } }
 
         /* ── Table ───────────────────────────── */
         .lev-dyntable-wrap{ margin-bottom:4px; }
@@ -294,16 +355,15 @@ export default function LevantamientoPage() {
         .lev-dyntable th{
           padding:7px 9px;
           text-align:left; white-space:nowrap;
-          font-family:var(--font-display); font-weight:700;
-          font-size:.52rem; letter-spacing:.2em; text-transform:uppercase;
-          color:var(--y); background:var(--bg2); border-bottom:1px solid var(--border-soft);
+          font-family:var(--font-body); font-weight:500;
+          font-size:.74rem; color:var(--muted); background:var(--bg3); border-bottom:1px solid var(--border-soft);
         }
         .lev-dyntable td{ padding:5px 5px; border-bottom:1px solid var(--border-soft); }
         .lev-dyntable tr:nth-child(even) td{ background:var(--hover-bg); }
         .lev-cell-input,.lev-cell-select{
-          width:100%; background:var(--bg3);
-          border:1px solid var(--border2);
-          color:var(--text); padding:6px 8px; font-size:.8rem;
+          width:100%; background:var(--input-bg); border-radius:6px;
+          border:1px solid var(--input-border);
+          color:var(--text); padding:7px 8px; font-size:.84rem;
           font-family:var(--font-body); outline:none; box-sizing:border-box;
         }
         .lev-cell-select{ appearance:none; cursor:pointer; }
@@ -316,9 +376,9 @@ export default function LevantamientoPage() {
         .lev-add-btn{
           margin-top:8px;
           padding:7px 16px;
-          border:1px dashed var(--border); background:transparent;
-          color:var(--y); font-family:var(--font-display); font-weight:700;
-          font-size:.65rem; letter-spacing:.12em; text-transform:uppercase;
+          border:1px dashed var(--border2); background:transparent; border-radius:8px;
+          color:var(--text); font-family:var(--font-body); font-weight:500;
+          font-size:.84rem;
           cursor:pointer; transition:background .15s;
         }
         .lev-add-btn:hover{ background:var(--y-soft); }
@@ -332,14 +392,14 @@ export default function LevantamientoPage() {
         .lev-nav::-webkit-scrollbar{ height:2px; }
         .lev-nav button{
           flex-shrink:0;
-          padding:6px 12px; font-family:var(--font-display);
-          font-weight:700; font-size:.6rem; letter-spacing:.1em; text-transform:uppercase;
-          border:1px solid var(--border2); background:transparent;
+          padding:7px 13px; font-family:var(--font-body); border-radius:999px;
+          font-weight:500; font-size:.8rem;
+          border:1px solid var(--border2); background:var(--bg2);
           color:var(--muted); cursor:pointer; transition:all .15s; white-space:nowrap;
         }
         .lev-nav button.active{
-          border-color:var(--y);
-          background:var(--y-soft); color:var(--y);
+          border-color:var(--y-brand);
+          background:var(--y-soft); color:var(--text); font-weight:600;
         }
 
         /* ── Checklist ───────────────────────── */
@@ -352,9 +412,9 @@ export default function LevantamientoPage() {
         .lev-check-item{
           display:flex;
           align-items:center; gap:10px; cursor:pointer;
-          padding:10px 12px;
+          padding:11px 12px; border-radius:10px;
           border:1px solid var(--border2);
-          background:transparent; transition:all .15s;
+          background:var(--bg2); transition:all .15s;
         }
         .lev-check-item.on{
           border-color:rgba(248,113,113,.4);
@@ -364,19 +424,20 @@ export default function LevantamientoPage() {
           width:20px; height:20px;
           flex-shrink:0;
           display:flex; align-items:center; justify-content:center;
-          background:var(--bg3); border:1px solid var(--border2);
+          background:var(--bg3); border:1px solid var(--border2); border-radius:5px;
           font-size:.7rem; color:#fff; transition:all .15s;
         }
         .lev-check-box.on{ background:#ef4444; border-color:#ef4444; }
         .lev-check-label{ font-size:.82rem; color:var(--muted); transition:color .15s; }
-        .lev-check-label.on{ color:#fca5a5; }
+        .lev-check-label.on{ color:var(--danger); font-weight:500; }
 
         /* ── Saved toast ─────────────────────── */
         .lev-toast{
           position:fixed;
           bottom:24px; right:24px; z-index:999;
-          background:var(--bg2); border:1px solid rgba(74,222,128,.4);
-          padding:10px 20px; display:flex; align-items:center; gap:8px;
+          background:var(--bg2); border:1px solid rgba(74,222,128,.4); border-radius:12px;
+          box-shadow:var(--shadow-pop);
+          padding:10px 18px; display:flex; align-items:center; gap:8px;
           animation:fadeInUp .3s ease;
         }
         @keyframes fadeInUp{
@@ -439,7 +500,7 @@ export default function LevantamientoPage() {
             <p style={{ fontSize:'8pt', color:'#666', letterSpacing:'0.15em', textTransform:'uppercase' }}>Levantamiento Técnico Eléctrico</p>
           </div>
           <div style={{ textAlign:'right', fontSize:'8pt', color:'#555', lineHeight:1.6 }}>
-            <p>Folio: LV-{data.cliente_nombre ? '—' : '—'}</p>
+            <p>Folio: {folio ? `LV-${String(folio).padStart(4, '0')}` : 'Borrador'}</p>
             <p>Fecha: {data.fecha}</p>
             <p>Técnico: {data.tecnico || '—'}</p>
             <p>Estado: {estado}</p>
@@ -447,50 +508,41 @@ export default function LevantamientoPage() {
         </div>
 
         {/* ── Page header (screen) ── */}
-        <div className="iv-page-header" data-no-print>
-          <div>
-            <p className="label-muted" style={{ marginBottom:'0.35rem', letterSpacing:'0.4em' }}>Módulo técnico</p>
-            <h1 style={{ fontFamily:'var(--font-display)', fontWeight:900, fontSize:'clamp(1.6rem,4vw,2.8rem)', textTransform:'uppercase', lineHeight:0.9, color:'var(--text)' }}>
-              LEVANTA<span style={{ color:'var(--y)' }}>MIENTO</span>
-            </h1>
+        <div className="pg-header iv-page-header" data-no-print>
+          <div style={{ minWidth: 0 }}>
+            <p className="pg-eyebrow">Visita técnica{folio ? ` · LV-${String(folio).padStart(4, '0')}` : ''}</p>
+            <h1 className="pg-title">Levantamiento</h1>
+            {data.cliente_nombre && <p className="pg-subtitle">{data.cliente_nombre}{data.direccion ? ` · ${data.direccion}` : ''}</p>}
           </div>
-          <div className="iv-header-actions">
+          <div className="pg-actions iv-header-actions">
             <button onClick={() => router.push('/levantamiento/historial')} className="btn btn-ghost btn-sm">
               <ArrowLeft size={13} /> Historial
             </button>
             <div style={{ position:'relative' }}>
-              <select value={estado} onChange={e => setEstado(e.target.value as EstadoLevantamiento)} style={{
-                background:'var(--bg2)', border:'1px solid var(--border2)',
-                color:'var(--text)', padding:'8px 28px 8px 12px', fontSize:'0.8rem',
-                fontFamily:'var(--font-display)', fontWeight:700, letterSpacing:'0.1em',
-                textTransform:'uppercase', outline:'none', appearance:'none', cursor:'pointer',
+              <select value={estado} onChange={e => setEstado(e.target.value as EstadoLevantamiento)} aria-label="Estado del levantamiento" style={{
+                background:'var(--bg2)', border:'1px solid var(--border2)', borderRadius: 8, height: 32,
+                color:'var(--text)', padding:'0 28px 0 12px', fontSize:'0.8rem', fontWeight:500,
+                outline:'none', appearance:'none', cursor:'pointer',
               }}>
                 {['Borrador','Completado','Enviado','Archivado'].map(e => <option key={e} value={e}>{e}</option>)}
               </select>
               <span style={{ position:'absolute', right:10, top:'50%', transform:'translateY(-50%)', color:'var(--muted)', pointerEvents:'none', fontSize:'.6rem' }}>▼</span>
             </div>
       
-            <button onClick={handleSave} disabled={saving} className="btn btn-primary">
+            <button onClick={handleSave} disabled={saving} className="btn btn-ghost btn-sm">
               <Save size={13} /> {saving ? 'Guardando…' : 'Guardar'}
             </button>
             <button onClick={triggerPrint} className="btn btn-ghost btn-sm">
               <Printer size={13} /> Imprimir
             </button>
             
-            {/* Componente Asíncrono para descarga directa estructurada de PDF */}
-            <PDFDownloadLink 
-              document={<LevantamientoPDF data={data} estado={estado} />}
-              fileName={`Levantamiento_${data.cliente_nombre || 'Sin_Nombre'}.pdf`}
-              className="btn btn-primary btn-sm"
-              style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}
-            >
-              {({ loading }) => (
-                <>
-                  <FileDown size={13} />
-                  {loading ? 'Generando...' : 'Descargar PDF'}
-                </>
-              )}
-            </PDFDownloadLink>
+            <button onClick={descargarPDF} disabled={genPDF} className="btn btn-ghost btn-sm">
+              {genPDF ? <Loader2 size={13} className="iv-spin" /> : <FileDown size={13} />}
+              {genPDF ? 'Generando…' : 'Descargar PDF'}
+            </button>
+            <button onClick={cotizar} disabled={yendoCot || saving} className="btn btn-primary btn-sm" title="Guardar y crear la cotización con el cliente y el alcance de este levantamiento">
+              {yendoCot ? <Loader2 size={13} className="iv-spin" /> : <FileText size={13} />} Cotizar
+            </button>
           </div>
         </div>
 
@@ -746,6 +798,10 @@ export default function LevantamientoPage() {
           <T label="Observaciones comerciales" rows={2} value={data.alcance_obs_comerciales} onChange={e=>set('alcance_obs_comerciales',e.target.value)} placeholder="Cliente interesado en contrato de mantención…" />
         </Sec>
 
+        <Sec id="s12" num="12" title="Registro fotográfico" icon="📷">
+          <FotosLevantamiento fotos={data.fotos || []} asegurarId={asegurarId} onChange={cambiarFotos} />
+        </Sec>
+
         {/* ── Footer actions ── */}
         <div data-no-print style={{ display:'flex', gap:10, paddingTop:8, flexWrap:'wrap' }}>
           <button onClick={handleSave} disabled={saving} className="btn btn-primary" style={{ flex:1, minWidth:160, justifyContent:'center' }}>
@@ -755,20 +811,13 @@ export default function LevantamientoPage() {
             <Printer size={14} /> Vista de Impresión (CSS)
           </button>
           
-          {/* Duplicado del componente de descarga en la botonera inferior */}
-          <PDFDownloadLink 
-            document={<LevantamientoPDF data={data} estado={estado} />} 
-            fileName={`Levantamiento_${data.cliente_nombre || 'Sin_Nombre'}.pdf`}
-            className="btn btn-ghost btn-sm"
-            style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}
-          >
-            {({ loading }) => (
-              <>
-                <FileDown size={14} />
-                {loading ? 'Generando...' : 'Exportar PDF Estructurado'}
-              </>
-            )}
-          </PDFDownloadLink>
+          <button onClick={descargarPDF} disabled={genPDF} className="btn btn-ghost btn-sm">
+            {genPDF ? <Loader2 size={14} className="iv-spin" /> : <FileDown size={14} />}
+            {genPDF ? 'Generando…' : 'Exportar PDF'}
+          </button>
+          <button onClick={cotizar} disabled={yendoCot || saving} className="btn btn-primary btn-sm">
+            {yendoCot ? <Loader2 size={14} className="iv-spin" /> : <FileText size={14} />} Cotizar este levantamiento
+          </button>
         </div>
 
         {/* Saved toast */}

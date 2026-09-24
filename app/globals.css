@@ -1,82 +1,81 @@
 /* ─────────────────────────────────────────────────────────
-   INNVOLT ERP — Design System v5.0
-   Barlow Condensed + Amarillo #ffc600 · Tema claro y oscuro
-─────────────────────────────────────────────────────────
-
-   Los colores viven en tokens con formato "R G B" (sin comas),
-   para poder aplicarles opacidad con rgb(var(--token) / alpha).
-   El tema se cambia agregando/quitando la clase .dark en <html>.
+   INNVOLT ERP — Design System v7.0 (lenguaje TecApp · marca InnVolt)
+   Sobrio y formal: superficies blancas sobre gris muy claro,
+   tipografías Inter + Space Grotesk y el AMARILLO InnVolt como
+   único acento (botón principal, marca activa, rótulos).
+   Oscuro en grises "zinc" (no negro puro, más cómodo a la vista).
+   Colores en "R G B" para opacidad con rgb(var(--token) / alpha).
 ───────────────────────────────────────────────────────── */
 @import "tailwindcss";
 @config "../tailwind.config.ts";
 
-/* ══ INNVOLT ERP — Design System v6.0 ══════════════════
-   Base neutra + acento índigo. El amarillo (--spark) es solo
-   remate (logo, hilo de KPI). Tema claro y oscuro (negro real).
-   Colores en "R G B" para opacidad con rgb(var(--token)/alpha). */
-
-/* ══ TEMA CLARO (por defecto) ══════════════════════════ */
+/* ══ TEMA CLARO ════════════════════════════════════════ */
 :root {
-  --surface:       255 255 255;   /* tarjetas: blanco puro   */
-  --surface-2:     231 233 239;   /* fondo de página (gris)  */
-  --surface-3:     238 240 245;   /* hover, zebra, wells     */
-  --content:        20  24  36;   /* texto principal         */
-  --content-muted:  88  96 116;   /* texto secundario        */
-  --content-faint: 130 138 158;   /* texto terciario         */
-  --line:          216 220 230;   /* bordes visibles         */
-  --line-soft:     230 233 240;   /* separadores suaves      */
-  --hover:         238 240 245;   /* fondo al pasar mouse    */
+  --surface:       255 255 255;   /* tarjetas                */
+  --surface-2:     247 248 250;   /* fondo de página         */
+  --surface-3:     241 243 246;   /* hover, zebra, wells     */
+  --content:        26  26  26;   /* texto principal         */
+  --content-muted: 102 102 110;   /* texto secundario        */
+  --content-faint: 142 142 152;   /* texto terciario         */
+  --line:          228 230 235;   /* bordes                  */
+  --line-soft:     238 240 243;   /* separadores suaves      */
+  --hover:         243 244 246;   /* fondo al pasar el mouse */
 
-  --fg: 20 24 36;
+  --fg: 26 26 26;
 
-  /* Acento índigo (interactivo) */
-  --y:        #4a56d2;            /* acento: texto/enlaces/activo */
-  --y2:       #3e49bd;            /* hover                        */
-  --y-brand:  #4a56d2;            /* rellenos sólidos (botones)   */
-  --y-soft:   #ecedfb;            /* realce de fondo suave        */
-  --on-accent:#ffffff;           /* texto sobre relleno de acento */
-  --border:   rgba(74,86,210,0.28);
+  /* Acento InnVolt. Sobre blanco el amarillo no se lee como TEXTO,
+     así que el texto de acento va en ámbar oscuro (contraste AA) y
+     el amarillo puro queda para rellenos (botón principal, marcas). */
+  --y:        #8a6400;            /* texto de acento / enlaces      */
+  --y2:       #6e5000;            /* hover del texto de acento      */
+  --y-brand:  #ffc600;            /* relleno: botón principal       */
+  --y-brand-hover: #f0b800;
+  --y-soft:   #fff6d6;            /* realce de fondo suave          */
+  --on-accent:#1a1a1a;            /* texto sobre el amarillo        */
+  --border:   rgba(214,164,0,0.45);
 
-  /* Remate amarillo de marca (SOLO detalles, nunca texto) */
   --spark:    #ffc600;
 
   --input-bg:       #ffffff;
   --input-bg-focus: #ffffff;
-  --input-border:   rgb(200 204 216);
+  --input-border:   rgb(214 217 224);
+  --focus-ring:     rgba(255,198,0,0.35);
 
-  --shadow-card: 0 1px 2px rgba(18,22,38,0.07), 0 2px 8px rgba(18,22,38,0.07);
-  --shadow-pop:  0 20px 50px rgba(18,22,38,0.22);
+  --shadow-card: 0 1px 2px rgba(16,24,40,0.05);
+  --shadow-pop:  0 20px 45px rgba(16,24,40,0.18);
 }
 
-/* ══ TEMA OSCURO (negro real) ══════════════════════════ */
+/* ══ TEMA OSCURO (grises zinc) ═════════════════════════ */
 .dark {
-  --surface:        18  18  18;   /* tarjetas                */
-  --surface-2:       0   0   0;   /* fondo de página: negro  */
-  --surface-3:      32  32  32;   /* hover, wells            */
-  --content:       241 241 242;
-  --content-muted: 161 161 166;
-  --content-faint: 106 106 112;
-  --line:           42  42  42;   /* gris neutro (sin azul)  */
-  --line-soft:      28  28  28;
-  --hover:          28  28  28;
+  --surface:        24  24  27;
+  --surface-2:      15  15  17;
+  --surface-3:      39  39  42;
+  --content:       244 244 245;
+  --content-muted: 161 161 170;
+  --content-faint: 113 113 122;
+  --line:           39  39  42;
+  --line-soft:      32  32  35;
+  --hover:          39  39  42;
 
   --fg: 255 255 255;
 
-  --y:        #8b93ff;
-  --y2:       #a2a9ff;
-  --y-brand:  #8b93ff;
-  --y-soft:   #1b1b24;
-  --on-accent:#111318;
-  --border:   rgba(139,147,255,0.26);
+  --y:        #ffc600;            /* sobre oscuro el amarillo sí se lee */
+  --y2:       #ffd54d;
+  --y-brand:  #ffc600;
+  --y-brand-hover: #ffd23a;
+  --y-soft:   rgba(255,198,0,0.12);
+  --on-accent:#111111;
+  --border:   rgba(255,198,0,0.32);
 
   --spark:    #ffc600;
 
-  --input-bg:       rgba(255,255,255,0.04);
-  --input-bg-focus: rgba(255,255,255,0.07);
-  --input-border:   rgb(58 58 58);
+  --input-bg:       rgba(255,255,255,0.03);
+  --input-bg-focus: rgba(255,255,255,0.05);
+  --input-border:   rgb(63 63 70);
+  --focus-ring:     rgba(255,198,0,0.25);
 
-  --shadow-card: 0 0 0 1px rgba(255,255,255,0.015);
-  --shadow-pop:  0 24px 60px rgba(0,0,0,0.7);
+  --shadow-card: 0 0 0 1px rgba(255,255,255,0.02);
+  --shadow-pop:  0 24px 60px rgba(0,0,0,0.6);
 }
 
 /* ══ ALIAS heredados ═══════════════════════════════════
@@ -106,13 +105,13 @@
   --info-soft:    rgba(58,109,240,0.10);
   --purple-soft:  rgba(122,90,240,0.10);
 
-  /* Tipografía de sistema, sentence case (renovado v6) */
-  --font-display: system-ui, -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
-  --font-body:    system-ui, -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+  /* Tipografías de TecApp, auto-hospedadas por next/font (ver app/layout.tsx) */
+  --font-display: var(--font-grotesk), system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  --font-body:    var(--font-inter), system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
   --page-px:   1.75rem;
   --page-pb:   3rem;
-  --topbar-h:  60px;
-  --sidebar-w: 236px;
+  --topbar-h:  56px;
+  --sidebar-w: 256px;
 
   /* Radios: lenguaje visual redondeado y consistente */
   --r-xs: 4px;
@@ -124,7 +123,7 @@
 }
 /* Tonos claros para fondo oscuro */
 .dark {
-  --danger:  #ff6b6f;
+  --danger:  #f87171;
   --success: #3ddc84;
   --info:    #6f9bff;
   --purple:  #a48bff;
@@ -139,7 +138,12 @@
   :root { --page-px: 1rem; --page-pb: 2rem; }
 }
 
-*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+/* El reinicio va en la capa base: fuera de capa le ganaba a TODAS las
+   utilidades de Tailwind (px-3, ml-4…) y los componentes portados de TecApp
+   quedaban sin espaciado. */
+@layer base {
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+}
 html { font-size: 16px; scroll-behavior: smooth; }
 
 body {
@@ -154,10 +158,32 @@ body {
 }
 
 ::selection { background: var(--y-brand); color: var(--on-accent); }
-::-webkit-scrollbar { width: 8px; height: 8px; }
+
+/* Scrollbars finas y acordes al tema */
+* { scrollbar-width: thin; scrollbar-color: rgb(var(--content-muted) / 0.35) transparent; }
+::-webkit-scrollbar { width: 10px; height: 10px; }
 ::-webkit-scrollbar-track { background: transparent; }
-::-webkit-scrollbar-thumb { background: rgb(var(--line)); border-radius: 8px; }
-::-webkit-scrollbar-thumb:hover { background: rgb(var(--content-faint)); }
+::-webkit-scrollbar-thumb {
+  background-color: rgb(var(--content-muted) / 0.35);
+  border-radius: 9999px;
+  border: 3px solid transparent;
+  background-clip: content-box;
+}
+::-webkit-scrollbar-thumb:hover { background-color: rgb(var(--content-muted) / 0.55); }
+
+/* iPhone hace zoom al enfocar un campo con letra < 16 px y descuadra la
+   pantalla: en celular los controles van a 16 px. */
+@media (max-width: 640px) {
+  input, select, textarea { font-size: 16px !important; }
+  /* Safari no estira fecha/hora al ancho y los centra raro */
+  input[type="date"], input[type="time"], input[type="datetime-local"] {
+    -webkit-appearance: none; appearance: none; text-align: left; min-height: 2.5rem;
+  }
+}
+/* Sin flechas en campos numéricos (en terreno no se usan) */
+input[type="number"]::-webkit-inner-spin-button,
+input[type="number"]::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
+input[type="number"] { -moz-appearance: textfield; appearance: textfield; }
 
 /* Cifras alineadas en tablas y montos */
 .tabular { font-variant-numeric: tabular-nums; }
@@ -172,27 +198,45 @@ body {
 /* ── Tipografía ────────────────────────────────────────── */
 .display {
   font-family: var(--font-display);
-  font-weight: 600;
+  font-weight: 700;
   letter-spacing: -0.02em;
-  line-height: 1.05;
+  line-height: 1.1;
 }
-/* Eyebrow / etiqueta pequeña — sentence case suave */
+/* Rótulo pequeño (eyebrow) */
 .label {
   font-family: var(--font-body);
-  font-weight: 500;
-  font-size: 0.68rem;
-  letter-spacing: 0.06em;
+  font-weight: 600;
+  font-size: 0.7rem;
+  letter-spacing: 0.12em;
   text-transform: uppercase;
   color: var(--y);
 }
 .label-muted {
   font-family: var(--font-body);
   font-weight: 500;
-  font-size: 0.68rem;
-  letter-spacing: 0.06em;
+  font-size: 0.7rem;
+  letter-spacing: 0.04em;
   text-transform: uppercase;
-  color: rgb(var(--content-faint));
+  color: rgb(var(--content-muted));
 }
+
+/* ── Encabezado de página (TecApp): rótulo + título + subtítulo ── */
+.pg-header {
+  display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between;
+  gap: 0.75rem; margin-bottom: 1.5rem;
+}
+.pg-eyebrow {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.72rem; letter-spacing: 0.2em; text-transform: uppercase; color: var(--y);
+}
+.pg-title {
+  margin-top: 0.25rem;
+  font-family: var(--font-display); font-weight: 700; letter-spacing: -0.02em;
+  font-size: 1.6rem; line-height: 1.15; color: rgb(var(--content));
+}
+@media (min-width: 640px) { .pg-title { font-size: 1.9rem; } }
+.pg-subtitle { margin-top: 0.25rem; font-size: 0.875rem; color: rgb(var(--content-muted)); }
+.pg-actions { display: flex; flex-wrap: wrap; gap: 0.5rem; }
 
 /* ── Botones ────────────────────────────────────────────── */
 .btn {
@@ -202,54 +246,48 @@ body {
   gap: 0.45rem;
   font-family: var(--font-body);
   font-weight: 500;
-  font-size: 0.84rem;
-  letter-spacing: -0.005em;
-  border: none;
+  font-size: 0.875rem;
+  border: 1px solid transparent;
   cursor: pointer;
-  transition: all 0.13s ease;
+  transition: background-color 0.13s ease, border-color 0.13s ease, color 0.13s ease;
   white-space: nowrap;
   text-decoration: none;
   user-select: none;
   -webkit-tap-highlight-color: transparent;
   outline: none;
-  border-radius: 9px;
+  border-radius: 8px;
   height: 38px;
-  padding: 0 0.95rem;
+  padding: 0 1rem;
 }
+.btn:focus-visible { box-shadow: 0 0 0 3px var(--focus-ring); }
 .btn:disabled { opacity: 0.5; cursor: not-allowed; }
 
-/* Primario: relleno de acento índigo con texto legible */
+/* Principal: amarillo InnVolt con texto negro (máximo contraste) */
 .btn-primary {
   background: var(--y-brand);
   color: var(--on-accent);
-  border: 1px solid var(--y-brand);
+  border-color: var(--y-brand);
+  font-weight: 600;
 }
-.btn-primary:hover:not(:disabled) { background: var(--y2); border-color: var(--y2); }
+.btn-primary:hover:not(:disabled) { background: var(--y-brand-hover); border-color: var(--y-brand-hover); }
 
+/* Secundario: contorno sobrio */
 .btn-ghost {
   background: rgb(var(--surface));
-  border: 1px solid rgb(var(--line));
-  color: rgb(var(--content-muted));
-  padding: 0 0.875rem;
-  height: 36px;
-}
-.btn-ghost:hover:not(:disabled) {
-  border-color: var(--border);
+  border-color: rgb(var(--line));
   color: rgb(var(--content));
-  background: rgb(var(--surface-3));
 }
+.btn-ghost:hover:not(:disabled) { background: rgb(var(--surface-3)); }
 
 .btn-danger {
   background: transparent;
-  border: 1px solid rgb(239 68 68 / 0.3);
+  border-color: rgb(239 68 68 / 0.35);
   color: var(--danger);
-  padding: 0 0.875rem;
-  height: 36px;
 }
 .btn-danger:hover:not(:disabled) { background: rgb(239 68 68 / 0.08); }
 
-.btn-sm { height: 30px; padding: 0 0.75rem; font-size: 0.65rem; }
-.btn-xs { height: 26px; padding: 0 0.6rem; font-size: 0.6rem; }
+.btn-sm { height: 32px; padding: 0 0.75rem; font-size: 0.8rem; }
+.btn-xs { height: 28px; padding: 0 0.6rem; font-size: 0.74rem; }
 
 /* ── Opciones de <select> nativas ────────────────────────
    El popup nativo no hereda el tema: sin esto, en oscuro las
@@ -262,37 +300,32 @@ select option {
 /* ── Inputs ─────────────────────────────────────────────── */
 .input {
   background: var(--input-bg);
-  border: 1px solid rgb(var(--line));
+  border: 1px solid var(--input-border);
   color: rgb(var(--content));
   font-family: var(--font-body);
   font-size: 0.875rem;
-  padding: 0.5rem 0.75rem;
+  padding: 0.55rem 0.75rem;
   outline: none;
-  transition: border-color 0.15s, background-color 0.15s;
+  transition: border-color 0.15s, box-shadow 0.15s, background-color 0.15s;
   width: 100%;
-  border-radius: 6px;
+  border-radius: 8px;
 }
 .input:focus {
-  border-color: var(--y);
+  border-color: var(--y-brand);
+  box-shadow: 0 0 0 3px var(--focus-ring);
   background: var(--input-bg-focus);
 }
-.input::placeholder { color: rgb(var(--content-muted)); }
+.input::placeholder { color: rgb(var(--content-faint)); }
 
-.input-sm { padding: 0.35rem 0.6rem; font-size: 0.8rem; height: 32px; }
+.input-sm { padding: 0.4rem 0.6rem; font-size: 0.82rem; height: 34px; }
 
-/* ── Cards / Panels ─────────────────────────────────────── */
-.panel {
+/* ── Cards / Panels (TecApp: rounded-2xl, borde fino, sombra sutil) ── */
+.panel, .panel-y {
   background: rgb(var(--surface));
   border: 1px solid rgb(var(--line));
-  border-radius: 10px;
+  border-radius: 14px;
   box-shadow: var(--shadow-card);
-}
-.panel-y {
-  background: rgb(var(--surface));
-  border: 1px solid rgb(var(--line));
-  border-top: 2px solid var(--y-brand);
-  border-radius: 10px;
-  box-shadow: var(--shadow-card);
+  overflow: hidden;
 }
 
 /* ── Acabado de paneles heredados ───────────────────────
@@ -322,11 +355,11 @@ tr div[style*="--bg3"], td div[style*="--bg3"] {
   font-size: 0.82rem;
 }
 .iv-table th {
-  font-family: var(--font-display);
-  font-weight: 700;
-  font-size: 0.58rem;
-  letter-spacing: 0.25em;
-  text-transform: uppercase;
+  font-family: var(--font-body);
+  font-weight: 500;
+  font-size: 0.75rem;
+  letter-spacing: 0;
+  text-transform: none;
   color: rgb(var(--content-muted));
   text-align: left;
   padding: 0.5rem 0.75rem;
@@ -335,7 +368,7 @@ tr div[style*="--bg3"], td div[style*="--bg3"] {
   background: rgb(var(--surface-3));
 }
 .iv-table td {
-  padding: 0.5rem 0.75rem;
+  padding: 0.65rem 0.75rem;
   border-bottom: 1px solid rgb(var(--line) / 0.6);
   vertical-align: middle;
 }
@@ -351,11 +384,11 @@ tr div[style*="--bg3"], td div[style*="--bg3"] {
 
 .iv-page-header {
   display: flex;
-  align-items: flex-start;
+  align-items: flex-end;
   justify-content: space-between;
   flex-wrap: wrap;
-  gap: 1rem;
-  margin-bottom: 2rem;
+  gap: 0.75rem;
+  margin-bottom: 1.5rem;
 }
 .iv-header-actions {
   display: flex;
@@ -437,12 +470,10 @@ aside.sidebar-desktop { border-right-color: rgb(var(--line)) !important; }
 .badge {
   display: inline-flex;
   align-items: center;
-  padding: 0.2rem 0.6rem;
-  font-family: var(--font-display);
-  font-weight: 700;
-  font-size: 0.58rem;
-  letter-spacing: 0.2em;
-  text-transform: uppercase;
+  padding: 0.15rem 0.55rem;
+  font-family: var(--font-body);
+  font-weight: 500;
+  font-size: 0.74rem;
   border-radius: 999px;
 }
 
@@ -450,23 +481,14 @@ aside.sidebar-desktop { border-right-color: rgb(var(--line)) !important; }
 .kpi-card {
   background: rgb(var(--surface));
   border: 1px solid rgb(var(--line));
-  padding: 1.25rem 1.5rem;
+  padding: 1.1rem 1.25rem;
   display: flex;
   flex-direction: column;
-  gap: 0.5rem;
+  gap: 0.45rem;
   position: relative;
   overflow: hidden;
-  border-radius: 10px;
+  border-radius: 14px;
   box-shadow: var(--shadow-card);
-}
-/* Franja superior: toma el color del acento de la tarjeta, a plena
-   intensidad. Con opacidad reducida el amarillo se ensucia y se lee café. */
-.kpi-card::before {
-  content: '';
-  position: absolute;
-  top: 0; left: 0; right: 0;
-  height: 3px;
-  background: var(--kpi-accent, var(--y-brand));
 }
 .kpi-icon {
   width: 32px; height: 32px;
@@ -476,8 +498,10 @@ aside.sidebar-desktop { border-right-color: rgb(var(--line)) !important; }
 }
 .kpi-value {
   font-family: var(--font-display);
-  font-weight: 900;
-  font-size: clamp(1.6rem, 3vw, 2.2rem);
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  font-variant-numeric: tabular-nums;
+  font-size: clamp(1.45rem, 2.6vw, 1.9rem);
   color: rgb(var(--content));
   line-height: 1;
 }
@@ -520,8 +544,8 @@ aside.sidebar-desktop { border-right-color: rgb(var(--line)) !important; }
   gap: 0.6rem;
   font-size: 0.85rem;
   animation: fadeIn 0.2s ease both;
-  border-radius: 8px;
-  box-shadow: 0 6px 20px rgba(0,0,0,0.14);
+  border-radius: 12px;
+  box-shadow: var(--shadow-pop);
 }
 
 /* ── Modal ──────────────────────────────────────────────── */
@@ -529,7 +553,6 @@ aside.sidebar-desktop { border-right-color: rgb(var(--line)) !important; }
   position: fixed;
   inset: 0;
   background: rgba(0,0,0,0.55);
-  backdrop-filter: blur(4px);
   z-index: 9999;
   display: flex;
   align-items: flex-start;
@@ -537,37 +560,49 @@ aside.sidebar-desktop { border-right-color: rgb(var(--line)) !important; }
   overflow-y: auto;
   padding: 2rem 1rem;
 }
-.dark .modal-overlay { background: rgba(0,0,0,0.78); }
+.dark .modal-overlay { background: rgba(0,0,0,0.7); }
 
 .modal-box {
   background: rgb(var(--surface));
   border: 1px solid rgb(var(--line));
-  border-top: 2px solid var(--y-brand);
   width: min(95vw, 620px);
   max-width: 560px;
-  max-height: calc(100vh - 4rem);
+  max-height: calc(100dvh - 4rem);
   overflow-y: auto;
   animation: fadeIn 0.2s ease both;
   margin: 0 auto;
-  border-radius: 12px;
-  box-shadow: 0 20px 50px rgba(0,0,0,0.25);
+  border-radius: 16px;
+  box-shadow: var(--shadow-pop);
 }
-.modal-box::-webkit-scrollbar { width: 3px; }
-.modal-box::-webkit-scrollbar-thumb { background: var(--border); }
+
+/* En el celular la ventana sube desde abajo, a todo el ancho y con el
+   pulgar cerca de los botones (patrón "bottom sheet" de TecApp). */
+@keyframes subirHoja { from { transform: translateY(100%); } to { transform: translateY(0); } }
+@media (max-width: 640px) {
+  .modal-overlay { align-items: flex-end; padding: 0; }
+  .modal-box {
+    width: 100% !important; max-width: 100% !important;
+    max-height: 92dvh !important;
+    margin: 0 !important;
+    border-radius: 18px 18px 0 0;
+    border-bottom: none;
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+    animation: subirHoja 0.22s ease-out both;
+  }
+}
 
 /* ── Section label ──────────────────────────────────────── */
 .section-label {
   font-family: var(--font-display);
   font-weight: 700;
-  font-size: 0.58rem;
-  letter-spacing: 0.3em;
-  text-transform: uppercase;
-  color: var(--y);
+  font-size: 1rem;
+  letter-spacing: -0.01em;
+  text-transform: none;
+  color: rgb(var(--content));
   display: flex;
-  align-items: flex-start;
-  padding-top: 1rem;
+  align-items: center;
   gap: 0.5rem;
-  margin-bottom: 0.875rem;
+  margin-bottom: 0.75rem;
 }
 
 /* ── Responsive helpers ─────────────────────────────────── */
@@ -590,7 +625,7 @@ aside.sidebar-desktop { border-right-color: rgb(var(--line)) !important; }
   transition: background 0.1s;
 }
 .clientes-list-row:hover { background: rgb(var(--surface-3)); }
-.clientes-list-row.active { background: rgb(var(--fg) / 0.05); }
+.clientes-list-row.active { background: rgb(var(--surface-3)); }
 
 @media (min-width: 769px) {
   .clientes-list-header {
@@ -671,12 +706,12 @@ aside.sidebar-desktop { border-right-color: rgb(var(--line)) !important; }
   right: 0;
   background: rgb(var(--surface));
   border: 1px solid rgb(var(--line));
-  border-top: none;
-  max-height: 220px;
+  max-height: 240px;
   overflow-y: auto;
   z-index: 50;
-  border-radius: 0 0 8px 8px;
-  box-shadow: 0 8px 24px rgba(0,0,0,0.18);
+  margin-top: 4px;
+  border-radius: 10px;
+  box-shadow: var(--shadow-pop);
 }
 .dropdown-item {
   padding: 0.65rem 0.875rem;

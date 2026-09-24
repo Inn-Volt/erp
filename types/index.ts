@@ -174,6 +174,33 @@ export interface RecetaIA {
 
 export type EstadoCotizacion = 'Pendiente' | 'Aceptado' | 'Realizado' | 'Rechazado' | 'Entregado';
 
+/** Por qué se pierde una venta: alimenta el análisis del dashboard. */
+export const MOTIVOS_PERDIDA = [
+  'Precio',
+  'Plazo de ejecución',
+  'Eligió a la competencia',
+  'Proyecto postergado o cancelado',
+  'Cambió el alcance',
+  'Sin respuesta del cliente',
+  'Otro',
+] as const;
+export type MotivoPerdida = typeof MOTIVOS_PERDIDA[number];
+
+/** Días sin respuesta tras los cuales una cotización pendiente pide seguimiento. */
+export const DIAS_SEGUIMIENTO = 3;
+
+/** Plantilla de textos por tipo de servicio (descripción, garantía, condiciones). */
+export interface PlantillaCotizacion {
+  id: string;
+  nombre: string;
+  tipo_servicio: string | null;
+  descripcion: string | null;
+  garantia: string | null;
+  condiciones: string | null;
+  created_at?: string;
+  updated_at?: string;
+}
+
 /** Moneda de la cotización. UF permite decimales; CLP se redondea a peso entero. */
 export type Moneda = 'CLP' | 'UF';
 
@@ -193,6 +220,28 @@ export interface Cotizacion {
   empresa_id?: string | null;
   /** Solicitud que originó esta cotización (relación inversa; opcional). */
   solicitud_id?: string | null;
+  /** Levantamiento (visita técnica) del que nació; sus fotos pueden ir al PDF. */
+  levantamiento_id?: string | null;
+  /** Si el PDF incluye el registro fotográfico del levantamiento. */
+  incluir_fotos?: boolean;
+
+  // ── Seguimiento comercial ──
+  enviada_at?: string | null;       // cuándo se envió al cliente
+  seguimiento_at?: string | null;   // último seguimiento hecho
+  seguimientos?: number;            // cuántos seguimientos
+
+  // ── Aceptación online (link /c/<token>) ──
+  token_publico?: string | null;
+  vista_at?: string | null;         // 1ª vez que el cliente abrió el link
+  respondida_at?: string | null;
+  respondida_por?: string | null;
+  respondida_rut?: string | null;
+  respuesta_comentario?: string | null;
+  respuesta_firma?: string | null;  // firma del cliente (PNG data URI) al aceptar online
+
+  // ── Motivo de pérdida (si fue Rechazada) ──
+  motivo_perdida?: string | null;
+  motivo_perdida_nota?: string | null;
   /** Moneda de la cotización (por defecto CLP). */
   moneda?: Moneda;
   /** Valor de la UF en CLP al momento de cotizar (solo informativo, si moneda = UF). */
@@ -282,9 +331,18 @@ export interface ConfiguracionEmpresa {
 
 export interface KpiData {
   total_cotizaciones: number;
+  /** Solo ventas concretadas (Aceptado/Realizado/Entregado), en CLP. */
   venta_acumulada: number;
   pendiente_pipeline: number;
   aceptadas: number;
+  /** Ventas concretadas cuya cotización se emitió este mes (CLP). */
+  venta_mes?: number;
+  rechazadas?: number;
+  pendientes?: number;
+  /** % de cierre sobre cotizaciones ya decididas (aceptadas / (aceptadas + rechazadas)). */
+  tasa_cierre?: number | null;
+  /** Monto promedio de las ventas concretadas (CLP). */
+  ticket_promedio?: number;
 }
 
 // ─── Utilidades UI ────────────────────────────────────────────────────────────

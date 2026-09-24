@@ -18,6 +18,8 @@ import {
   TIPO_SERVICIO_OPCIONES, TIPO_SERVICIO_LABEL, PRIORIDAD_META,
   ESTADO_SOLICITUD_META, ESTADOS_SOLICITUD,
 } from '@/types/solicitud';
+import { fetchConSesion } from '@/lib/fetchConSesion';
+import PageHeader from '@/components/PageHeader';
 
 const PRIORIDADES: PrioridadSolicitud[] = ['Baja', 'Media', 'Alta', 'Urgente'];
 
@@ -235,7 +237,7 @@ function DetalleSolicitud({ sol, onClose, onChange, onEdit, onDelete }: {
         await solicitudesService.update(sol.id, { info_adicional: infoAdicional });
         await solicitudesService.addHistorial(sol.id, 'Información adicional agregada.', sol.historial);
       }
-      const res = await fetch('/api/solicitudes-ia', {
+      const res = await fetchConSesion('/api/solicitudes-ia', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -284,7 +286,7 @@ function DetalleSolicitud({ sol, onClose, onChange, onEdit, onDelete }: {
           {/* Cabecera */}
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
             <EstadoBadge estado={sol.estado} />
-            <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.3rem', padding: '0.2rem 0.55rem', borderRadius: 6, background: PRIORIDAD_META[sol.prioridad].bg, color: PRIORIDAD_META[sol.prioridad].color, fontSize: '0.66rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.3rem', padding: '0.2rem 0.55rem', borderRadius: 6, background: PRIORIDAD_META[sol.prioridad].bg, color: PRIORIDAD_META[sol.prioridad].color, fontSize: '0.66rem', fontWeight: 700 }}>
               {sol.prioridad}
             </span>
           </div>
@@ -316,7 +318,7 @@ function DetalleSolicitud({ sol, onClose, onChange, onEdit, onDelete }: {
           {/* ── ANÁLISIS IA ── */}
           <div>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.6rem' }}>
-              <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.4rem', fontFamily: 'var(--font-display)', fontWeight: 700, fontSize: '0.6rem', letterSpacing: '0.18em', textTransform: 'uppercase', color: 'var(--y)' }}>
+              <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.4rem', fontFamily: 'var(--font-display)', fontWeight: 700, fontSize: '0.78rem', color: 'var(--y)' }}>
                 <Sparkles size={13} /> Análisis IA
               </span>
               <button onClick={() => analizar(false)} disabled={analizando} className="btn btn-primary btn-sm">
@@ -353,7 +355,7 @@ function DetalleSolicitud({ sol, onClose, onChange, onEdit, onDelete }: {
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
                       {a.items_sugeridos.map((it, i) => (
                         <div key={i} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.76rem' }}>
-                          <span style={{ fontSize: '0.5rem', fontWeight: 700, textTransform: 'uppercase', color: CATEGORIA_COLORS[it.categoria], border: `1px solid ${CATEGORIA_COLORS[it.categoria]}44`, padding: '0.05rem 0.3rem', borderRadius: 4, whiteSpace: 'nowrap' }}>{CATEGORIA_LABELS[it.categoria]}</span>
+                          <span style={{ fontSize: '0.72rem', fontWeight: 700, color: CATEGORIA_COLORS[it.categoria], border: `1px solid ${CATEGORIA_COLORS[it.categoria]}44`, padding: '0.05rem 0.3rem', borderRadius: 4, whiteSpace: 'nowrap' }}>{CATEGORIA_LABELS[it.categoria]}</span>
                           <span style={{ flex: 1, color: 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={it.descripcion}>{it.descripcion}</span>
                           <span style={{ color: 'var(--muted)', whiteSpace: 'nowrap' }}>{it.cantidad_sugerida} {it.unidad}</span>
                         </div>
@@ -364,7 +366,7 @@ function DetalleSolicitud({ sol, onClose, onChange, onEdit, onDelete }: {
 
                 {a.informacion_faltante.length > 0 && (
                   <div style={{ background: 'rgba(255,198,0,0.06)', border: '1px solid var(--border)', borderRadius: 8, padding: '0.6rem 0.75rem' }}>
-                    <p style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', fontSize: '0.62rem', fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--y)', marginBottom: '0.4rem' }}>
+                    <p style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', fontSize: '0.78rem', fontWeight: 700, color: 'var(--y)', marginBottom: '0.4rem' }}>
                       <HelpCircle size={12} /> Información faltante
                     </p>
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
@@ -515,17 +517,14 @@ export default function SolicitudesPage() {
         }
       `}</style>
 
-      <div className="iv-page-header">
-        <div>
-          <p className="label-muted" style={{ marginBottom: '0.35rem', letterSpacing: '0.4em' }}>Requerimientos de clientes</p>
-          <h1 style={{ fontFamily: 'var(--font-display)', fontWeight: 900, fontSize: 'clamp(2rem,5vw,3.2rem)', textTransform: 'uppercase', lineHeight: 0.9, color: 'var(--text)' }}>
-            SOLICI<span style={{ color: 'var(--y)' }}>TUDES</span>
-          </h1>
-        </div>
-        <div className="iv-header-actions">
+      <PageHeader
+        eyebrow="Requerimientos de clientes"
+        title="Solicitudes"
+        subtitle="Requerimientos de clientes por cotizar"
+        actions={<>
           <button onClick={() => setModal({ open: true, sol: null })} className="btn btn-primary"><Plus size={14} /> Nueva solicitud</button>
-        </div>
-      </div>
+        </>}
+      />
 
       <div className={`sol-layout${detalle ? ' split' : ''}`}>
       <div className="panel-y">
@@ -564,7 +563,7 @@ export default function SolicitudesPage() {
                     {s.cotizacion_id && s.cotizaciones?.folio ? <span style={{ color: 'var(--success)' }}> · COT #{String(s.cotizaciones.folio).padStart(4, '0')}</span> : null}
                   </p>
                 </div>
-                <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.3rem', padding: '0.2rem 0.5rem', borderRadius: 6, background: PRIORIDAD_META[s.prioridad].bg, color: PRIORIDAD_META[s.prioridad].color, fontSize: '0.62rem', fontWeight: 700, textTransform: 'uppercase', whiteSpace: 'nowrap' }} className="hide-mobile">{s.prioridad}</span>
+                <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.3rem', padding: '0.2rem 0.5rem', borderRadius: 6, background: PRIORIDAD_META[s.prioridad].bg, color: PRIORIDAD_META[s.prioridad].color, fontSize: '0.78rem', fontWeight: 700, whiteSpace: 'nowrap' }} className="hide-mobile">{s.prioridad}</span>
                 <EstadoBadge estado={s.estado} />
                 <ChevronRight size={13} color="var(--muted)" />
               </div>
@@ -593,7 +592,7 @@ export default function SolicitudesPage() {
 function EstadoBadge({ estado }: { estado: EstadoSolicitud }) {
   const m = ESTADO_SOLICITUD_META[estado];
   return (
-    <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.35rem', padding: '0.25rem 0.6rem', borderRadius: 6, background: m.bg, color: m.color, fontSize: '0.66rem', fontWeight: 700, fontFamily: 'var(--font-display)', letterSpacing: '0.06em', textTransform: 'uppercase', whiteSpace: 'nowrap' }}>
+    <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.35rem', padding: '0.25rem 0.6rem', borderRadius: 6, background: m.bg, color: m.color, fontSize: '0.66rem', fontWeight: 700, fontFamily: 'var(--font-display)', whiteSpace: 'nowrap' }}>
       <span style={{ width: 6, height: 6, borderRadius: '50%', background: m.color }} />
       {m.label}
     </span>

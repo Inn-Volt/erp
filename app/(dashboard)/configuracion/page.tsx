@@ -5,6 +5,9 @@ import { Settings, Save, Loader2, Building2, Percent, Hash } from 'lucide-react'
 import { supabase } from '@/lib/supabase';
 import { useToast } from '@/hooks/useToast';
 import { INNVOLT_INFO } from '@/types';
+import IAEstadoCard from '@/components/IAEstadoCard';
+import PlantillasCard from '@/components/PlantillasCard';
+import PageHeader from '@/components/PageHeader';
 
 interface Config {
   nombre: string;
@@ -91,8 +94,7 @@ export default function ConfiguracionPage() {
   };
 
   const sectionLabel: React.CSSProperties = {
-    fontFamily: 'var(--font-display)', fontWeight: 700, fontSize: '0.58rem',
-    letterSpacing: '0.3em', textTransform: 'uppercase', color: 'var(--y)',
+    fontFamily: 'var(--font-display)', fontWeight: 700, fontSize: '0.76rem', color: 'var(--y)',
     display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '1rem',
   };
 
@@ -106,20 +108,17 @@ export default function ConfiguracionPage() {
 
   return (
     <div className="anim-in">
-      <div className="iv-page-header">
-        <div>
-          <p className="label-muted" style={{ marginBottom: '0.35rem', letterSpacing: '0.4em' }}>Preferencias del sistema</p>
-          <h1 style={{ fontFamily: 'var(--font-display)', fontWeight: 900, fontSize: 'clamp(2rem,5vw,3.2rem)', textTransform: 'uppercase', lineHeight: 0.9, color: 'var(--text)' }}>
-            CONFI<span style={{ color: 'var(--y)' }}>GURACIÓN</span>
-          </h1>
-        </div>
-        <div className="iv-header-actions">
-          <button onClick={handleSave} disabled={saving} style={{ background: 'var(--y-brand)', color: 'var(--on-accent)', border: 'none', cursor: 'pointer', padding: '0 1.25rem', height: 36, fontFamily: 'var(--font-display)', fontWeight: 900, fontSize: '0.72rem', letterSpacing: '0.12em', textTransform: 'uppercase', display: 'inline-flex', alignItems: 'center', gap: '0.4rem', opacity: saving ? 0.5 : 1 }}>
+      <PageHeader
+        eyebrow="Preferencias del sistema"
+        title="Configuración"
+        subtitle="Empresa, textos por defecto, plantillas e inteligencia artificial"
+        actions={<>
+          <button onClick={handleSave} disabled={saving} className="btn btn-primary">
             {saving ? <Loader2 size={13} className="iv-spin" /> : <Save size={13} />}
             Guardar cambios
           </button>
-        </div>
-      </div>
+        </>}
+      />
 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '2px' }}>
 
@@ -196,6 +195,12 @@ export default function ConfiguracionPage() {
             </div>
           </div>
         </div>
+
+        {/* Plantillas por tipo de servicio */}
+        <PlantillasCard />
+
+        {/* Inteligencia artificial: proveedores y prueba */}
+        <IAEstadoCard />
       </div>
     </div>
   );
