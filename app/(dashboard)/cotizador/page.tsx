@@ -9,7 +9,7 @@ import {
   Loader2, RefreshCcw, Check, FileUp,
   Copy, Package, Settings2, X, ArrowUp, ArrowDown,
   Building2, ChevronDown, Pencil, Handshake, HardHat, BrickWall,
-  Calculator, Truck, Library, Sparkles, Inbox, ExternalLink,
+  Calculator, Truck, Library, Sparkles, Inbox, ExternalLink, Send,
 } from 'lucide-react';
 import { pdf } from '@react-pdf/renderer';
 import { saveAs } from 'file-saver';
@@ -31,7 +31,7 @@ import {
   calcularPartida, partidaDesdeReceta, borradorDesdeAnalisis,
   convertirItemsMoneda, formatMiles, nombreArchivo, formatDate,
 } from '@/utils';
-import type { CotizacionItem, Cliente, CategoriaItem, Supuestos, Moneda, Partida, RecetaConComponentes, PartidaIAResuelta, CatalogoItem } from '@/types';
+import type { CotizacionItem, Cliente, CategoriaItem, Supuestos, Moneda, Partida, RecetaConComponentes, PartidaIAResuelta, CatalogoItem, Cotizacion } from '@/types';
 import {
   CATEGORIA_LABELS, CATEGORIAS_ORDEN, CATEGORIA_COLORS,
   SUPUESTOS_DEFAULT, UNIDADES,
@@ -44,6 +44,8 @@ import CalculadoraHH from '@/components/CalculadoraHH';
 import BuscadorBiblioteca from '@/components/BuscadorBiblioteca';
 import CotizarIAModal from '@/components/CotizarIAModal';
 import NumeroInput from '@/components/NumeroInput';
+import EnviarCotizacionModal from '@/components/EnviarCotizacionModal';
+import { fotosService } from '@/services/fotos';
 import { DescripcionModal, OpcionesModal } from '@/components/CotizadorModales';
 
 // ─── Estilos base ─────────────────────────────────────────────────────────────
@@ -249,7 +251,7 @@ function PDFModal({
   folio, cliente, items, totals, descuentoPorcentajeMO,
   descripcionGeneral, garantia, condicionesComerciales,
   ocultarSuministros, empresa, moneda, valorUF, partidas, mostrarDetalle, onClose,
-  fechaEmision, hayCambios, onGuardar,
+  fechaEmision, hayCambios, onGuardar, levantamientoId, incluirFotos, onEnviar,
 }: {
   folio: number; cliente: Cliente; items: CotizacionItem[];
   totals: ReturnType<typeof calcularTotals>; descuentoPorcentajeMO: number;
@@ -257,6 +259,9 @@ function PDFModal({
   ocultarSuministros: boolean; empresa: EmpresaInfo; moneda: Moneda; valorUF: number;
   partidas: Partida[]; mostrarDetalle: boolean; onClose: () => void;
   fechaEmision: string | null; hayCambios: boolean; onGuardar: () => void;
+  levantamientoId: string | null; incluirFotos: boolean;
+  /** Abre "Enviar al cliente" (link, WhatsApp, correo). */
+  onEnviar?: () => void;
 }) {
   const [gen, setGen] = useState(false);
   const { error: toastError } = useToast();
@@ -279,6 +284,12 @@ function PDFModal({
     setGen(true);
     try {
       if (tipo === 'cliente') {
+        // Fotos del levantamiento (links firmados temporales) si la opción está activa.
+        let fotos: { url: string; caption: string }[] = [];
+        if (incluirFotos && levantamientoId) {
+          const lev = await levantamientosService.getById(levantamientoId);
+          fotos = await fotosService.paraPDF(lev?.data.fotos);
+        }
         const blob = await pdf(
           <PresupuestoPDF
             cliente={cliente} items={items} totals={totals}
@@ -288,7 +299,7 @@ function PDFModal({
             ocultarSuministros={ocultarSuministros}
             empresa={empresa} moneda={moneda} valorUF={valorUF}
             partidas={partidas} mostrarDetalle={mostrarDetalle}
-            fechaEmision={fechaEmision}
+            fechaEmision={fechaEmision} fotos={fotos}
           />
         ).toBlob();
         saveAs(blob, `Cotizacion_${folioStr}_${nombreArchivo(cliente.nombre_cliente)}.pdf`);
@@ -353,6 +364,11 @@ function PDFModal({
             </div>
           )}
 
+          {onEnviar && (
+            <button onClick={onEnviar} style={{ ...btnGhost, width: '100%', justifyContent: 'center', height: 44, background: 'var(--y-brand)', color: 'var(--on-accent)', borderColor: 'transparent', fontWeight: 700 }}>
+              <Send size={14} /> Enviar al cliente (link para aceptar online)
+            </button>
+          )}
           <button onClick={() => download('cliente')} disabled={gen} style={{ ...btnGhost, width: '100%', justifyContent: 'center', height: 44, borderColor: 'rgba(74,222,128,0.3)', color: 'var(--success)' }}>
             {gen ? <Loader2 size={14} className="iv-spin" /> : <FileText size={14} />}
             PDF Cliente (con IVA)
@@ -726,6 +742,11 @@ function CotizadorContent() {
   // Solicitud de origen (flujo Solicitud → IA → Cotización). Vacío en cotización directa.
   const [solicitudOrigen,        setSolicitudOrigen]        = useState<Solicitud | null>(null);
   const [generandoIA,            setGenerandoIA]            = useState(false);
+  // Levantamiento de origen (sus fotos pueden ir al PDF) y la fila guardada (para "Enviar").
+  const [levantamientoId,        setLevantamientoId]        = useState<string | null>(null);
+  const [incluirFotos,           setIncluirFotos]           = useState(false);
+  const [cotGuardada,            setCotGuardada]            = useState<Cotizacion | null>(null);
+  const [showEnviar,             setShowEnviar]             = useState(false);
   // Fecha de emisión real (created_at) para el PDF; null = cotización nueva (hoy).
   const [fechaEmision,           setFechaEmision]           = useState<string | null>(null);
   // Huella del contenido guardado, para detectar "cambios sin guardar".
@@ -794,6 +815,8 @@ const [empresaEditing, setEmpresaEditing] = useState<EmpresaInfo | null>(null);
       try {
         const lev = await levantamientosService.getById(levantamientoParam);
         if (lev) {
+          setLevantamientoId(lev.id);
+          setIncluirFotos((lev.data.fotos || []).length > 0);
           if (lev.cliente_id) {
             const c = dataClientes.find((x: Cliente) => x.id === lev.cliente_id);
             if (c) { setClienteSeleccionado(c); setSearchCliente(c.nombre_cliente); }
@@ -886,6 +909,9 @@ const [empresaEditing, setEmpresaEditing] = useState<EmpresaInfo | null>(null);
       if (cot.solicitud_id && !isCloning) {
         try { const sol = await solicitudesService.getById(cot.solicitud_id); if (sol) setSolicitudOrigen(sol); } catch { /* opcional */ }
       }
+      setLevantamientoId(cot.levantamiento_id || null);
+      setIncluirFotos(!!cot.incluir_fotos);
+      setCotGuardada(isCloning ? null : cot);
       if (!isCloning) { setFolioGenerado(cot.folio); setFechaEmision(cot.created_at); setCapturarFirma(true); }
       else            { obtenerUltimoFolio(); setFechaEmision(null); setFirmaGuardada(null); }
     }
@@ -1418,13 +1444,26 @@ const [empresaEditing, setEmpresaEditing] = useState<EmpresaInfo | null>(null);
       // Relación con la solicitud de origen (solo si vino de ese flujo).
       ...(solicitudOrigen ? { solicitud_id: solicitudOrigen.id } : {}),
     };
+    // Campos nuevos (requieren supabase_mejoras_comerciales.sql). Si la base aún no
+    // los tiene, se guarda igual sin ellos y se avisa.
+    const extras = levantamientoId ? { levantamiento_id: levantamientoId, incluir_fotos: incluirFotos } : {};
+    const esEdicion = !!(editId && !cloneId);
+    const persistir = (p: typeof payload & Partial<typeof extras>) =>
+      esEdicion ? cotizacionesService.update(editId as string, p) : cotizacionesService.create({ ...p, estado: 'Pendiente' });
     try {
-      let result;
-      if (editId && !cloneId) {
-        result = await cotizacionesService.update(editId, payload);
+      let result: Cotizacion;
+      try {
+        result = await persistir({ ...payload, ...extras });
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String((err as { message?: string })?.message || '');
+        if (!Object.keys(extras).length || !/column|schema cache/i.test(msg)) throw err;
+        result = await persistir(payload);
+        warning('Guardada sin el vínculo al levantamiento: ejecuta supabase_mejoras_comerciales.sql en Supabase.');
+      }
+      setCotGuardada(result);
+      if (esEdicion) {
         success('Cotización actualizada correctamente');
       } else {
-        result = await cotizacionesService.create({ ...payload, estado: 'Pendiente' });
         success('Cotización guardada correctamente');
         // Vincula la cotización recién creada a su solicitud de origen.
         if (solicitudOrigen) {
@@ -1462,6 +1501,9 @@ const [empresaEditing, setEmpresaEditing] = useState<EmpresaInfo | null>(null);
     setCondicionesComerciales(defCondiciones);
     setSupuestos({ ...SUPUESTOS_DEFAULT });
     setSolicitudOrigen(null);
+    setLevantamientoId(null);
+    setIncluirFotos(false);
+    setCotGuardada(null);
     obtenerUltimoFolio();
     router.push('/cotizador');
   };
@@ -1543,6 +1585,8 @@ const [empresaEditing, setEmpresaEditing] = useState<EmpresaInfo | null>(null);
           empresa={empresaPDF} moneda={moneda} valorUF={valorUF}
           partidas={partidas} mostrarDetalle={mostrarDetalle}
           fechaEmision={fechaEmision} hayCambios={hayCambios} onGuardar={handleGuardar}
+          levantamientoId={levantamientoId} incluirFotos={incluirFotos}
+          onEnviar={cotGuardada ? () => { setShowPDFModal(false); setShowEnviar(true); } : undefined}
           onClose={() => setShowPDFModal(false)}
         />
       )}
@@ -1597,14 +1641,25 @@ const [empresaEditing, setEmpresaEditing] = useState<EmpresaInfo | null>(null);
         />
       )}
 
+      {showEnviar && cotGuardada && clienteSeleccionado && (
+        <EnviarCotizacionModal
+          cot={{ ...cotGuardada, total: totals.total, moneda, clientes: clienteSeleccionado }}
+          empresaNombre={empresaSelec?.nombre || 'InnVolt'}
+          onClose={() => setShowEnviar(false)}
+          onCambio={() => { if (editId) cotizacionesService.getById(editId).then(c => c && setCotGuardada(c)); }}
+        />
+      )}
+
       {showOpciones && (
         <OpcionesModal
           ocultarSuministros={ocultarSuministros}
           ocultarCostos={ocultarCostos}
           mostrarDetalle={mostrarDetalle}
+          incluirFotos={levantamientoId ? incluirFotos : null}
           onToggle={(campo) => {
             if (campo === 'ocultarSuministros') setOcultarSuministros(v => !v);
             else if (campo === 'ocultarCostos') setOcultarCostos(v => !v);
+            else if (campo === 'incluirFotos') setIncluirFotos(v => !v);
             else setMostrarDetalle(v => !v);
           }}
           onClose={() => setShowOpciones(false)}

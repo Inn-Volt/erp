@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Save, Printer, ArrowLeft, AlertTriangle, CheckCircle, FileDown, FileText, Loader2 } from 'lucide-react';
 import { levantamientosService } from '@/services/levantamientos';
@@ -12,6 +12,8 @@ import {
   ESTADOS_GEN, TIPOS_TABLERO, TIPOS_CABLE, TIPOS_CANAL, TIPOS_LUM, SISTEMAS_ELEC,
 } from '@/types/levantamiento';
 import { newId, nombreArchivo } from '@/utils';
+import FotosLevantamiento from '@/components/FotosLevantamiento';
+import { fotosService, type FotoLevantamiento } from '@/services/fotos';
 import { useToast } from '@/hooks/useToast';
 
 // Importación del componente de renderizado de PDF estructurado analizado previamente
@@ -190,6 +192,7 @@ const NAV = [
   { id:'s7',  short:'07 Canal.'    }, { id:'s8',  short:'08 Crítico'   },
   { id:'s9',  short:'09 Medic.'    }, { id:'s10', short:'10 Recom.'    },
   { id:'s11', short:'11 Alcance'   },
+  { id:'s12', short:'12 Fotos'     },
 ];
 
 // ─── PRINT HANDLER ────────────────────────────────────────────────────────────
@@ -208,6 +211,10 @@ export default function LevantamientoPage() {
   const [genPDF,   setGenPDF]   = useState(false);
   const [yendoCot, setYendoCot] = useState(false);
   const { success, error: toastError } = useToast();
+  // Refs para el guardado automático de fotos (evitan cierres con datos viejos).
+  const dataRef = useRef(data);
+  useEffect(() => { dataRef.current = data; }, [data]);
+  const idRef = useRef<string | null>(null);
   const [saving,   setSaving]   = useState(false);
   const [saved,    setSaved]    = useState(false);
   const [activeNav,setActiveNav]= useState('s1');
@@ -218,7 +225,9 @@ export default function LevantamientoPage() {
   useEffect(() => { clientesService.getAll().then(setClientes).catch(console.error); }, []);
 
   useEffect(() => {
-    if (editId) levantamientosService.getById(editId).then(lev => {
+    // Si el id es el que acabamos de crear, los datos ya están en pantalla:
+    // recargar podría pisar fotos que se están subiendo en ese momento.
+    if (editId && editId !== idRef.current) levantamientosService.getById(editId).then(lev => {
       if (lev) { setData(lev.data); setClienteId(lev.cliente_id || ''); setEstado(lev.estado); setFolio(lev.folio); }
     });
   }, [editId]);
@@ -240,6 +249,7 @@ export default function LevantamientoPage() {
       else {
         const created = await levantamientosService.create(payload);
         id = created.id;
+        idRef.current = created.id;
         setFolio(created.folio);
         router.replace(`/levantamiento?id=${created.id}`);
       }
@@ -253,6 +263,18 @@ export default function LevantamientoPage() {
     }
   };
   const handleSave = async () => { if (await guardar()) success('Levantamiento guardado'); };
+
+  // ── Fotos: la lista se guarda sola en el levantamiento al subir/editar/borrar ──
+  const asegurarId = async (): Promise<string | null> => editId || idRef.current || (await guardar());
+  const cambiarFotos = async (fotos: FotoLevantamiento[]) => {
+    const nueva = { ...dataRef.current, fotos };
+    dataRef.current = nueva;
+    setData(nueva);
+    const id = editId || idRef.current;
+    if (!id) return;
+    try { await levantamientosService.update(id, { data: nueva }); }
+    catch { toastError('No se pudo guardar la lista de fotos. Pulsa "Guardar".'); }
+  };
 
   /** Levantamiento → Cotización: guarda y abre el cotizador con cliente y alcance precargados. */
   const cotizar = async () => {
@@ -270,7 +292,8 @@ export default function LevantamientoPage() {
   const descargarPDF = async () => {
     setGenPDF(true);
     try {
-      const blob = await pdf(<LevantamientoPDF data={data} estado={estado} />).toBlob();
+      const fotosPDF = await fotosService.paraPDF(data.fotos);
+      const blob = await pdf(<LevantamientoPDF data={data} estado={estado} fotos={fotosPDF} />).toBlob();
       saveAs(blob, `Levantamiento_${folio ? `LV-${String(folio).padStart(4, '0')}_` : ''}${nombreArchivo(data.cliente_nombre || 'sin_nombre')}.pdf`);
     } catch (e) {
       toastError('No se pudo generar el PDF: ' + (e instanceof Error ? e.message : ''));
@@ -777,6 +800,10 @@ export default function LevantamientoPage() {
           <T label="Mejoras recomendadas" rows={2} value={data.alcance_mejoras} onChange={e=>set('alcance_mejoras',e.target.value)} placeholder="Automatización, domótica, medición inteligente…" />
           <T label="Mantenciones sugeridas" rows={2} value={data.alcance_mantenciones} onChange={e=>set('alcance_mantenciones',e.target.value)} placeholder="Mantención preventiva semestral, ajuste de bornes…" />
           <T label="Observaciones comerciales" rows={2} value={data.alcance_obs_comerciales} onChange={e=>set('alcance_obs_comerciales',e.target.value)} placeholder="Cliente interesado en contrato de mantención…" />
+        </Sec>
+
+        <Sec id="s12" num="12" title="Registro fotográfico" icon="📷">
+          <FotosLevantamiento fotos={data.fotos || []} asegurarId={asegurarId} onChange={cambiarFotos} />
         </Sec>
 
         {/* ── Footer actions ── */}

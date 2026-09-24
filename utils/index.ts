@@ -66,6 +66,17 @@ export const sumarDias = (iso: string, dias: number) => {
   return fechaLocal(d);
 };
 
+/**
+ * Días de validez de la oferta, leídos de las condiciones comerciales
+ * ("Validez oferta: 15 días") para que PDF, link del cliente y texto nunca se
+ * contradigan. Si no se indica, 15 días.
+ */
+export const diasValidez = (condiciones: string | null | undefined): number => {
+  const m = /validez[^\d\n]{0,40}(\d{1,3})\s*d[ií]as/i.exec(condiciones || '');
+  const n = m ? parseInt(m[1], 10) : NaN;
+  return n > 0 && n <= 365 ? n : 15;
+};
+
 export const formatPct = (v: number) =>
   `${(Math.round((v || 0) * 10) / 10).toLocaleString('es-CL')}%`;
 

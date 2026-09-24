@@ -18,6 +18,7 @@ import {
   TIPO_SERVICIO_OPCIONES, TIPO_SERVICIO_LABEL, PRIORIDAD_META,
   ESTADO_SOLICITUD_META, ESTADOS_SOLICITUD,
 } from '@/types/solicitud';
+import { fetchConSesion } from '@/lib/fetchConSesion';
 
 const PRIORIDADES: PrioridadSolicitud[] = ['Baja', 'Media', 'Alta', 'Urgente'];
 
@@ -235,7 +236,7 @@ function DetalleSolicitud({ sol, onClose, onChange, onEdit, onDelete }: {
         await solicitudesService.update(sol.id, { info_adicional: infoAdicional });
         await solicitudesService.addHistorial(sol.id, 'Información adicional agregada.', sol.historial);
       }
-      const res = await fetch('/api/solicitudes-ia', {
+      const res = await fetchConSesion('/api/solicitudes-ia', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

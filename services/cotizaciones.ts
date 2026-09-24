@@ -1,6 +1,30 @@
 import { supabase } from '@/lib/supabase';
 import type { Cotizacion, EstadoCotizacion, KpiData } from '@/types';
+import { DIAS_SEGUIMIENTO } from '@/types';
 import { solicitudesService } from '@/services/solicitudes';
+
+/** Mensaje claro cuando falta ejecutar el SQL de mejoras comerciales. */
+const errColumna = (e: { message?: string } | null) =>
+  e && /column|schema cache/i.test(e.message || '')
+    ? new Error('Falta ejecutar supabase_mejoras_comerciales.sql en Supabase.')
+    : e;
+
+/** Días desde el último movimiento comercial (seguimiento, envío o creación). */
+export function diasSinMovimiento(c: Pick<Cotizacion, 'seguimiento_at' | 'enviada_at' | 'created_at'>): number {
+  const ref = c.seguimiento_at || c.enviada_at || c.created_at;
+  return Math.floor((Date.now() - new Date(ref).getTime()) / 86_400_000);
+}
+
+/** Pendiente y sin movimiento hace DIAS_SEGUIMIENTO días o más → hay que llamar. */
+export function necesitaSeguimiento(c: Pick<Cotizacion, 'estado' | 'seguimiento_at' | 'enviada_at' | 'created_at'>): boolean {
+  return c.estado === 'Pendiente' && diasSinMovimiento(c) >= DIAS_SEGUIMIENTO;
+}
+
+/** Link público de la cotización para el cliente (/c/<token>). */
+export function linkPublico(token: string): string {
+  const origin = typeof window !== 'undefined' ? window.location.origin : (process.env.NEXT_PUBLIC_SITE_URL || '');
+  return `${origin}/c/${token}`;
+}
 
 /** Estados que significan venta concretada. */
 export const ESTADOS_VENTA: EstadoCotizacion[] = ['Aceptado', 'Realizado', 'Entregado'];
@@ -74,14 +98,68 @@ export const cotizacionesService = {
     if (error) throw error;
   },
 
-  async updateEstado(id: string, estado: EstadoCotizacion): Promise<void> {
-    const { error } = await supabase
-      .from('cotizaciones')
-      .update({ estado, updated_at: new Date().toISOString() })
-      .eq('id', id);
+  /**
+   * Cambia el estado. Al rechazar se puede guardar el motivo de pérdida. Si el
+   * SQL de mejoras aún no se ejecutó, el cambio de estado igual se aplica.
+   */
+  async updateEstado(
+    id: string,
+    estado: EstadoCotizacion,
+    extra: { motivo_perdida?: string | null; motivo_perdida_nota?: string | null } = {},
+  ): Promise<void> {
+    const ahora = new Date().toISOString();
+    let { error } = await supabase.from('cotizaciones').update({ estado, ...extra, updated_at: ahora }).eq('id', id);
+    if (error && Object.keys(extra).length && /column|schema cache/i.test(error.message)) {
+      ({ error } = await supabase.from('cotizaciones').update({ estado, updated_at: ahora }).eq('id', id));
+    }
     if (error) throw error;
     // Cierra el ciclo Solicitud → Venta (best-effort: nunca bloquea el cambio de estado).
     try { await sincronizarSolicitud(id, estado); } catch { /* sin solicitud o sin columna */ }
+  },
+
+  /** Registra que se hizo un seguimiento (llamada, WhatsApp, correo). */
+  async registrarSeguimiento(id: string, seguimientosActuales = 0): Promise<void> {
+    const { error } = await supabase
+      .from('cotizaciones')
+      .update({ seguimiento_at: new Date().toISOString(), seguimientos: (seguimientosActuales || 0) + 1 })
+      .eq('id', id);
+    if (error) throw errColumna(error);
+  },
+
+  /** Marca la cotización como enviada al cliente (solo la primera vez). */
+  async marcarEnviada(id: string): Promise<void> {
+    const { error } = await supabase
+      .from('cotizaciones')
+      .update({ enviada_at: new Date().toISOString() })
+      .eq('id', id)
+      .is('enviada_at', null);
+    if (error) throw errColumna(error);
+  },
+
+  /** Cotizaciones pendientes (para la lista "Por seguir"). */
+  async getPendientes(): Promise<Cotizacion[]> {
+    const { data, error } = await supabase
+      .from('cotizaciones')
+      .select('*, clientes(*)')
+      .eq('estado', 'Pendiente')
+      .order('created_at', { ascending: true });
+    if (error) throw error;
+    return data || [];
+  },
+
+  /** Conteo de motivos de pérdida. {} si aún no existe la columna. */
+  async getMotivosPerdida(): Promise<Record<string, number>> {
+    const { data, error } = await supabase
+      .from('cotizaciones')
+      .select('motivo_perdida')
+      .eq('estado', 'Rechazado');
+    if (error) return {};
+    const conteo: Record<string, number> = {};
+    for (const r of data || []) {
+      const m = (r as { motivo_perdida: string | null }).motivo_perdida || 'Sin motivo registrado';
+      conteo[m] = (conteo[m] || 0) + 1;
+    }
+    return conteo;
   },
 
   async getNextFolio(): Promise<number> {

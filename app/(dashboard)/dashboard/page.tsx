@@ -1,9 +1,10 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
-import { FileText, Users, TrendingUp, Clock, Plus, ChevronRight, Zap, Inbox, Calendar, Target } from 'lucide-react';
-import { cotizacionesService } from '@/services/cotizaciones';
+import { FileText, Users, TrendingUp, Clock, Plus, ChevronRight, Zap, Inbox, Calendar, Target, BellRing, TrendingDown, Send, Eye } from 'lucide-react';
+import { cotizacionesService, necesitaSeguimiento, diasSinMovimiento } from '@/services/cotizaciones';
+import EnviarCotizacionModal from '@/components/EnviarCotizacionModal';
 import { clientesService } from '@/services/clientes';
 import { solicitudesService } from '@/services/solicitudes';
 import { agendaService } from '@/services/agenda';
@@ -45,7 +46,19 @@ export default function DashboardPage() {
   const [recientes, setRecientes] = useState<Cotizacion[]>([]);
   const [totalClientes, setTotalClientes] = useState(0);
   const [embudo, setEmbudo] = useState<Embudo | null>(null);
+  const [porSeguir, setPorSeguir] = useState<Cotizacion[]>([]);
+  const [motivos, setMotivos] = useState<Record<string, number>>({});
+  const [enviar, setEnviar] = useState<Cotizacion | null>(null);
   const [loading, setLoading] = useState(true);
+
+  // Lista "Por seguir" y motivos de pérdida (se recargan tras un seguimiento).
+  const cargarSeguimiento = useCallback(() => {
+    cotizacionesService.getPendientes()
+      .then(ps => setPorSeguir(ps.filter(necesitaSeguimiento).sort((a, b) => diasSinMovimiento(b) - diasSinMovimiento(a))))
+      .catch(() => setPorSeguir([]));
+    cotizacionesService.getMotivosPerdida().then(setMotivos).catch(() => setMotivos({}));
+  }, []);
+  useEffect(() => { cargarSeguimiento(); }, [cargarSeguimiento]);
 
   useEffect(() => {
     // Solicitudes y agenda son módulos nuevos: si su tabla aún no existe, el
@@ -77,6 +90,9 @@ export default function DashboardPage() {
 
   return (
     <div className="anim-in">
+      {enviar && (
+        <EnviarCotizacionModal cot={enviar} empresaNombre={INNVOLT_INFO.nombre} onClose={() => setEnviar(null)} onCambio={cargarSeguimiento} />
+      )}
       {/* Header */}
       <div className="iv-page-header">
         <div>
@@ -127,6 +143,60 @@ export default function DashboardPage() {
               </button>
             ))}
           </div>
+        </div>
+      )}
+
+      {/* Seguimiento + motivos de pérdida */}
+      {!loading && (porSeguir.length > 0 || Object.keys(motivos).length > 0) && (
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '2px', marginBottom: '2px' }}>
+          {porSeguir.length > 0 && (
+            <div className="panel-y" style={{ padding: '1rem 1.25rem' }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.75rem' }}>
+                <p className="section-label" style={{ margin: 0, color: 'var(--orange)' }}><BellRing size={12} /> Por seguir hoy ({porSeguir.length})</p>
+                <button onClick={() => router.push('/cotizador/historial')} className="btn btn-ghost btn-xs">Ver todas <ChevronRight size={11} /></button>
+              </div>
+              <p style={{ fontSize: '0.72rem', color: 'var(--muted)', marginBottom: '0.6rem' }}>Cotizaciones pendientes sin respuesta hace 3 días o más. Un seguimiento a tiempo recupera muchas ventas.</p>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                {porSeguir.slice(0, 5).map(c => (
+                  <div key={c.id} style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', padding: '0.55rem 0.7rem', background: 'var(--bg3)', borderRadius: 'var(--r-sm)' }}>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <p style={{ fontSize: '0.84rem', fontWeight: 600, color: 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                        {formatFolio(c.folio)} · {c.clientes?.nombre_cliente || '—'}
+                      </p>
+                      <p style={{ fontSize: '0.7rem', color: 'var(--muted)', display: 'flex', gap: 8, alignItems: 'center' }}>
+                        <span style={{ color: 'var(--orange)' }}>{diasSinMovimiento(c)} días</span>
+                        <span>{formatMoneda(c.total, (c.moneda as Moneda) || 'CLP')}</span>
+                        {c.vista_at && <span style={{ color: 'var(--info)', display: 'inline-flex', alignItems: 'center', gap: 2 }}><Eye size={10} /> la abrió</span>}
+                      </p>
+                    </div>
+                    <button onClick={() => setEnviar(c)} className="btn btn-ghost btn-xs" style={{ color: 'var(--orange)' }}><Send size={11} /> Seguir</button>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+          {Object.keys(motivos).length > 0 && (() => {
+            const total = Object.values(motivos).reduce((a, b) => a + b, 0);
+            const orden = Object.entries(motivos).sort((a, b) => b[1] - a[1]);
+            return (
+              <div className="panel-y" style={{ padding: '1rem 1.25rem' }}>
+                <p className="section-label" style={{ marginBottom: '0.75rem' }}><TrendingDown size={12} /> ¿Por qué perdemos ventas?</p>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                  {orden.map(([m, n]) => (
+                    <div key={m}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.76rem', marginBottom: 3 }}>
+                        <span style={{ color: 'var(--text)' }}>{m}</span>
+                        <span style={{ color: 'var(--muted)' }}>{n} · {Math.round((n / total) * 100)}%</span>
+                      </div>
+                      <div style={{ height: 6, background: 'var(--bg3)', borderRadius: 3, overflow: 'hidden' }}>
+                        <div style={{ width: `${(n / total) * 100}%`, height: '100%', background: 'var(--danger)', opacity: 0.75 }} />
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            );
+          })()}
         </div>
       )}
 

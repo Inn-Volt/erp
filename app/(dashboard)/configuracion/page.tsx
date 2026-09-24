@@ -5,6 +5,8 @@ import { Settings, Save, Loader2, Building2, Percent, Hash } from 'lucide-react'
 import { supabase } from '@/lib/supabase';
 import { useToast } from '@/hooks/useToast';
 import { INNVOLT_INFO } from '@/types';
+import IAEstadoCard from '@/components/IAEstadoCard';
+import PlantillasCard from '@/components/PlantillasCard';
 
 interface Config {
   nombre: string;
@@ -196,6 +198,12 @@ export default function ConfiguracionPage() {
             </div>
           </div>
         </div>
+
+        {/* Plantillas por tipo de servicio */}
+        <PlantillasCard />
+
+        {/* Inteligencia artificial: proveedores y prueba */}
+        <IAEstadoCard />
       </div>
     </div>
   );

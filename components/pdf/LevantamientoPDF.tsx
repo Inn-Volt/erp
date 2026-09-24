@@ -1,5 +1,5 @@
 import React from 'react';
-import { Document, Page, Text, View, StyleSheet } from '@react-pdf/renderer';
+import { Document, Page, Text, View, StyleSheet, Image } from '@react-pdf/renderer';
 import type { LevantamientoData } from '@/types/levantamiento';
 
 const COLORS = {
@@ -54,15 +54,22 @@ const styles = StyleSheet.create({
     borderRightColor: '#dddddd' 
   },
   footer: { position: 'absolute', bottom: 20, left: 30, right: 30, textAlign: 'center', color: '#666', fontSize: 8 },
-  critical: { color: COLORS.danger, fontWeight: 'bold', marginBottom: 2 }
+  critical: { color: COLORS.danger, fontWeight: 'bold', marginBottom: 2 },
+  // Registro fotográfico: 2 fotos por fila
+  fotosGrid: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between' },
+  fotoBox: { width: '48.5%', marginBottom: 12 },
+  foto: { width: '100%', height: 190, objectFit: 'cover', borderWidth: 1, borderStyle: 'solid', borderColor: COLORS.border },
+  fotoCaption: { fontSize: 8, color: '#444444', marginTop: 3 },
 });
 
 interface Props {
   data: LevantamientoData;
   estado: string;
+  /** Fotos de la visita con URL firmada temporal (se generan al descargar). */
+  fotos?: { url: string; caption: string }[];
 }
 
-export default function LevantamientoPDF({ data, estado }: Props) {
+export default function LevantamientoPDF({ data, estado, fotos = [] }: Props) {
   return (
     <Document>
       <Page size="A4" style={styles.page}>
@@ -139,6 +146,22 @@ export default function LevantamientoPDF({ data, estado }: Props) {
 
         <Text fixed style={styles.footer} render={({ pageNumber, totalPages }) => `Página ${pageNumber} de ${totalPages}`} />
       </Page>
+
+      {fotos.length > 0 && (
+        <Page size="A4" style={styles.page}>
+          <Text style={styles.sectionTitle}>12. REGISTRO FOTOGRÁFICO</Text>
+          <View style={styles.fotosGrid}>
+            {fotos.map((f, i) => (
+              <View key={i} style={styles.fotoBox} wrap={false}>
+                {/* eslint-disable-next-line jsx-a11y/alt-text -- <Image> de @react-pdf no admite alt */}
+                <Image src={f.url} style={styles.foto} />
+                <Text style={styles.fotoCaption}>{i + 1}. {f.caption || 'Sin descripción'}</Text>
+              </View>
+            ))}
+          </View>
+          <Text fixed style={styles.footer} render={({ pageNumber, totalPages }) => `Página ${pageNumber} de ${totalPages}`} />
+        </Page>
+      )}
     </Document>
   );
 }

@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { usuarioAutenticado, noAutorizado } from '@/lib/authServidor';
 import { generarJSON, type GeminiSchema } from '@/lib/ia';
 import type { RecetaIA } from '@/types';
 
@@ -47,6 +48,7 @@ const SCHEMA: GeminiSchema = {
 };
 
 export async function POST(req: Request) {
+  if (!(await usuarioAutenticado(req))) return noAutorizado();
   let descripcion = '';
   try {
     const body = await req.json();

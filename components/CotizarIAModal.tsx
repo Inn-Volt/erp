@@ -6,6 +6,7 @@ import { formatCLP, resolverBorradorIA } from '@/utils';
 import { catalogoService } from '@/services/catalogo';
 import { CATEGORIA_LABELS, CATEGORIA_COLORS } from '@/types';
 import type { BorradorIA, PartidaIAResuelta, CategoriaItem, Moneda } from '@/types';
+import { fetchConSesion } from '@/lib/fetchConSesion';
 
 const EJEMPLOS = [
   'Habilitación eléctrica de 3 locales comerciales: tablero por local, iluminación LED, 6 enchufes y certificación SEC.',
@@ -35,7 +36,7 @@ export default function CotizarIAModal({
     setError(null);
     setResueltas(null);
     try {
-      const res = await fetch('/api/cotizar-ia', {
+      const res = await fetchConSesion('/api/cotizar-ia', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ descripcion: descripcion.trim() }),

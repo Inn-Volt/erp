@@ -3,7 +3,7 @@ import {
   Document, Page, Text, View, StyleSheet, Image,
 } from '@react-pdf/renderer';
 import type { CotizacionItem, Cliente, Partida } from '@/types';
-import { boldPorLinea, formatDate, fechaLocal, sumarDias, type Totals } from '@/utils';
+import { boldPorLinea, formatDate, fechaLocal, sumarDias, diasValidez, type Totals } from '@/utils';
 
 /** Logo con tinta oscura: es el que contrasta sobre el papel blanco del PDF. */
 const LOGO_PDF = '/InnVolt-transparente-claro.png';
@@ -173,6 +173,12 @@ const s = StyleSheet.create({
   pagoKey: { fontSize: 6.5, color: FAINT, textTransform: 'uppercase', letterSpacing: 0.5 },
   pagoVal: { fontSize: 8, color: INK, fontFamily: 'Helvetica-Bold', marginBottom: 4 },
   aceptaText: { fontSize: 7.5, color: MUTED, lineHeight: 1.5 },
+
+  // ── Registro fotográfico (2 por fila) ──
+  fotosGrid: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between' },
+  fotoBox: { width: '48.5%', marginBottom: 12 },
+  foto: { width: '100%', height: 185, objectFit: 'cover', borderRadius: 4 },
+  fotoCaption: { fontSize: 7.5, color: MUTED, marginTop: 4 },
   totalesInner: { width: 240, borderWidth: 1, borderColor: LINE, borderRadius: 6, overflow: 'hidden' },
   totalesRow: {
     flexDirection: 'row',
@@ -304,16 +310,6 @@ const fmtMoneda = (moneda: Moneda) => (n: number) => (moneda === 'UF' ? fmtUFn(n
 const fmtCant = (n: number) =>
   new Intl.NumberFormat('es-CL', { maximumFractionDigits: 2 }).format(n || 0);
 
-/**
- * Días de validez de la oferta. Se leen de las condiciones comerciales
- * ("Validez oferta: 15 días") para que la fecha del PDF y el texto nunca se
- * contradigan. Si no se indica, 15 días.
- */
-const diasValidez = (condiciones: string): number => {
-  const m = /validez[^\d\n]{0,40}(\d{1,3})\s*d[ií]as/i.exec(condiciones || '');
-  const n = m ? parseInt(m[1], 10) : NaN;
-  return n > 0 && n <= 365 ? n : 15;
-};
 
 /** Divide un texto en segmentos según **negrita** (marcadores estilo markdown). */
 const parseInline = (text: string): { t: string; b: boolean }[] => {
@@ -424,6 +420,8 @@ interface Props {
    * salía con fecha de septiembre. null/undefined = hoy (cotización nueva).
    */
   fechaEmision?: string | null;
+  /** Fotos del levantamiento (URL firmada temporal + leyenda). Vacío = sin página de fotos. */
+  fotos?: { url: string; caption: string }[];
 }
 
 // ─── Componente fila de tabla (reutilizable) ──────────────────────────────────
@@ -506,7 +504,7 @@ export default function PresupuestoPDF({
   cliente, items, totals,
   folio, descripcionGeneral, garantia, condicionesComerciales,
   ocultarSuministros, empresa, moneda = 'CLP', valorUF = 0,
-  partidas = [], mostrarDetalle = false, fechaEmision,
+  partidas = [], mostrarDetalle = false, fechaEmision, fotos = [],
 }: Props) {
 
   // Formateador de moneda de todo el documento (CLP o UF).
@@ -881,6 +879,35 @@ export default function PresupuestoPDF({
         </View>
 
       </Page>
+
+      {/* ══ REGISTRO FOTOGRÁFICO — fotos de la visita técnica (opcional) ══ */}
+      {fotos.length > 0 && (
+        <Page size="A4" style={s.page}>
+          <View style={s.accentBar} fixed>
+            <View style={s.accentDark} />
+            <View style={s.accentSpark} />
+          </View>
+          <View style={{ padding: '4 32 0 32' }}>
+            <Text style={s.pageTitle}>REGISTRO FOTOGRÁFICO DE LA VISITA TÉCNICA</Text>
+            <View style={s.fotosGrid}>
+              {fotos.map((f, i) => (
+                <View key={i} style={s.fotoBox} wrap={false}>
+                  {/* eslint-disable-next-line jsx-a11y/alt-text -- <Image> de @react-pdf no admite alt */}
+                  <Image src={f.url} style={s.foto} />
+                  <Text style={s.fotoCaption}>{i + 1}. {f.caption || 'Registro de la visita'}</Text>
+                </View>
+              ))}
+            </View>
+          </View>
+          <View style={s.footer} fixed>
+            <View style={s.footerBrand}>
+              <View style={s.footerDot} />
+              <Text style={s.footerLeft}>{empresa.nombre}</Text>
+            </View>
+            <Text style={s.footerRight} render={({ pageNumber, totalPages }) => `${folio} · Página ${pageNumber}/${totalPages}`} />
+          </View>
+        </Page>
+      )}
 
       {/* ══════════════════════════════════════════════════════════════════════
           PÁGINA FINAL — Importante + Cláusulas + Firma al fondo

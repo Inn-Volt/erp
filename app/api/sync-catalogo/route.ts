@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { usuarioAutenticado, noAutorizado } from '@/lib/authServidor';
 import * as XLSX from 'xlsx';
 import { cleanNumber } from '@/utils';
 import type { CategoriaItem } from '@/types';
@@ -34,7 +35,8 @@ function campo(row: Record<string, unknown>, ...nombres: string[]): unknown {
   return undefined;
 }
 
-export async function GET() {
+export async function GET(req: Request) {
+  if (!(await usuarioAutenticado(req))) return noAutorizado();
   try {
     const url = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/export?format=xlsx`;
     const res = await fetch(url, { cache: 'no-store' });

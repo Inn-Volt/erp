@@ -16,6 +16,7 @@ import type {
 import {
   CATEGORIA_LABELS, CATEGORIAS_ORDEN, CATEGORIA_COLORS, UNIDADES,
 } from '@/types';
+import { fetchConSesion } from '@/lib/fetchConSesion';
 
 // ─── Estilos base ─────────────────────────────────────────────────────────────
 const field: React.CSSProperties = {
@@ -160,7 +161,7 @@ function RecetaModal({ receta, catalogo, onClose, onSaved }: {
     setIaCargando(true);
     setIaError(null);
     try {
-      const res = await fetch('/api/receta-ia', {
+      const res = await fetchConSesion('/api/receta-ia', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ descripcion: iaDesc.trim() }),
       });
@@ -382,7 +383,7 @@ export default function BibliotecaPage() {
   const sincronizarSheet = useCallback(async (silent = false) => {
     setSincronizando(true);
     try {
-      const res = await fetch('/api/sync-catalogo');
+      const res = await fetchConSesion('/api/sync-catalogo');
       const data = await res.json();
       if (!res.ok || data.error) throw new Error(data.error || 'No se pudo leer el Google Sheet');
       const { creados, actualizados, borrados } = await catalogoService.syncCatalogo(data.items);

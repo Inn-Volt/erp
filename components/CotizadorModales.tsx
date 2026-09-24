@@ -9,10 +9,13 @@
  *    costos internos).
  */
 
-import { useRef } from 'react';
-import { FileText, X, Eye, SlidersHorizontal, Check, Bold, List, RotateCcw } from 'lucide-react';
+import { useRef, useState, useEffect } from 'react';
+import { FileText, X, Eye, SlidersHorizontal, Check, Bold, List, RotateCcw, LayoutTemplate, Save } from 'lucide-react';
 import { boldPorLinea } from '@/utils';
 import type { EmpresaInfo } from '@/components/pdf/PresupuestoPDF';
+import type { PlantillaCotizacion } from '@/types';
+import { plantillasService } from '@/services/plantillas';
+import { useToast } from '@/hooks/useToast';
 
 type Campo = 'descripcion' | 'garantia' | 'condiciones';
 
@@ -73,6 +76,40 @@ export function DescripcionModal({
   onRestaurarBase?: () => void;
 }) {
   const refs = useRef<Record<Campo, HTMLTextAreaElement | null>>({ descripcion: null, garantia: null, condiciones: null });
+  const { success, error: toastError } = useToast();
+
+  // ── Plantillas por tipo de servicio ──
+  const [plantillas, setPlantillas] = useState<PlantillaCotizacion[]>([]);
+  const [plantillaSel, setPlantillaSel] = useState('');
+  useEffect(() => { plantillasService.getAll().then(setPlantillas).catch(() => setPlantillas([])); }, []);
+
+  const aplicarPlantilla = (id: string) => {
+    const pl = plantillas.find(x => x.id === id);
+    setPlantillaSel('');
+    if (!pl) return;
+    const hayTexto = descripcion.trim() || garantia.trim() || condiciones.trim();
+    if (hayTexto && !confirm(`¿Reemplazar los textos actuales por la plantilla "${pl.nombre}"?`)) return;
+    if (pl.descripcion) onChange('descripcion', pl.descripcion);
+    if (pl.garantia) onChange('garantia', pl.garantia);
+    if (pl.condiciones) onChange('condiciones', pl.condiciones);
+    success(`Plantilla "${pl.nombre}" aplicada`);
+  };
+
+  const guardarComoPlantilla = async () => {
+    const nombre = prompt('Nombre de la plantilla (ej: CCTV residencial):');
+    if (!nombre?.trim()) return;
+    try {
+      const nueva = await plantillasService.create({
+        nombre: nombre.trim(), tipo_servicio: null,
+        descripcion: descripcion || null, garantia: garantia || null, condiciones: condiciones || null,
+      });
+      setPlantillas(prev => [...prev, nueva].sort((a, b) => a.nombre.localeCompare(b.nombre)));
+      success('Plantilla guardada: la puedes reutilizar en cualquier cotización');
+    } catch (e) {
+      const m = e instanceof Error ? e.message : '';
+      toastError(/relation|schema cache|does not exist/i.test(m) ? 'Falta ejecutar supabase_mejoras_comerciales.sql en Supabase.' : 'No se pudo guardar la plantilla');
+    }
+  };
 
   /** Aplica formato (negrita/viñeta) sobre la selección del textarea del campo. */
   const aplicar = (field: Campo, tipo: 'bold' | 'bullet') => {
@@ -108,6 +145,19 @@ export function DescripcionModal({
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '1rem 1.4rem', borderBottom: '1px solid var(--border2)' }}>
           <span style={sectionLabel}><FileText size={13} /> Descripción y condiciones</span>
           <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--muted)' }}><X size={16} /></button>
+        </div>
+
+        {/* Plantillas: cargar textos listos por tipo de servicio o guardar los actuales */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap', padding: '0.6rem 1.4rem', borderBottom: '1px solid var(--border2)', background: 'var(--bg3)' }}>
+          <LayoutTemplate size={14} style={{ color: 'var(--y)' }} />
+          <select value={plantillaSel} onChange={e => aplicarPlantilla(e.target.value)}
+            style={{ background: 'var(--input-bg)', border: '1px solid var(--input-border)', color: 'var(--text)', borderRadius: 'var(--r-sm)', height: 32, padding: '0 0.5rem', fontSize: '0.8rem', minWidth: 200 }}>
+            <option value="">{plantillas.length ? 'Usar una plantilla…' : 'Sin plantillas todavía'}</option>
+            {plantillas.map(pl => <option key={pl.id} value={pl.id}>{pl.nombre}</option>)}
+          </select>
+          <button onClick={guardarComoPlantilla} style={{ display: 'inline-flex', alignItems: 'center', gap: 5, height: 32, padding: '0 0.7rem', background: 'transparent', border: '1px solid var(--border2)', borderRadius: 'var(--r-sm)', color: 'var(--muted)', cursor: 'pointer', fontSize: '0.75rem' }}>
+            <Save size={12} /> Guardar como plantilla
+          </button>
         </div>
 
         <div className="desc-modal-grid" style={{ flex: 1, minHeight: 0, overflow: 'hidden' }}>
@@ -231,13 +281,15 @@ function PreviewAclaraciones({ garantia, condiciones }: { garantia: string; cond
 
 // ══════════════════════════════════════════════════════════════════════════════
 export function OpcionesModal({
-  ocultarSuministros, ocultarCostos, mostrarDetalle, onToggle, onClose,
+  ocultarSuministros, ocultarCostos, mostrarDetalle, incluirFotos = null, onToggle, onClose,
 }: {
   ocultarSuministros: boolean; ocultarCostos: boolean; mostrarDetalle: boolean;
-  onToggle: (campo: 'ocultarSuministros' | 'ocultarCostos' | 'mostrarDetalle') => void;
+  /** null = la cotización no viene de un levantamiento (la opción no aplica). */
+  incluirFotos?: boolean | null;
+  onToggle: (campo: 'ocultarSuministros' | 'ocultarCostos' | 'mostrarDetalle' | 'incluirFotos') => void;
   onClose: () => void;
 }) {
-  const filas = [
+  const filas: { campo: 'ocultarSuministros' | 'ocultarCostos' | 'mostrarDetalle' | 'incluirFotos'; val: boolean; label: string; hint: string }[] = [
     {
       campo: 'mostrarDetalle' as const, val: mostrarDetalle,
       label: 'Mostrar detalle técnico de materiales',
@@ -253,6 +305,11 @@ export function OpcionesModal({
       label: 'Ocultar costos y margen interno',
       hint: 'Oculta en pantalla las columnas de costo, imprevistos y margen. No afecta al PDF del cliente.',
     },
+    ...(incluirFotos !== null ? [{
+      campo: 'incluirFotos' as const, val: incluirFotos,
+      label: 'Incluir fotos del levantamiento',
+      hint: 'Agrega al PDF (y al link del cliente) una página con el registro fotográfico de la visita técnica.',
+    }] : []),
   ];
   return (
     <div className="modal-overlay" onClick={e => { if (e.target === e.currentTarget) onClose(); }} style={{ zIndex: 200 }}>

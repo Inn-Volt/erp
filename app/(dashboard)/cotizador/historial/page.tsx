@@ -4,12 +4,16 @@ import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import {
   History, Search, Trash2, Copy, Edit3, FileText, ChevronDown,
-  ChevronUp, Download, Loader2, X, Filter, ArrowUpDown,
+  ChevronUp, Download, Loader2, X, Filter, ArrowUpDown, Send, Eye, BellRing, CheckCircle2,
 } from 'lucide-react';
 import { pdf } from '@react-pdf/renderer';
 import { saveAs } from 'file-saver';
 
-import { cotizacionesService } from '@/services/cotizaciones';
+import { cotizacionesService, necesitaSeguimiento, diasSinMovimiento } from '@/services/cotizaciones';
+import EnviarCotizacionModal from '@/components/EnviarCotizacionModal';
+import { levantamientosService } from '@/services/levantamientos';
+import { fotosService } from '@/services/fotos';
+import MotivoPerdidaModal from '@/components/MotivoPerdidaModal';
 import { useToast } from '@/hooks/useToast';
 import { formatCLP, formatMoneda, formatFolio, formatDate, calcularTotals, normalizarItem, nombreArchivo } from '@/utils';
 import type { Cotizacion, EstadoCotizacion, Moneda } from '@/types';
@@ -36,6 +40,9 @@ export default function HistorialPage() {
   const [genPDF, setGenPDF] = useState<string | null>(null);
   const [showFilters, setShowFilters] = useState(false);
   const [loadingEmpresa, setLoadingEmpresa] = useState(true);
+  const [soloPorSeguir, setSoloPorSeguir] = useState(false);
+  const [enviar, setEnviar] = useState<Cotizacion | null>(null);
+  const [rechazo, setRechazo] = useState<Cotizacion | null>(null);
 
  const load = useCallback(async () => {
   setLoading(true);
@@ -91,15 +98,32 @@ useEffect(() => {
     }
   };
 
-  const handleEstado = async (id: string, estado: EstadoCotizacion) => {
+  const handleEstado = async (cot: Cotizacion, estado: EstadoCotizacion) => {
+    // Rechazar pide el motivo de pérdida (análisis en el dashboard).
+    if (estado === 'Rechazado') { setRechazo(cot); return; }
     try {
-      await cotizacionesService.updateEstado(id, estado);
+      await cotizacionesService.updateEstado(cot.id, estado, { motivo_perdida: null, motivo_perdida_nota: null });
       success(`Estado actualizado a ${estado}`);
       load();
     } catch {
       toastError('Error al actualizar estado');
     }
   };
+
+  const confirmarRechazo = async (motivo: string, nota: string) => {
+    if (!rechazo) return;
+    try {
+      await cotizacionesService.updateEstado(rechazo.id, 'Rechazado', { motivo_perdida: motivo, motivo_perdida_nota: nota || null });
+      success(`Marcada como rechazada · ${motivo}`);
+      setRechazo(null);
+      load();
+    } catch {
+      toastError('Error al actualizar estado');
+    }
+  };
+
+  const empresaNombreDe = (cot: Cotizacion) =>
+    (empresas.find(e => e.id === cot.empresa_id) || empresa)?.nombre || 'InnVolt';
 const [empresa, setEmpresa]   = useState<EmpresaInfo | null>(null);
 const [empresas, setEmpresas] = useState<EmpresaInfo[]>([]);
 
@@ -123,6 +147,11 @@ const [empresas, setEmpresas] = useState<EmpresaInfo[]>([]);
       const sup = { ...SUPUESTOS_DEFAULT, ...(cot.supuestos || {}) };
       const itemsNorm = (cot.items || []).map(i => normalizarItem(i, sup));
       const totals = calcularTotals(itemsNorm, cot.descuento_global || 0);
+      let fotos: { url: string; caption: string }[] = [];
+      if (cot.incluir_fotos && cot.levantamiento_id) {
+        const lev = await levantamientosService.getById(cot.levantamiento_id);
+        fotos = await fotosService.paraPDF(lev?.data.fotos);
+      }
       const blob = await pdf(
         <PresupuestoPDF
           cliente={cot.clientes}
@@ -140,6 +169,7 @@ const [empresas, setEmpresas] = useState<EmpresaInfo[]>([]);
           partidas={cot.partidas || []}
           mostrarDetalle={cot.mostrar_detalle || false}
           fechaEmision={cot.created_at}
+          fotos={fotos}
         />
       ).toBlob();
       saveAs(blob, `Cotizacion_${formatFolio(cot.folio)}_${nombreArchivo(cot.clientes.nombre_cliente)}.pdf`);
@@ -159,6 +189,7 @@ const [empresas, setEmpresas] = useState<EmpresaInfo[]>([]);
   const filtered = useMemo(() => {
     let list = [...cotizaciones];
     if (filterEstado !== 'Todos') list = list.filter(c => c.estado === filterEstado);
+    if (soloPorSeguir) list = list.filter(necesitaSeguimiento);
     if (search) {
       const q = search.toLowerCase();
       list = list.filter(c =>
@@ -181,7 +212,9 @@ const [empresas, setEmpresas] = useState<EmpresaInfo[]>([]);
       return 0;
     });
     return list;
-  }, [cotizaciones, filterEstado, search, sortKey, sortDir]);
+  }, [cotizaciones, filterEstado, search, sortKey, sortDir, soloPorSeguir]);
+
+  const porSeguir = useMemo(() => cotizaciones.filter(necesitaSeguimiento).length, [cotizaciones]);
 
   // Resumen rápido
   const resumen = useMemo(() => ({
@@ -204,6 +237,12 @@ const [empresas, setEmpresas] = useState<EmpresaInfo[]>([]);
 
   return (
     <div className="anim-in">
+      {enviar && (
+        <EnviarCotizacionModal cot={enviar} empresaNombre={empresaNombreDe(enviar)} onClose={() => setEnviar(null)} onCambio={load} />
+      )}
+      {rechazo && (
+        <MotivoPerdidaModal folio={formatFolio(rechazo.folio)} onConfirm={confirmarRechazo} onClose={() => setRechazo(null)} />
+      )}
       {/* Header */}
       <div className="iv-page-header">
         <div>
@@ -253,6 +292,11 @@ const [empresas, setEmpresas] = useState<EmpresaInfo[]>([]);
 
         <button onClick={() => setShowFilters(f => !f)} style={{ background: showFilters ? 'var(--y-soft)' : 'var(--bg3)', border: `1px solid ${showFilters ? 'var(--border)' : 'var(--border2)'}`, cursor: 'pointer', padding: '0 0.75rem', height: 32, display: 'inline-flex', alignItems: 'center', gap: '0.4rem', fontFamily: 'var(--font-display)', fontWeight: 700, fontSize: '0.62rem', letterSpacing: '0.15em', textTransform: 'uppercase', color: showFilters ? 'var(--y)' : 'var(--muted)' }}>
           <Filter size={12} /> Filtros
+        </button>
+
+        <button onClick={() => setSoloPorSeguir(v => !v)} title={`Pendientes sin movimiento hace 3 días o más`}
+          style={{ background: soloPorSeguir ? 'rgba(251,146,60,0.14)' : 'var(--bg3)', border: `1px solid ${soloPorSeguir ? 'var(--orange)' : 'var(--border2)'}`, cursor: 'pointer', padding: '0 0.75rem', height: 32, display: 'inline-flex', alignItems: 'center', gap: '0.4rem', fontFamily: 'var(--font-display)', fontWeight: 700, fontSize: '0.62rem', letterSpacing: '0.15em', textTransform: 'uppercase', color: porSeguir > 0 ? 'var(--orange)' : 'var(--muted)' }}>
+          <BellRing size={12} /> Por seguir ({porSeguir})
         </button>
 
         {filterEstado !== 'Todos' && (
@@ -315,13 +359,13 @@ const [empresas, setEmpresas] = useState<EmpresaInfo[]>([]);
                 <th style={{ ...thStyle, width: 100 }} onClick={() => toggleSort('fecha')}>
                   <span style={{ display: 'flex', alignItems: 'center', gap: '0.3rem' }}>Fecha <SortIcon k="fecha" /></span>
                 </th>
-                <th style={{ ...thStyle, width: 110 }} onClick={() => toggleSort('estado')}>
+                <th style={{ ...thStyle, width: 130 }} onClick={() => toggleSort('estado')}>
                   <span style={{ display: 'flex', alignItems: 'center', gap: '0.3rem' }}>Estado <SortIcon k="estado" /></span>
                 </th>
                 <th style={{ ...thStyle, width: 120, textAlign: 'right' }} onClick={() => toggleSort('total')}>
                   <span style={{ display: 'flex', alignItems: 'center', gap: '0.3rem', justifyContent: 'flex-end' }}>Total <SortIcon k="total" /></span>
                 </th>
-                <th style={{ ...thStyle, width: 130, textAlign: 'center' }}>Acciones</th>
+                <th style={{ ...thStyle, width: 160, textAlign: 'center' }}>Acciones</th>
               </tr>
             </thead>
             <tbody>
@@ -355,7 +399,7 @@ const [empresas, setEmpresas] = useState<EmpresaInfo[]>([]);
                         <span style={{ width: 7, height: 7, borderRadius: '50%', background: ec.color, flexShrink: 0 }} />
                         <select
                           value={cot.estado}
-                          onChange={e => handleEstado(cot.id, e.target.value as EstadoCotizacion)}
+                          onChange={e => handleEstado(cot, e.target.value as EstadoCotizacion)}
                           onClick={e => e.stopPropagation()}
                           style={{
                             background: 'transparent', border: 'none', color: ec.color, cursor: 'pointer',
@@ -368,6 +412,24 @@ const [empresas, setEmpresas] = useState<EmpresaInfo[]>([]);
                           ))}
                         </select>
                       </div>
+                      {necesitaSeguimiento(cot) && (
+                        <p style={{ fontSize: '0.64rem', color: 'var(--orange)', marginTop: 3, display: 'flex', alignItems: 'center', gap: 3 }} title="Sin respuesta: haz seguimiento">
+                          <BellRing size={10} /> Seguir · {diasSinMovimiento(cot)} días
+                        </p>
+                      )}
+                      {cot.estado === 'Pendiente' && cot.vista_at && (
+                        <p style={{ fontSize: '0.64rem', color: 'var(--info)', marginTop: 2, display: 'flex', alignItems: 'center', gap: 3 }} title={`Abierta por el cliente el ${formatDate(cot.vista_at)}`}>
+                          <Eye size={10} /> Vista {formatDate(cot.vista_at)}
+                        </p>
+                      )}
+                      {cot.respondida_at && cot.respondida_por && (
+                        <p style={{ fontSize: '0.64rem', color: cot.estado === 'Rechazado' ? 'var(--danger)' : 'var(--success)', marginTop: 2, display: 'flex', alignItems: 'center', gap: 3 }} title={cot.respuesta_comentario || ''}>
+                          <CheckCircle2 size={10} /> Online: {cot.respondida_por}
+                        </p>
+                      )}
+                      {cot.estado === 'Rechazado' && cot.motivo_perdida && (
+                        <p style={{ fontSize: '0.64rem', color: 'var(--muted)', marginTop: 2 }} title={cot.motivo_perdida_nota || ''}>{cot.motivo_perdida}</p>
+                      )}
                     </td>
                     <td style={{ textAlign: 'right', fontFamily: 'var(--font-display)', fontWeight: 700, fontSize: '0.9rem', whiteSpace: 'nowrap' }}>
                       {formatMoneda(cot.total, (cot.moneda as Moneda) || 'CLP')}
@@ -387,6 +449,13 @@ const [empresas, setEmpresas] = useState<EmpresaInfo[]>([]);
                           style={{ background: 'none', border: '1px solid var(--border2)', cursor: 'pointer', padding: '0.25rem 0.4rem', color: 'var(--muted)' }}
                         >
                           <Copy size={12} />
+                        </button>
+                        <button
+                          onClick={() => setEnviar(cot)}
+                          title={necesitaSeguimiento(cot) ? 'Hacer seguimiento' : 'Enviar al cliente'}
+                          style={{ background: 'none', border: `1px solid ${necesitaSeguimiento(cot) ? 'var(--orange)' : 'var(--border2)'}`, cursor: 'pointer', padding: '0.25rem 0.4rem', color: necesitaSeguimiento(cot) ? 'var(--orange)' : 'var(--y)' }}
+                        >
+                          <Send size={12} />
                         </button>
                         <button
                           onClick={() => handleDownloadPDF(cot)}

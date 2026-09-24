@@ -92,6 +92,8 @@ export interface LevantamientoData {
   alcance_mejoras: string;
   alcance_mantenciones: string;
   alcance_obs_comerciales: string;
+  // Fotos de la visita (Storage privado). Opcional: levantamientos antiguos no tienen.
+  fotos?: { path: string; caption: string }[];
 }
 
 export type EstadoLevantamiento = 'Borrador' | 'Completado' | 'Enviado' | 'Archivado';
