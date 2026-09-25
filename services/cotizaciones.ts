@@ -20,9 +20,9 @@ export function necesitaSeguimiento(c: Pick<Cotizacion, 'estado' | 'seguimiento_
   return c.estado === 'Pendiente' && diasSinMovimiento(c) >= DIAS_SEGUIMIENTO;
 }
 
-/** Link público de la cotización para el cliente (/c/<token>). */
+/** Link público de la cotización para el cliente (/c/<token>). Se arma en el navegador. */
 export function linkPublico(token: string): string {
-  const origin = typeof window !== 'undefined' ? window.location.origin : (process.env.NEXT_PUBLIC_SITE_URL || '');
+  const origin = typeof window !== 'undefined' ? window.location.origin : '';
   return `${origin}/c/${token}`;
 }
 
