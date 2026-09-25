@@ -431,11 +431,18 @@ aside.sidebar-desktop { border-right-color: rgb(var(--line)) !important; }
 }
 
 /* ── Animations ─────────────────────────────────────────── */
+/* Las animaciones de entrada terminan en `transform: none` y usan fill-mode
+   `backwards` (no `both`): un transform que QUEDA aplicado convierte al elemento
+   en el marco de `position: fixed` y los modales de adentro se recortan al alto
+   del contenido en vez de cubrir la pantalla. */
 @keyframes fadeIn {
   from { opacity: 0; transform: translateY(8px); }
-  to   { opacity: 1; transform: translateY(0); }
+  to   { opacity: 1; transform: none; }
 }
-.anim-in { animation: fadeIn 0.25s ease both; }
+/* La raíz de cada página contiene sus modales: solo se desvanece, SIN
+   transform, para no recortarlos ni siquiera durante la animación. */
+@keyframes aparecer { from { opacity: 0; } }
+.anim-in { animation: aparecer 0.25s ease backwards; }
 
 @keyframes spin { to { transform: rotate(360deg); } }
 .iv-spin { animation: spin 0.8s linear infinite; }
@@ -543,7 +550,7 @@ aside.sidebar-desktop { border-right-color: rgb(var(--line)) !important; }
   align-items: flex-start;
   gap: 0.6rem;
   font-size: 0.85rem;
-  animation: fadeIn 0.2s ease both;
+  animation: fadeIn 0.2s ease backwards;
   border-radius: 12px;
   box-shadow: var(--shadow-pop);
 }
@@ -569,7 +576,7 @@ aside.sidebar-desktop { border-right-color: rgb(var(--line)) !important; }
   max-width: 560px;
   max-height: calc(100dvh - 4rem);
   overflow-y: auto;
-  animation: fadeIn 0.2s ease both;
+  animation: fadeIn 0.2s ease backwards;
   margin: 0 auto;
   border-radius: 16px;
   box-shadow: var(--shadow-pop);
@@ -577,7 +584,7 @@ aside.sidebar-desktop { border-right-color: rgb(var(--line)) !important; }
 
 /* En el celular la ventana sube desde abajo, a todo el ancho y con el
    pulgar cerca de los botones (patrón "bottom sheet" de TecApp). */
-@keyframes subirHoja { from { transform: translateY(100%); } to { transform: translateY(0); } }
+@keyframes subirHoja { from { transform: translateY(100%); } to { transform: none; } }
 @media (max-width: 640px) {
   .modal-overlay { align-items: flex-end; padding: 0; }
   .modal-box {
@@ -587,7 +594,7 @@ aside.sidebar-desktop { border-right-color: rgb(var(--line)) !important; }
     border-radius: 18px 18px 0 0;
     border-bottom: none;
     padding-bottom: env(safe-area-inset-bottom, 0px);
-    animation: subirHoja 0.22s ease-out both;
+    animation: subirHoja 0.22s ease-out backwards;
   }
 }
 
@@ -666,11 +673,11 @@ aside.sidebar-desktop { border-right-color: rgb(var(--line)) !important; }
   background: rgb(var(--surface));
   border-left: 1px solid rgb(var(--line));
   overflow-y: auto;
-  animation: slideInRight 0.2s ease both;
+  animation: slideInRight 0.2s ease backwards;
 }
 @keyframes slideInRight {
   from { transform: translateX(100%); }
-  to   { transform: translateX(0); }
+  to   { transform: none; }
 }
 @media (max-width: 768px) {
   .cliente-detail-overlay.open { display: block; }
