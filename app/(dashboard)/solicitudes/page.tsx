@@ -125,7 +125,7 @@ function SolicitudModal({ solicitud, clientes, createdBy, onClose, onSaved }: {
                   onChange={e => { setClienteSearch(e.target.value); setShowClienteDrop(true); if (!e.target.value) setClienteId(''); }}
                   onFocus={() => setShowClienteDrop(true)}
                   onBlur={() => setTimeout(() => setShowClienteDrop(false), 150)}
-                  placeholder="Buscar por nombre, empresa o RUT…"
+                  placeholder="Nombre, empresa o RUT…"
                   style={{ paddingLeft: '1.9rem', paddingRight: clienteId ? '1.9rem' : undefined }}
                   autoComplete="off"
                 />
