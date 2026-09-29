@@ -57,9 +57,10 @@ export default function LoginPage() {
       background: 'var(--bg)', position: 'relative', overflow: 'hidden',
     }}>
       {/* Background grid */}
-      <div className="iv-grid-bg" style={{ position: 'absolute', inset: 0, opacity: 0.5 }} />
-      <div className="iv-stripe" style={{ left: '30%', opacity: 0.08 }} />
-      <div className="iv-stripe" style={{ right: '30%', opacity: 0.08 }} />
+      {/* Capas decorativas: nunca deben capturar clics ni tapar el formulario. */}
+      <div className="iv-grid-bg" style={{ position: 'absolute', inset: 0, opacity: 0.5, pointerEvents: 'none' }} />
+      <div className="iv-stripe" style={{ left: '30%', opacity: 0.08, pointerEvents: 'none' }} />
+      <div className="iv-stripe" style={{ right: '30%', opacity: 0.08, pointerEvents: 'none' }} />
 
       {/* Glow */}
       <div style={{

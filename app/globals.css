@@ -442,7 +442,11 @@ aside.sidebar-desktop { border-right-color: rgb(var(--line)) !important; }
 /* La raíz de cada página contiene sus modales: solo se desvanece, SIN
    transform, para no recortarlos ni siquiera durante la animación. */
 @keyframes aparecer { from { opacity: 0; } }
-.anim-in { animation: aparecer 0.25s ease backwards; }
+/* position: relative (sin z-index) hace lo que antes hacía de rebote el transform:
+   el contenido se pinta SOBRE las capas decorativas absolutas que van antes (brillo
+   y grilla del login) y es el marco de sus hijos absolutos. A diferencia del
+   transform, NO atrapa a los modales position: fixed. */
+.anim-in { position: relative; animation: aparecer 0.25s ease backwards; }
 
 @keyframes spin { to { transform: rotate(360deg); } }
 .iv-spin { animation: spin 0.8s linear infinite; }
