@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { usuarioAutenticado, noAutorizado } from '@/lib/authServidor';
 import { generarJSON, type GeminiSchema } from '@/lib/ia';
-import type { BorradorIA } from '@/types';
+import { normalizarBorradorIA } from '@/utils';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -23,6 +23,8 @@ Reglas:
 - Incluye mano de obra en casi toda partida de instalación; no entregues solo materiales.
 - Sé específico en las descripciones de los componentes (ej. "Cable EVA 2,5 mm² 100 m", no "cable").
 - Si la descripción es ambigua, asume un alcance profesional razonable y refléjalo en la descripción comercial de la partida.
+- Si el texto dice "GENERA SOLO ESTAS PARTIDAS", genera exactamente esas partidas (con esos nombres) y ninguna otra.
+- Sé conciso para responder rápido: máximo 10 componentes por partida, descripción de cada componente de máximo 15 palabras y descripción comercial de la partida de máximo 50 palabras.
 - Responde SIEMPRE en español.`;
 
 const SCHEMA: GeminiSchema = {
@@ -74,12 +76,15 @@ export async function POST(req: Request) {
   }
 
   try {
-    const borrador = await generarJSON<BorradorIA>({
+    // Se normaliza: una respuesta con detalles menores (número como texto, categoría
+    // desconocida) se usa en vez de perderse entera.
+    const borrador = normalizarBorradorIA(await generarJSON<unknown>({
       system: SYSTEM,
       user: `Proyecto a cotizar (interpreta y estructura en partidas):\n\n${descripcion}`,
       schema: SCHEMA,
-    });
-    if (!borrador?.partidas?.length) {
+      rescatar: true,
+    }));
+    if (!borrador.partidas.length) {
       return NextResponse.json({ error: 'La IA no generó partidas. Agrega más detalle al proyecto.' }, { status: 502 });
     }
     return NextResponse.json({ ok: true, borrador });
