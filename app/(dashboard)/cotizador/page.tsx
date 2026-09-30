@@ -1,7 +1,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 'use client';
 
-import { useState, useEffect, useMemo, useRef, Suspense, useCallback } from 'react';
+import { useState, useEffect, useLayoutEffect, useMemo, useRef, Suspense, useCallback, Fragment } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import {
@@ -423,106 +423,134 @@ function ItemRow({ item, index, onUpdate, onDelete, onDuplicate, onMoveUp, onMov
   const inputStyle: React.CSSProperties = {
     background: 'var(--input-bg)', border: '1px solid var(--input-border)', color: 'var(--text)',
     fontFamily: 'var(--font-body)', fontSize: '0.85rem',
-    padding: '0.45rem 0.5rem', outline: 'none', width: '100%',
+    padding: '0.45rem 0.5rem', outline: 'none', width: '100%', minWidth: 0, height: 34, boxSizing: 'border-box',
     textAlign: 'right', transition: 'all 0.15s ease', borderRadius: 'var(--r)',
   };
+
+  // Descripción completa: el campo crece en alto según el texto (y al cambiar el ancho).
+  const descRef = useRef<HTMLTextAreaElement>(null);
+  const ajustarAlto = useCallback(() => {
+    const el = descRef.current;
+    if (!el) return;
+    el.style.height = 'auto';
+    el.style.height = `${el.scrollHeight}px`;
+  }, []);
+  useLayoutEffect(ajustarAlto, [item.descripcion, ajustarAlto]);
+  useEffect(() => {
+    const el = descRef.current;
+    if (!el || typeof ResizeObserver === 'undefined') return;
+    let ancho = el.clientWidth;
+    const ro = new ResizeObserver(() => {
+      if (el.clientWidth !== ancho) { ancho = el.clientWidth; ajustarAlto(); }
+    });
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [ajustarAlto]);
+
+  // Desglose que suma exacto: cada parte sale de restar montos YA redondeados.
+  const r = (v: number) => redondearMoneda(v, moneda);
+  const dCosto = r(calc.costoTotal);
+  const dConImprev = r(calc.costoConImprev);
+  const dVenta = r(calc.precioVenta);
+  const dTotal = r(calc.precioConIva);
+  const desglose = [
+    { label: 'Costo', valor: dCosto, color: 'var(--text)', title: 'Costo total del ítem (costo unitario × cantidad)' },
+    { label: 'Imprevistos', valor: dConImprev - dCosto, color: 'var(--orange)', title: `Imprevistos ${item.imprevistos || 0}%` },
+    { label: 'Utilidad', valor: dVenta - dConImprev, color: dVenta - dConImprev < 0 ? 'var(--danger)' : 'var(--purple)', title: 'Precio de venta neto − costo con imprevistos' },
+    { label: 'IVA', valor: dTotal - dVenta, color: 'var(--info)', title: `IVA ${item.iva || 0}%` },
+  ];
+
+  const pct = (valor: number | undefined, onChange: (v: string) => void, color: string, title: string, placeholder = '0', max = 100) => (
+    <div style={{ display: 'flex', alignItems: 'center', position: 'relative', width: '100%' }}>
+      <input type="number" min="0" max={max} step="1" value={valor ?? ''} onChange={e => onChange(e.target.value)} className="no-spin-arrows input-row-focus" placeholder={placeholder} title={title}
+        style={{ ...inputStyle, paddingRight: '1.2rem', color, fontWeight: 500 }} />
+      <span style={{ fontSize: '0.72rem', color, position: 'absolute', right: '0.45rem', pointerEvents: 'none' }}>%</span>
+    </div>
+  );
 
   return (
     <div className="iv-item-row" style={{
       background: 'var(--bg3)', borderLeft: `4px solid ${CAT_COLORS[item.categoria]}`,
       marginBottom: '6px', display: 'flex', flexDirection: 'column', gap: 0,
-      boxShadow: '0 2px 4px rgba(0,0,0,0.1)', borderRadius: 'var(--r)',
+      boxShadow: '0 1px 2px rgba(0,0,0,0.06)', borderRadius: 'var(--r)',
     }}>
-      <div className="iv-item-grid-container">
-        <div className="cell-desc" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-          <CatIcon size={14} color={CAT_COLORS[item.categoria]} style={{ flexShrink: 0, opacity: 0.8 }} />
-          <input
-            value={item.descripcion}
-            onChange={e => onUpdate(index, { descripcion: e.target.value })}
-            placeholder="Descripción del ítem o servicio..."
-            className="input-row-focus"
-            style={{ ...inputStyle, textAlign: 'left', fontSize: '0.88rem', background: 'transparent', border: 'none', paddingLeft: 0 }}
-          />
-        </div>
-
-        <div className="iv-item-inputs-group">
-          <div className="input-field-wrapper min-w-50">
-            <span className="mobile-label">Cant.</span>
-            <NumeroInput value={item.cantidad || 0} onChange={v => onUpdate(index, { cantidad: v })} min={0} className="input-row-focus" style={{ ...inputStyle, textAlign: 'center', fontWeight: 'bold' }} placeholder="0" ariaLabel="Cantidad" />
-          </div>
-          <div className="input-field-wrapper min-w-60">
-            <span className="mobile-label">Unid.</span>
-            <select value={item.unidad} onChange={e => onUpdate(index, { unidad: e.target.value })} className="input-row-focus" style={{ ...inputStyle, cursor: 'pointer', textAlign: 'center', padding: '0.45rem 0.2rem' }}>
-              {UNIDADES.map(u => <option key={u} value={u}>{u}</option>)}
-            </select>
-          </div>
-          {!ocultarCostos && (
-            <div className="input-field-wrapper">
-              <span className="mobile-label">Costo Unit.</span>
-              <NumeroInput value={item.costo || 0} onChange={handleCostoChange} min={0} formatear={fmt} className="input-row-focus" placeholder="$ 0" ariaLabel="Costo unitario" style={{ ...inputStyle, color: 'var(--muted)', fontSize: '0.8rem' }} />
-            </div>
-          )}
-          {!ocultarCostos && (
-            <div className="input-field-wrapper min-w-55">
-              <span className="mobile-label">Imprev.</span>
-              <div style={{ display: 'flex', alignItems: 'center', position: 'relative', width: '100%' }}>
-                <input type="number" min="0" max="100" step="1" value={item.imprevistos ?? ''} onChange={e => handleImprevistosChange(e.target.value)} className="no-spin-arrows input-row-focus" placeholder="0" style={{ ...inputStyle, paddingRight: '1.1rem', color: 'var(--orange)', fontWeight: '500' }} title="% de imprevistos / contingencia" />
-                <span style={{ fontSize: '0.7rem', color: 'var(--orange)', position: 'absolute', right: '0.4rem', pointerEvents: 'none' }}>%</span>
-              </div>
-            </div>
-          )}
-          {!ocultarCostos && (
-            <div className="input-field-wrapper min-w-55">
-              <span className="mobile-label">Margen</span>
-              <div style={{ display: 'flex', alignItems: 'center', position: 'relative', width: '100%' }}>
-                <input type="number" min="0" max="99" step="1" value={item.margen || ''} onChange={e => handleMargenChange(e.target.value)} className="no-spin-arrows input-row-focus" placeholder="30" style={{ ...inputStyle, paddingRight: '1.1rem', color: 'var(--purple)', fontWeight: '500' }} />
-                <span style={{ fontSize: '0.7rem', color: 'var(--purple)', position: 'absolute', right: '0.4rem', pointerEvents: 'none' }}>%</span>
-              </div>
-            </div>
-          )}
-          <div className="input-field-wrapper">
-            <span className="mobile-label">Precio Venta</span>
-            <NumeroInput value={item.precio || 0} onChange={handlePrecioChange} min={0} formatear={fmt} className="input-row-focus" placeholder="$ 0" ariaLabel="Precio de venta" style={{ ...inputStyle, color: 'var(--y)', fontWeight: '700' }} />
-          </div>
-          <div className="input-field-wrapper min-w-55">
-            <span className="mobile-label">Desc.</span>
-            <div style={{ display: 'flex', alignItems: 'center', position: 'relative', width: '100%' }}>
-              <input type="number" min="0" max="100" step="1" value={item.descuento || ''} onChange={e => onUpdate(index, { descuento: parseFloat(e.target.value) || 0 })} className="no-spin-arrows input-row-focus" placeholder="0" style={{ ...inputStyle, paddingRight: '1.1rem', color: 'var(--danger)', fontWeight: '500' }} title="% de descuento de esta línea" />
-              <span style={{ fontSize: '0.7rem', color: 'var(--danger)', position: 'absolute', right: '0.4rem', pointerEvents: 'none' }}>%</span>
-            </div>
-          </div>
-          <div className="input-field-wrapper min-w-65">
-            <span className="mobile-label">IVA</span>
-            <div style={{ display: 'flex', alignItems: 'center', position: 'relative', width: '100%' }}>
-              <input type="number" min="0" max="100" step="1" value={item.iva ?? ''} onChange={e => onUpdate(index, { iva: parseFloat(e.target.value) || 0 })} className="no-spin-arrows input-row-focus" placeholder="0" style={{ ...inputStyle, paddingRight: '1.1rem', color: 'var(--info)', fontWeight: '500' }} title="% de IVA aplicado a este ítem" />
-              <span style={{ fontSize: '0.7rem', color: 'var(--info)', position: 'absolute', right: '0.4rem', pointerEvents: 'none' }}>%</span>
-            </div>
-          </div>
-          <div className="input-field-wrapper cell-subtotal">
-            <span className="mobile-label">Subtotal</span>
-            <span style={{ fontFamily: 'var(--font-display)', fontWeight: 700, fontSize: '0.9rem', color: 'var(--text)', textAlign: 'right', display: 'block', padding: '0.45rem 0' }}>
-              {fmt(calc.precioVenta)}
-            </span>
-            {(item.descuento || 0) > 0 && (
-              <span style={{ fontSize: '0.6rem', color: 'var(--danger)', textAlign: 'right', display: 'block' }}>−{fmt(calc.montoDescuento)}</span>
-            )}
-          </div>
-        </div>
-
+      {/* Línea 1: descripción completa + acciones */}
+      <div className="iv-item-top">
+        <CatIcon size={15} color={CAT_COLORS[item.categoria]} style={{ flexShrink: 0, opacity: 0.85, marginTop: 9 }} />
+        <textarea
+          ref={descRef}
+          rows={1}
+          value={item.descripcion}
+          onChange={e => onUpdate(index, { descripcion: e.target.value.replace(/\s*\n+\s*/g, ' ') })}
+          onKeyDown={e => { if (e.key === 'Enter') e.preventDefault(); }}
+          placeholder="Descripción del ítem o servicio…"
+          aria-label="Descripción del ítem"
+          className="iv-item-desc input-row-focus"
+        />
         <div className="cell-actions">
-          <button onClick={() => onMoveUp(index)}   disabled={isFirst} title="Subir" style={{ background: 'none', border: 'none', cursor: isFirst ? 'default' : 'pointer', color: isFirst ? 'var(--faint)' : 'var(--faint)', padding: '4px' }}><ArrowUp size={12} /></button>
-          <button onClick={() => onMoveDown(index)} disabled={isLast}  title="Bajar" style={{ background: 'none', border: 'none', cursor: isLast ? 'default' : 'pointer', color: isLast ? 'var(--faint)' : 'var(--faint)', padding: '4px' }}><ArrowDown size={12} /></button>
+          <button onClick={() => onMoveUp(index)}   disabled={isFirst} title="Subir" style={{ background: 'none', border: 'none', cursor: isFirst ? 'default' : 'pointer', color: 'var(--faint)', padding: '4px' }}><ArrowUp size={12} /></button>
+          <button onClick={() => onMoveDown(index)} disabled={isLast}  title="Bajar" style={{ background: 'none', border: 'none', cursor: isLast ? 'default' : 'pointer', color: 'var(--faint)', padding: '4px' }}><ArrowDown size={12} /></button>
           <button onClick={() => onDuplicate(index)} title="Duplicar"  style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--faint)', padding: '4px' }}><Copy size={12} /></button>
-          <button onClick={() => onDelete(index)}    title="Eliminar"  style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'rgba(248,113,113,0.5)', padding: '4px' }}><Trash2 size={12} /></button>
+          <button onClick={() => onDelete(index)}    title="Eliminar"  style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'rgba(248,113,113,0.6)', padding: '4px' }}><Trash2 size={12} /></button>
         </div>
       </div>
 
-      {/* Selector categoría + desglose de costeo */}
-      <div style={{
-        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-        gap: '0.5rem', padding: '0 0.75rem 0.5rem', flexWrap: 'wrap',
-      }}>
-        <div style={{ display: 'flex', gap: '1px' }}>
+      {/* Línea 2: valores, cada uno con su nombre */}
+      <div className={`iv-item-inputs-group${ocultarCostos ? ' sin-costos' : ''}`}>
+        <label className="input-field-wrapper">
+          <span className="mobile-label">Cant.</span>
+          <NumeroInput value={item.cantidad || 0} onChange={v => onUpdate(index, { cantidad: v })} min={0} className="input-row-focus" style={{ ...inputStyle, textAlign: 'center', fontWeight: 'bold' }} placeholder="0" ariaLabel="Cantidad" />
+        </label>
+        <label className="input-field-wrapper">
+          <span className="mobile-label">Unidad</span>
+          <select value={item.unidad} onChange={e => onUpdate(index, { unidad: e.target.value })} className="input-row-focus" style={{ ...inputStyle, cursor: 'pointer', textAlign: 'center', padding: '0.45rem 0.2rem' }}>
+            {UNIDADES.map(u => <option key={u} value={u}>{u}</option>)}
+          </select>
+        </label>
+        {!ocultarCostos && (
+          <label className="input-field-wrapper">
+            <span className="mobile-label">Costo unit.</span>
+            <NumeroInput value={item.costo || 0} onChange={handleCostoChange} min={0} formatear={fmt} className="input-row-focus" placeholder="$ 0" ariaLabel="Costo unitario" style={{ ...inputStyle, color: 'var(--muted)' }} />
+          </label>
+        )}
+        {!ocultarCostos && (
+          <label className="input-field-wrapper">
+            <span className="mobile-label">Imprev.</span>
+            {pct(item.imprevistos, handleImprevistosChange, 'var(--orange)', '% de imprevistos / contingencia')}
+          </label>
+        )}
+        {!ocultarCostos && (
+          <label className="input-field-wrapper">
+            <span className="mobile-label">Margen</span>
+            {pct(item.margen || undefined, handleMargenChange, 'var(--purple)', '% de margen sobre el precio de venta', '30', 99)}
+          </label>
+        )}
+        <label className="input-field-wrapper">
+          <span className="mobile-label">P. venta unit.</span>
+          <NumeroInput value={item.precio || 0} onChange={handlePrecioChange} min={0} formatear={fmt} className="input-row-focus" placeholder="$ 0" ariaLabel="Precio de venta" style={{ ...inputStyle, color: 'var(--y)', fontWeight: 700 }} />
+        </label>
+        <label className="input-field-wrapper">
+          <span className="mobile-label">Desc.</span>
+          {pct(item.descuento || undefined, v => onUpdate(index, { descuento: parseFloat(v) || 0 }), 'var(--danger)', '% de descuento de esta línea')}
+        </label>
+        <label className="input-field-wrapper">
+          <span className="mobile-label">IVA</span>
+          {pct(item.iva, v => onUpdate(index, { iva: parseFloat(v) || 0 }), 'var(--info)', '% de IVA aplicado a este ítem')}
+        </label>
+        <div className="input-field-wrapper cell-subtotal">
+          <span className="mobile-label">Subtotal neto</span>
+          <span style={{ fontFamily: 'var(--font-display)', fontWeight: 700, fontSize: '0.92rem', color: 'var(--text)', display: 'flex', alignItems: 'center', justifyContent: 'flex-end', height: 34, whiteSpace: 'nowrap' }}>
+            {fmt(calc.precioVenta)}
+          </span>
+          {(item.descuento || 0) > 0 && (
+            <span style={{ fontSize: '0.7rem', color: 'var(--danger)', textAlign: 'right', display: 'block' }}>−{fmt(calc.montoDescuento)}</span>
+          )}
+        </div>
+      </div>
+
+      {/* Línea 3: categoría + desglose (costo + imprevistos + utilidad + IVA = total) */}
+      <div className="iv-item-foot">
+        <div style={{ display: 'flex', gap: '1px', flexWrap: 'wrap' }}>
           {CATEGORIAS_ORDEN.map(cat => (
             <button key={cat} onClick={() => onUpdate(index, { categoria: cat })}
               style={{
@@ -537,24 +565,17 @@ function ItemRow({ item, index, onUpdate, onDelete, onDuplicate, onMoveUp, onMov
           ))}
         </div>
 
-        {/* Trazabilidad del cálculo (igual al Excel) */}
         {!ocultarCostos && item.costo > 0 && (
-          <span style={{
-            fontSize: '0.6rem', color: 'var(--muted)', fontFamily: 'monospace',
-            display: 'flex', gap: '0.35rem', alignItems: 'center', flexWrap: 'wrap',
-          }}>
-            <span title="Costo total">{fmt(calc.costoTotal)}</span>
-            <span style={{ opacity: 0.4 }}>→</span>
-            <span title="Costo con imprevistos" style={{ color: 'var(--orange)' }}>{fmt(calc.costoConImprev)}</span>
-            <span style={{ opacity: 0.4 }}>→</span>
-            <span title="Precio de venta neto" style={{ color: 'var(--y)' }}>{fmt(calc.precioVenta)}</span>
-            {item.iva > 0 && (
-              <>
-                <span style={{ opacity: 0.4 }}>→</span>
-                <span title={`Con IVA ${item.iva}%`} style={{ color: 'var(--info)' }}>{fmt(calc.precioConIva)}</span>
-              </>
-            )}
-          </span>
+          <div className="iv-item-desglose">
+            {desglose.map((d, i) => (
+              <Fragment key={d.label}>
+                {i > 0 && <span className="op">+</span>}
+                <span title={d.title}><span className="lbl">{d.label}</span> <b style={{ color: d.color }}>{fmt(d.valor)}</b></span>
+              </Fragment>
+            ))}
+            <span className="op">=</span>
+            <span title="Total del ítem con IVA"><span className="lbl">Total</span> <b style={{ color: 'var(--text)' }}>{fmt(dTotal)}</b></span>
+          </div>
         )}
       </div>
     </div>
@@ -566,7 +587,7 @@ function PartidaCard({
   partida, itemsPartida, indexOf,
   onUpdatePartida, onDeletePartida, onSetMargen, onAddItem, onBuscar, onCalcHH,
   updateItem, deleteItem, duplicateItem, moveItem,
-  moneda, ocultarCostos, fmt,
+  moneda, ocultarCostos, fmt, destacada = false,
 }: {
   partida: Partida;
   itemsPartida: CotizacionItem[];
@@ -584,18 +605,20 @@ function PartidaCard({
   moneda: Moneda;
   ocultarCostos: boolean;
   fmt: (v: number) => string;
+  /** Recién creada: se resalta un momento para que se vea dónde quedó. */
+  destacada?: boolean;
 }) {
   const calc = useMemo(() => calcularPartida(itemsPartida), [itemsPartida]);
   const modo = partida.modoPrecio || 'items';
   const inp: React.CSSProperties = { background: 'var(--input-bg)', border: '1px solid var(--input-border)', color: 'var(--text)', borderRadius: 'var(--r-sm)', padding: '0.4rem 0.5rem', outline: 'none', fontSize: '0.85rem' };
 
   return (
-    <div style={{ background: 'var(--bg2)', border: '1px solid var(--border2)', borderLeft: '3px solid var(--y-brand)', borderRadius: 'var(--r)', padding: '0.85rem', marginBottom: '8px' }}>
+    <div id={`partida-${partida.id}`} className={destacada ? 'partida-nueva' : undefined} style={{ background: 'var(--bg2)', border: '1px solid var(--border2)', borderLeft: '3px solid var(--y-brand)', borderRadius: 'var(--r)', padding: '0.85rem', marginBottom: '8px', scrollMarginTop: 16 }}>
       {/* Encabezado */}
       <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'flex-start', marginBottom: '0.6rem', flexWrap: 'wrap' }}>
         <div style={{ flex: 1, minWidth: 180 }}>
           <span style={{ fontFamily: 'var(--font-display)', fontWeight: 700, fontSize: '0.74rem', color: 'var(--y)' }}>Partida de proyecto</span>
-          <input value={partida.nombre} onChange={e => onUpdatePartida(partida.id, { nombre: e.target.value })} placeholder="Nombre comercial (ej. Habilitación de tableros)"
+          <input data-nombre-partida value={partida.nombre} onChange={e => onUpdatePartida(partida.id, { nombre: e.target.value })} placeholder="Nombre comercial (ej. Habilitación de tableros)"
             style={{ ...inp, width: '100%', fontWeight: 700, fontSize: '0.95rem', marginTop: '0.2rem' }} />
         </div>
         <div style={{ display: 'flex', alignItems: 'flex-end', gap: '0.4rem' }}>
@@ -1122,9 +1145,23 @@ const [empresaEditing, setEmpresaEditing] = useState<EmpresaInfo | null>(null);
   }
 
   // ── Handlers de PARTIDAS ──
+  const [partidaNueva, setPartidaNueva] = useState<string | null>(null);
   const addPartida = useCallback(() => {
-    setPartidas(prev => [...prev, { id: newId(), nombre: '', descripcion: '', cantidad: 1, unidad: 'un', modoPrecio: 'items' }]);
+    const id = newId();
+    setPartidas(prev => [...prev, { id, nombre: '', descripcion: '', cantidad: 1, unidad: 'un', modoPrecio: 'items' }]);
+    setPartidaNueva(id);
   }, []);
+
+  // Guía a la partida recién creada: la pantalla baja hasta ella, se resalta y el
+  // cursor queda en su nombre para escribir de inmediato.
+  useEffect(() => {
+    if (!partidaNueva) return;
+    const el = document.getElementById(`partida-${partidaNueva}`);
+    el?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    const tFoco = setTimeout(() => el?.querySelector<HTMLInputElement>('[data-nombre-partida]')?.focus({ preventScroll: true }), 450);
+    const tFin = setTimeout(() => setPartidaNueva(null), 2600);
+    return () => { clearTimeout(tFoco); clearTimeout(tFin); };
+  }, [partidaNueva]);
 
   /** Actualiza campos de la partida; si cambia la cantidad, recalcula sus ítems. */
   const updatePartida = useCallback((id: string, patch: Partial<Partida>) => {
@@ -1546,24 +1583,29 @@ const [empresaEditing, setEmpresaEditing] = useState<EmpresaInfo | null>(null);
         .cotizador-grid-responsive { display: grid; grid-template-columns: 1fr; gap: 12px; align-items: start; }
         .cotizador-context { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; align-items: start; }
         @media (max-width: 760px) { .cotizador-context { grid-template-columns: 1fr; } }
-        .input-field-wrapper { display: flex; flex-direction: column; gap: 2px; flex: 1; min-width: 75px; }
-        .min-w-50 { min-width: 50px !important; }
-        .min-w-55 { min-width: 55px !important; }
-        .min-w-60 { min-width: 60px !important; }
-        .min-w-65 { min-width: 65px !important; }
-        .mobile-label { display: none; font-family: var(--font-display); font-size: 0.55rem; text-transform: uppercase; color: var(--muted); letter-spacing: 0.05em; }
-        .iv-item-grid-container { display: grid; grid-template-columns: 1.5fr 4fr auto; align-items: center; gap: 10px; padding: 0.6rem 0.75rem; }
-        .iv-item-inputs-group { display: flex; align-items: center; gap: 6px; width: 100%; }
-        .cell-actions { display: flex; gap: 1px; align-items: center; background: var(--hover-bg); padding: 0.25rem; border-radius: var(--r-sm); justify-content: center; }
-        .desktop-header-columns { display: grid; grid-template-columns: 1.5fr 4fr auto; gap: 10px; padding: 0.4rem 0.75rem; background: var(--bg3); }
+        /* Fila de ítem: 1) descripción completa  2) valores con su nombre  3) categoría + desglose.
+           Cada fila es un "container": el reparto de columnas depende del ancho de la fila, no de la pantalla. */
+        .iv-item-row { container-type: inline-size; }
+        .iv-item-top { display: flex; align-items: flex-start; gap: 0.5rem; padding: 0.55rem 0.75rem 0.3rem; }
+        .iv-item-desc { flex: 1; min-width: 0; resize: none; overflow: hidden; display: block; background: transparent; border: 1px solid transparent; border-radius: var(--r); color: var(--text); font-family: var(--font-body); font-size: 0.92rem; font-weight: 500; line-height: 1.4; padding: 0.3rem 0.45rem; outline: none; }
+        .iv-item-desc:hover { border-color: var(--border2); }
+        .iv-item-inputs-group { display: grid; grid-template-columns: repeat(auto-fit, minmax(92px, 1fr)); gap: 8px; align-items: start; padding: 0 0.75rem 0.4rem; }
+        @container (min-width: 860px) {
+          .iv-item-inputs-group { grid-template-columns: 0.8fr 0.9fr 1.3fr 0.75fr 0.75fr 1.3fr 0.75fr 0.75fr 1.4fr; }
+          .iv-item-inputs-group.sin-costos { grid-template-columns: 0.8fr 0.9fr 1.3fr 0.75fr 0.75fr 1.4fr; }
+        }
+        .input-field-wrapper { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+        .mobile-label { display: block; font-family: var(--font-body); font-size: 0.7rem; font-weight: 500; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .cell-actions { display: flex; gap: 1px; align-items: center; background: var(--hover-bg); padding: 0.25rem; border-radius: var(--r-sm); justify-content: center; flex-shrink: 0; }
+        .iv-item-foot { display: flex; align-items: center; justify-content: space-between; gap: 0.5rem; padding: 0 0.75rem 0.55rem; flex-wrap: wrap; }
+        .iv-item-desglose { display: flex; align-items: baseline; gap: 0.3rem 0.45rem; flex-wrap: wrap; justify-content: flex-end; font-size: 0.78rem; font-variant-numeric: tabular-nums; }
+        .iv-item-desglose .lbl { color: var(--muted); }
+        .iv-item-desglose b { font-weight: 600; white-space: nowrap; }
+        .iv-item-desglose .op { color: var(--faint); }
+        @keyframes resaltarPartida { 0%, 60% { box-shadow: 0 0 0 3px var(--focus-ring); background: var(--y-soft); } 100% { box-shadow: 0 0 0 0 transparent; } }
+        .partida-nueva { animation: resaltarPartida 2.4s ease-out; }
         @media (min-width: 1025px) { .cotizador-grid-responsive { grid-template-columns: 300px 1fr; } }
         @media (max-width: 1024px) {
-          .desktop-header-columns { display: none !important; }
-          .iv-item-grid-container { grid-template-columns: 1fr !important; gap: 12px !important; padding: 1rem !important; }
-          .iv-item-inputs-group { display: grid !important; grid-template-columns: repeat(auto-fit, minmax(95px, 1fr)) !important; gap: 10px !important; }
-          .cell-subtotal span { text-align: right !important; font-size: 1.05rem !important; }
-          .cell-actions { width: 100%; justify-content: space-around; padding: 0.5rem; }
-          .mobile-label { display: block !important; }
           .iv-header-actions { width: 100%; grid-template-columns: repeat(auto-fit, minmax(110px, 1fr)) !important; }
         }
         @media (min-width: 1025px) { .iv-financial-layout { flex-direction: row !important; } .iv-financial-layout > * { flex: 1; } }
@@ -1894,27 +1936,9 @@ const [empresaEditing, setEmpresaEditing] = useState<EmpresaInfo | null>(null);
               onAddItem={addItemAPartida} onBuscar={buscarParaPartida} onCalcHH={calcHHParaPartida}
               updateItem={updateItem} deleteItem={deleteItem} duplicateItem={duplicateItem} moveItem={moveItem}
               moneda={moneda} ocultarCostos={ocultarCostos} fmt={fmt}
+              destacada={p.id === partidaNueva}
             />
           ))}
-
-          {/* Header columnas desktop (solo para ítems sueltos) */}
-          {itemsSueltos.length > 0 && (
-            <div className="desktop-header-columns">
-              <span style={{ fontFamily: 'var(--font-display)', fontWeight: 700, fontSize: '0.55rem', letterSpacing: '0.15em', color: 'var(--muted)' }}>DESCRIPCIÓN</span>
-              <div style={{ display: 'flex', width: '100%', gap: '6px' }}>
-                <span style={{ flex: 1, minWidth: '50px', textAlign: 'center', fontFamily: 'var(--font-display)', fontWeight: 700, fontSize: '0.55rem', color: 'var(--muted)' }}>CANT.</span>
-                <span style={{ flex: 1, minWidth: '60px', textAlign: 'center', fontFamily: 'var(--font-display)', fontWeight: 700, fontSize: '0.55rem', color: 'var(--muted)' }}>UNID.</span>
-                {!ocultarCostos && <span style={{ flex: 1, textAlign: 'right', fontFamily: 'var(--font-display)', fontWeight: 700, fontSize: '0.55rem', color: 'var(--muted)' }}>COSTO UNIT</span>}
-                {!ocultarCostos && <span style={{ flex: 1, minWidth: '55px', textAlign: 'center', fontFamily: 'var(--font-display)', fontWeight: 700, fontSize: '0.55rem', color: 'var(--orange)' }}>IMPREV.</span>}
-                {!ocultarCostos && <span style={{ flex: 1, minWidth: '55px', textAlign: 'center', fontFamily: 'var(--font-display)', fontWeight: 700, fontSize: '0.55rem', color: 'var(--purple)' }}>MARGEN</span>}
-                <span style={{ flex: 1, textAlign: 'right', fontFamily: 'var(--font-display)', fontWeight: 700, fontSize: '0.55rem', color: 'var(--y)' }}>P. VENTA</span>
-                <span style={{ flex: 1, minWidth: '55px', textAlign: 'center', fontFamily: 'var(--font-display)', fontWeight: 700, fontSize: '0.55rem', color: 'var(--danger)' }}>DESC.</span>
-                <span style={{ flex: 1, minWidth: '65px', textAlign: 'center', fontFamily: 'var(--font-display)', fontWeight: 700, fontSize: '0.55rem', color: 'var(--info)' }}>IVA %</span>
-                <span style={{ flex: 1, textAlign: 'right', fontFamily: 'var(--font-display)', fontWeight: 700, fontSize: '0.55rem', color: 'var(--muted)' }}>SUBTOTAL</span>
-              </div>
-              <span style={{ width: '68px' }}></span>
-            </div>
-          )}
 
           {/* Estado vacío (sin partidas ni ítems) — el flujo principal es por partida */}
           {items.length === 0 && partidas.length === 0 && (
