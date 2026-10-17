@@ -2,7 +2,7 @@ import React from 'react';
 import {
   Document, Page, Text, View, StyleSheet, Image,
 } from '@react-pdf/renderer';
-import type { CotizacionItem, Cliente, Partida } from '@/types';
+import type { CotizacionItem, Cliente, Partida, Vendedor } from '@/types';
 import { boldPorLinea, formatDate, fechaLocal, sumarDias, diasValidez, type Totals } from '@/utils';
 
 /** Logo con tinta oscura: es el que contrasta sobre el papel blanco del PDF. */
@@ -428,6 +428,8 @@ interface Props {
   fotos?: { url: string; caption: string }[];
   /** Aceptación online del cliente: llena el bloque de firma (nombre, RUT, fecha y firma). */
   aceptacion?: AceptacionPDF | null;
+  /** Quién cotiza (la cuenta que hizo la cotización): contacto en el encabezado y en la firma. */
+  vendedor?: Vendedor | null;
 }
 
 export interface AceptacionPDF {
@@ -517,7 +519,7 @@ export default function PresupuestoPDF({
   cliente, items, totals,
   folio, descripcionGeneral, garantia, condicionesComerciales,
   ocultarSuministros, empresa, moneda = 'CLP', valorUF = 0,
-  partidas = [], mostrarDetalle = false, fechaEmision, fotos = [], aceptacion = null,
+  partidas = [], mostrarDetalle = false, fechaEmision, fotos = [], aceptacion = null, vendedor = null,
 }: Props) {
 
   // Formateador de moneda de todo el documento (CLP o UF).
@@ -647,6 +649,12 @@ export default function PresupuestoPDF({
             {empresa.direccion && <Text style={s.companyLine}>{empresa.direccion}</Text>}
             <Text style={s.companyLine}>{empresa.telefono}  ·  {empresa.email}</Text>
             {empresa.website && <Text style={s.companyLine}>{empresa.website}</Text>}
+            {vendedor?.nombre ? (
+              <Text style={[s.companyLine, { color: INK, marginTop: 2 }]}>
+                Contacto: {vendedor.nombre}{vendedor.cargo ? ` (${vendedor.cargo})` : ''}
+                {vendedor.telefono ? `  ·  ${vendedor.telefono}` : ''}{vendedor.email && vendedor.email !== empresa.email ? `  ·  ${vendedor.email}` : ''}
+              </Text>
+            ) : null}
           </View>
 
           <View style={s.folioCard}>
@@ -1016,9 +1024,10 @@ export default function PresupuestoPDF({
           <View style={s.firmaCol}>
             {aceptacion && <View style={s.firmaEspacio} />}
             <View style={s.firmaLinea} />
-            <Text style={s.firmaNombreText}>{empresa.nombre}</Text>
+            <Text style={s.firmaNombreText}>{vendedor?.nombre || empresa.nombre}</Text>
+            {vendedor?.nombre ? <Text style={s.firmaMutedText}>{vendedor.cargo || 'Representante comercial'} · {empresa.nombre}</Text> : null}
             <Text style={s.firmaMutedText}>RUT: {empresa.rut}</Text>
-            <Text style={s.firmaMutedText}>Representante Comercial</Text>
+            {!vendedor?.nombre ? <Text style={s.firmaMutedText}>Representante Comercial</Text> : null}
           </View>
 
         </View>

@@ -11,12 +11,14 @@ import { saveAs } from 'file-saver';
 
 import { cotizacionesService, necesitaSeguimiento, diasSinMovimiento } from '@/services/cotizaciones';
 import EnviarCotizacionModal from '@/components/EnviarCotizacionModal';
+import { usePermisos } from '@/hooks/usePermisos';
+import { vendedoresService } from '@/services/vendedores';
 import { levantamientosService } from '@/services/levantamientos';
 import { fotosService } from '@/services/fotos';
 import MotivoPerdidaModal from '@/components/MotivoPerdidaModal';
 import { useToast } from '@/hooks/useToast';
 import { formatCLP, formatMoneda, formatFolio, formatDate, calcularTotals, normalizarItem, nombreArchivo } from '@/utils';
-import type { Cotizacion, EstadoCotizacion, Moneda } from '@/types';
+import type { Cotizacion, EstadoCotizacion, Moneda, Vendedor } from '@/types';
 import { ESTADO_COLORS, ESTADOS_TODOS, SUPUESTOS_DEFAULT } from '@/types';
 import PresupuestoPDF from '@/components/pdf/PresupuestoPDF';
 import { supabase } from '@/lib/supabase';
@@ -44,12 +46,19 @@ export default function HistorialPage() {
   const [soloPorSeguir, setSoloPorSeguir] = useState(false);
   const [enviar, setEnviar] = useState<Cotizacion | null>(null);
   const [rechazo, setRechazo] = useState<Cotizacion | null>(null);
+  const [vendedores, setVendedores] = useState<Record<string, Vendedor>>({});
+  const { puede } = usePermisos();
+  const puedeCrear = puede('cotizaciones.crear');
+  const puedeAprobar = puede('cotizaciones.aprobar');
+  const puedeAnular = puede('cotizaciones.anular');
+  const vendedorDe = (c: Cotizacion) => (c.vendedor_id ? vendedores[c.vendedor_id] || null : null);
 
  const load = useCallback(async () => {
   setLoading(true);
   try {
-    const data = await cotizacionesService.getAll();
+    const [data, mapa] = await Promise.all([cotizacionesService.getAll(), vendedoresService.mapa()]);
     setCotizaciones(data);
+    setVendedores(mapa);
   } catch (e) {
     console.error('Error al cargar el historial:', e);
     toastError('No se pudo cargar el historial de cotizaciones');
@@ -171,7 +180,8 @@ const [empresas, setEmpresas] = useState<EmpresaInfo[]>([]);
           mostrarDetalle={cot.mostrar_detalle || false}
           fechaEmision={cot.created_at}
           fotos={fotos}
-          aceptacion={cot.estado === 'Aceptado' && cot.respondida_por && cot.respondida_at
+          vendedor={vendedorDe(cot)}
+          aceptacion={['Aceptado', 'Realizado', 'Entregado'].includes(cot.estado) && cot.respondida_por && cot.respondida_at
             ? { nombre: cot.respondida_por, rut: cot.respondida_rut, fecha: cot.respondida_at, firma: cot.respuesta_firma }
             : null}
         />
@@ -241,7 +251,7 @@ const [empresas, setEmpresas] = useState<EmpresaInfo[]>([]);
   return (
     <div className="anim-in">
       {enviar && (
-        <EnviarCotizacionModal cot={enviar} empresaNombre={empresaNombreDe(enviar)} onClose={() => setEnviar(null)} onCambio={load} />
+        <EnviarCotizacionModal cot={enviar} empresaNombre={empresaNombreDe(enviar)} vendedor={vendedorDe(enviar)} onClose={() => setEnviar(null)} onCambio={load} />
       )}
       {rechazo && (
         <MotivoPerdidaModal folio={formatFolio(rechazo.folio)} onConfirm={confirmarRechazo} onClose={() => setRechazo(null)} />
@@ -250,11 +260,11 @@ const [empresas, setEmpresas] = useState<EmpresaInfo[]>([]);
       <PageHeader
         eyebrow="Registro completo"
         title="Historial de cotizaciones"
-        actions={<>
+        actions={puedeCrear ? <>
           <button onClick={() => router.push('/cotizador')} className="btn btn-primary">
             <FileText size={13} /> Nueva cotización
           </button>
-        </>}
+        </> : null}
       />
 
       {/* KPI strip */}
@@ -385,6 +395,11 @@ const [empresas, setEmpresas] = useState<EmpresaInfo[]>([]);
                           {cot.clientes.empresa}
                         </p>
                       )}
+                      {vendedorDe(cot) && (
+                        <p style={{ fontSize: '0.7rem', color: 'var(--faint)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title="Quién cotizó">
+                          por {vendedorDe(cot)!.nombre}
+                        </p>
+                      )}
                     </td>
                     <td className="col-descripcion" style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: '0.8rem', color: 'var(--muted)' }}>
                       {cot.descripcion_general || '—'}
@@ -397,6 +412,8 @@ const [empresas, setEmpresas] = useState<EmpresaInfo[]>([]);
                         <span style={{ width: 7, height: 7, borderRadius: '50%', background: ec.color, flexShrink: 0 }} />
                         <select
                           value={cot.estado}
+                          disabled={!puedeAprobar}
+                          title={puedeAprobar ? undefined : 'Tu rol no puede cambiar estados'}
                           onChange={e => handleEstado(cot, e.target.value as EstadoCotizacion)}
                           onClick={e => e.stopPropagation()}
                           style={{
@@ -434,27 +451,27 @@ const [empresas, setEmpresas] = useState<EmpresaInfo[]>([]);
                     </td>
                     <td>
                       <div onClick={e => e.stopPropagation()} style={{ display: 'flex', gap: '0.3rem', justifyContent: 'center' }}>
-                        <button
+                        {puedeCrear && <button
                           onClick={() => router.push(`/cotizador?edit=${cot.id}`)}
                           title="Editar"
                           style={{ background: 'none', border: '1px solid var(--border2)', cursor: 'pointer', padding: '0.25rem 0.4rem', color: 'var(--muted)' }}
                         >
                           <Edit3 size={12} />
-                        </button>
-                        <button
+                        </button>}
+                        {puedeCrear && <button
                           onClick={() => router.push(`/cotizador?clone=${cot.id}`)}
                           title="Clonar"
                           style={{ background: 'none', border: '1px solid var(--border2)', cursor: 'pointer', padding: '0.25rem 0.4rem', color: 'var(--muted)' }}
                         >
                           <Copy size={12} />
-                        </button>
-                        <button
+                        </button>}
+                        {puedeCrear && <button
                           onClick={() => setEnviar(cot)}
                           title={necesitaSeguimiento(cot) ? 'Hacer seguimiento' : 'Enviar al cliente'}
                           style={{ background: 'none', border: `1px solid ${necesitaSeguimiento(cot) ? 'var(--orange)' : 'var(--border2)'}`, cursor: 'pointer', padding: '0.25rem 0.4rem', color: necesitaSeguimiento(cot) ? 'var(--orange)' : 'var(--y)' }}
                         >
                           <Send size={12} />
-                        </button>
+                        </button>}
                         <button
                           onClick={() => handleDownloadPDF(cot)}
                           title="Descargar PDF"
@@ -463,13 +480,13 @@ const [empresas, setEmpresas] = useState<EmpresaInfo[]>([]);
                         >
                           {genPDF === cot.id ? <Loader2 size={12} className="iv-spin" /> : <Download size={12} />}
                         </button>
-                        <button
+                        {puedeAnular && <button
                           onClick={() => handleDelete(cot.id, cot.folio)}
                           title="Eliminar"
                           style={{ background: 'none', border: '1px solid rgba(248,113,113,0.2)', cursor: 'pointer', padding: '0.25rem 0.4rem', color: 'var(--danger)' }}
                         >
                           <Trash2 size={12} />
-                        </button>
+                        </button>}
                       </div>
                     </td>
                   </tr>

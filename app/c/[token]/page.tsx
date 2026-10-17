@@ -101,8 +101,8 @@ export default function CotizacionClientePage() {
           garantia={cot.condiciones_servicio} condicionesComerciales={cot.condiciones_comerciales}
           ocultarSuministros={cot.ocultar_suministros} empresa={cot.empresa}
           moneda={cot.moneda} valorUF={cot.valor_uf || 0} partidas={cot.partidas}
-          mostrarDetalle={cot.mostrar_detalle} fechaEmision={cot.created_at} fotos={cot.fotos}
-          aceptacion={cot.estado === 'Aceptado' && cot.respondida_por && cot.respondida_at
+          mostrarDetalle={cot.mostrar_detalle} fechaEmision={cot.created_at} fotos={cot.fotos} vendedor={cot.vendedor}
+          aceptacion={['Aceptado', 'Realizado', 'Entregado'].includes(cot.estado) && cot.respondida_por && cot.respondida_at
             ? { nombre: cot.respondida_por, rut: cot.respondida_rut, fecha: cot.respondida_at, firma: cot.respuesta_firma }
             : null}
         />,
@@ -152,7 +152,8 @@ export default function CotizacionClientePage() {
   const logo = cot.empresa.logo_url || (esInnVolt(cot.empresa.nombre) ? LOGO_INNVOLT : '');
   const pendiente = cot.estado === 'Pendiente';
   const aceptada = ['Aceptado', 'Realizado', 'Entregado'].includes(cot.estado);
-  const telEmpresa = (cot.empresa.telefono || '').replace(/\D/g, '');
+  // WhatsApp de quien cotizó (si tiene teléfono); si no, el de la empresa.
+  const telEmpresa = (cot.vendedor?.telefono || cot.empresa.telefono || '').replace(/\D/g, '');
   const wa = telEmpresa ? `https://wa.me/${telEmpresa.startsWith('56') ? telEmpresa : '56' + telEmpresa}?text=${encodeURIComponent(`Hola, tengo una consulta sobre la cotización ${formatFolio(cot.folio)}.`)}` : '';
   const sueltos = cot.items.filter(i => !i.partidaId);
 
@@ -337,9 +338,21 @@ export default function CotizacionClientePage() {
 
         {/* Contacto */}
         <Tarjeta titulo="¿Dudas?">
+          {cot.vendedor?.nombre && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 12 }}>
+              <span style={{ width: 42, height: 42, borderRadius: '50%', background: C.spark, color: C.ink, display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, flexShrink: 0 }}>
+                {cot.vendedor.nombre.split(/\s+/).filter(Boolean).slice(0, 2).map(p => p[0]).join('').toUpperCase()}
+              </span>
+              <span>
+                <span style={{ display: 'block', fontSize: 12, color: C.faint }}>Te atiende</span>
+                <span style={{ display: 'block', fontWeight: 700 }}>{cot.vendedor.nombre}</span>
+                {cot.vendedor.cargo && <span style={{ display: 'block', fontSize: 13, color: C.muted }}>{cot.vendedor.cargo}</span>}
+              </span>
+            </div>
+          )}
           <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
             {wa && <a href={wa} target="_blank" rel="noreferrer" style={{ ...btnSec, flex: '1 1 160px', textDecoration: 'none', background: '#1f8f4e', color: '#fff', border: 'none' }}><MessageCircle size={18} /> WhatsApp</a>}
-            {cot.empresa.email && <a href={`mailto:${cot.empresa.email}?subject=${encodeURIComponent(`Cotización ${formatFolio(cot.folio)}`)}`} style={{ ...btnSec, flex: '1 1 160px', textDecoration: 'none' }}><Mail size={18} /> Correo</a>}
+            {(cot.vendedor?.email || cot.empresa.email) && <a href={`mailto:${cot.vendedor?.email || cot.empresa.email}?subject=${encodeURIComponent(`Cotización ${formatFolio(cot.folio)}`)}`} style={{ ...btnSec, flex: '1 1 160px', textDecoration: 'none' }}><Mail size={18} /> Correo</a>}
             <button onClick={descargarPDF} disabled={genPDF} style={{ ...btnSec, flex: '1 1 160px' }}>
               {genPDF ? <Loader2 size={18} className="iv-spin" /> : <Download size={18} />} Descargar PDF
             </button>

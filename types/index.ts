@@ -238,6 +238,8 @@ export interface Cotizacion {
   respondida_rut?: string | null;
   respuesta_comentario?: string | null;
   respuesta_firma?: string | null;  // firma del cliente (PNG data URI) al aceptar online
+  aceptada_at?: string | null;      // fecha de aceptación (las ventas se cuentan por ella)
+  vendedor_id?: string | null;      // quién cotizó (cuenta que la creó)
 
   // ── Motivo de pérdida (si fue Rechazada) ──
   motivo_perdida?: string | null;
@@ -395,3 +397,12 @@ export const INNVOLT_INFO = {
   email: 'innvolt.cl@gmail.com',
   web: 'www.innvolt.cl',
 };
+
+/** Quién cotiza: la persona (cuenta) que hizo la cotización, con sus datos de contacto. */
+export interface Vendedor {
+  id?: string;
+  nombre: string;
+  cargo?: string | null;
+  telefono?: string | null;
+  email?: string | null;
+}

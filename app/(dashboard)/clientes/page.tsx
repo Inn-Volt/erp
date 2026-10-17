@@ -9,6 +9,7 @@ import { formatDate } from '@/utils';
 import { useRouter } from 'next/navigation';
 import PageHeader from '@/components/PageHeader';
 import LinksMapa from '@/components/LinksMapa';
+import { usePermisos } from '@/hooks/usePermisos';
 
 const EMPTY_CLIENTE: Omit<Cliente, 'id' | 'created_at' | 'updated_at'> = {
   nombre_cliente: '',
@@ -98,6 +99,7 @@ function ClienteModal({ cliente, onClose, onSave }: {
 
 export default function ClientesPage() {
   const { success, error: toastError } = useToast();
+  const { puede } = usePermisos();
   const router = useRouter();
   const [clientes, setClientes] = useState<Cliente[]>([]);
   const [loading, setLoading] = useState(true);
@@ -169,9 +171,9 @@ export default function ClientesPage() {
         eyebrow="Base de datos"
         title="Clientes"
         actions={<>
-          <button onClick={() => setModal({ open: true, cliente: null })} className="btn btn-primary">
+          {puede('clientes.crear') && <button onClick={() => setModal({ open: true, cliente: null })} className="btn btn-primary">
             <Plus size={14} /> Nuevo cliente
-          </button>
+          </button>}
         </>}
       />
 
@@ -222,12 +224,12 @@ export default function ClientesPage() {
               <button onClick={() => router.push(`/cotizador?cliente=${selected.id}`)} className="btn btn-primary btn-sm" style={{ width: '100%', justifyContent: 'center' }}>
                 <FileText size={13} /> Nueva cotización
               </button>
-              <button onClick={() => setModal({ open: true, cliente: selected })} className="btn btn-ghost btn-sm" style={{ width: '100%', justifyContent: 'center' }}>
+              {puede('clientes.crear') && <button onClick={() => setModal({ open: true, cliente: selected })} className="btn btn-ghost btn-sm" style={{ width: '100%', justifyContent: 'center' }}>
                 <Edit3 size={13} /> Editar cliente
-              </button>
-              <button onClick={() => handleDelete(selected.id, selected.nombre_cliente)} className="btn btn-danger btn-sm" style={{ width: '100%', justifyContent: 'center' }}>
+              </button>}
+              {puede('clientes.anular') && <button onClick={() => handleDelete(selected.id, selected.nombre_cliente)} className="btn btn-danger btn-sm" style={{ width: '100%', justifyContent: 'center' }}>
                 <Trash2 size={13} /> Eliminar
-              </button>
+              </button>}
             </div>
           </div>
         </div>
@@ -358,12 +360,12 @@ export default function ClientesPage() {
               <button onClick={() => router.push(`/cotizador?cliente=${selected.id}`)} className="btn btn-primary btn-sm" style={{ width: '100%', justifyContent: 'center' }}>
                 <FileText size={13} /> Nueva cotización
               </button>
-              <button onClick={() => setModal({ open: true, cliente: selected })} className="btn btn-ghost btn-sm" style={{ width: '100%', justifyContent: 'center' }}>
+              {puede('clientes.crear') && <button onClick={() => setModal({ open: true, cliente: selected })} className="btn btn-ghost btn-sm" style={{ width: '100%', justifyContent: 'center' }}>
                 <Edit3 size={13} /> Editar cliente
-              </button>
-              <button onClick={() => handleDelete(selected.id, selected.nombre_cliente)} className="btn btn-danger btn-sm" style={{ width: '100%', justifyContent: 'center' }}>
+              </button>}
+              {puede('clientes.anular') && <button onClick={() => handleDelete(selected.id, selected.nombre_cliente)} className="btn btn-danger btn-sm" style={{ width: '100%', justifyContent: 'center' }}>
                 <Trash2 size={13} /> Eliminar
-              </button>
+              </button>}
             </div>
           </div>
         )}

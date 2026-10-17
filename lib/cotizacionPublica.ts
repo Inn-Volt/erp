@@ -42,6 +42,7 @@ export interface FilaCotizacion {
   respondida_por: string | null;
   respondida_rut?: string | null;
   respuesta_firma?: string | null;   // puede no existir si falta correr el SQL
+  vendedor_id?: string | null;       // quién cotizó (Fase 1)
   clientes: {
     nombre_cliente: string; empresa: string | null; rut: string; email: string | null;
     telefono: string | null; direccion: string | null; contacto_nombre: string | null;
@@ -115,9 +116,23 @@ export async function fotosDe(levantamientoId: string | null, incluir: boolean |
     .filter(f => f.url);
 }
 
+/** Contacto de quien cotizó (solo nombre, cargo, teléfono y correo). */
+async function vendedorDe(id: string | null | undefined): Promise<CotizacionPublica['vendedor']> {
+  if (!id) return null;
+  try {
+    const { data } = await getSupabaseAdmin().from('profiles').select('nombre, email, cargo, telefono').eq('id', id).maybeSingle();
+    if (!data) return null;
+    return { nombre: data.nombre || data.email || '', cargo: data.cargo ?? null, telefono: data.telefono ?? null, email: data.email ?? null };
+  } catch {
+    return null;
+  }
+}
+
 export async function aPublica(cot: FilaCotizacion): Promise<CotizacionPublica> {
   const { vence, vigente } = vigencia(cot);
-  const [empresa, fotos] = await Promise.all([empresaDe(cot.empresa_id), fotosDe(cot.levantamiento_id, cot.incluir_fotos)]);
+  const [empresa, fotos, vendedor] = await Promise.all([
+    empresaDe(cot.empresa_id), fotosDe(cot.levantamiento_id, cot.incluir_fotos), vendedorDe(cot.vendedor_id),
+  ]);
   const c = cot.clientes;
   return {
     folio: cot.folio,
@@ -144,7 +159,8 @@ export async function aPublica(cot: FilaCotizacion): Promise<CotizacionPublica> 
     respondida_at: cot.respondida_at,
     respondida_por: cot.respondida_por,
     respondida_rut: cot.respondida_rut ?? null,
-    respuesta_firma: cot.estado === 'Aceptado' ? (cot.respuesta_firma ?? null) : null,
+    respuesta_firma: ['Aceptado', 'Realizado', 'Entregado'].includes(cot.estado) ? (cot.respuesta_firma ?? null) : null,
+    vendedor,
     fotos,
   };
 }

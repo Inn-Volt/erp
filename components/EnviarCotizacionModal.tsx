@@ -14,7 +14,8 @@ import { X, Send, Copy, MessageCircle, Mail, CheckCircle2, Loader2, Eye, Clock }
 import { cotizacionesService, linkPublico, diasSinMovimiento } from '@/services/cotizaciones';
 import { useToast } from '@/hooks/useToast';
 import { formatMoneda, formatFolio, formatDate } from '@/utils';
-import type { Cotizacion, Moneda } from '@/types';
+import type { Cotizacion, Moneda, Vendedor } from '@/types';
+import { firmaVendedor } from '@/services/vendedores';
 
 /** Normaliza un teléfono chileno para wa.me (solo dígitos, con 56). */
 function telefonoWhatsApp(tel?: string | null): string {
@@ -26,9 +27,11 @@ function telefonoWhatsApp(tel?: string | null): string {
   return d;
 }
 
-export default function EnviarCotizacionModal({ cot, empresaNombre, onClose, onCambio }: {
+export default function EnviarCotizacionModal({ cot, empresaNombre, vendedor, onClose, onCambio }: {
   cot: Cotizacion;
   empresaNombre: string;
+  /** Quién cotiza: firma el mensaje (si no, firma la empresa). */
+  vendedor?: Vendedor | null;
   onClose: () => void;
   /** Se llama tras registrar envío o seguimiento (para recargar la lista). */
   onCambio?: () => void;
@@ -42,13 +45,14 @@ export default function EnviarCotizacionModal({ cot, empresaNombre, onClose, onC
   const esSeguimiento = !!cot.enviada_at && cot.estado === 'Pendiente';
   const dias = diasSinMovimiento(cot);
 
+  const firma = vendedor?.nombre ? `\n— ${firmaVendedor(vendedor, empresaNombre)}${vendedor.telefono ? ` · ${vendedor.telefono}` : ''}` : '';
   const mensaje = esSeguimiento
     ? `Hola ${nombre}, ¿pudiste revisar la cotización ${folio} de ${empresaNombre} por ${total}? ` +
       (link ? `La puedes ver y aceptar aquí: ${link} ` : '') +
-      'Si tienes dudas o quieres ajustar algo, conversemos. ¡Saludos!'
+      'Si tienes dudas o quieres ajustar algo, conversemos. ¡Saludos!' + firma
     : `Hola ${nombre}, te envío la cotización ${folio} de ${empresaNombre} por ${total}. ` +
       (link ? `Puedes revisarla, descargarla y aceptarla aquí: ${link} ` : '') +
-      'Quedo atento a tus comentarios. ¡Saludos!';
+      'Quedo atento a tus comentarios. ¡Saludos!' + firma;
 
   const registrarEnvio = async () => {
     if (cot.enviada_at) return;

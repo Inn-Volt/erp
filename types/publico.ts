@@ -31,5 +31,7 @@ export interface CotizacionPublica {
   respondida_rut: string | null;
   /** Firma del cliente (PNG data URI), solo si la aceptó online. */
   respuesta_firma: string | null;
+  /** Quién cotizó: su contacto (nombre, cargo, teléfono, correo). Sin datos internos. */
+  vendedor: { nombre: string; cargo: string | null; telefono: string | null; email: string | null } | null;
   fotos: FotoPublica[];
 }
