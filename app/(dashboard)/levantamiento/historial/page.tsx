@@ -8,6 +8,7 @@ import type { Levantamiento, EstadoLevantamiento } from '@/types/levantamiento';
 import { ESTADO_LEV_COLORS } from '@/types/levantamiento';
 import { formatDate } from '@/utils';
 import PageHeader from '@/components/PageHeader';
+import { usePermisos } from '@/hooks/usePermisos';
 
 function Skeleton({ h = 48 }: { h?: number }) {
   return <div className="skeleton" style={{ height: h, width: '100%', marginBottom: 2 }} />;
@@ -17,6 +18,7 @@ const ESTADOS: EstadoLevantamiento[] = ['Borrador', 'Completado', 'Enviado', 'Ar
 
 export default function LevantamientoHistorialPage() {
   const router = useRouter();
+  const { puede } = usePermisos();
   const [items, setItems] = useState<Levantamiento[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
@@ -195,9 +197,9 @@ export default function LevantamientoHistorialPage() {
                   <button onClick={() => router.push(`/levantamiento?id=${lev.id}`)} className="btn btn-ghost btn-sm" style={{ padding: '4px 8px' }} title="Editar">
                     <Edit2 size={12} />
                   </button>
-                  <button onClick={() => handleDelete(lev.id)} disabled={deleting === lev.id} className="btn btn-danger btn-sm" style={{ padding: '4px 8px' }} title="Eliminar">
+                  {puede('levantamientos.anular') && <button onClick={() => handleDelete(lev.id)} disabled={deleting === lev.id} className="btn btn-danger btn-sm" style={{ padding: '4px 8px' }} title="Eliminar">
                     <Trash2 size={12} />
-                  </button>
+                  </button>}
                 </div>
               </div>
             );

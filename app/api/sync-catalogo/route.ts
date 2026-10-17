@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { usuarioAutenticado, noAutorizado } from '@/lib/authServidor';
+import { sesionConPermisos, tienePermiso, noAutorizado, sinPermiso } from '@/lib/authServidor';
 import * as XLSX from 'xlsx';
 import { cleanNumber } from '@/utils';
 import type { CategoriaItem } from '@/types';
@@ -36,7 +36,9 @@ function campo(row: Record<string, unknown>, ...nombres: string[]): unknown {
 }
 
 export async function GET(req: Request) {
-  if (!(await usuarioAutenticado(req))) return noAutorizado();
+  const ses = await sesionConPermisos(req);
+  if (!ses) return noAutorizado();
+  if (!tienePermiso(ses.permisos, 'biblioteca.editar')) return sinPermiso();
   try {
     const url = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/export?format=xlsx`;
     const res = await fetch(url, { cache: 'no-store' });

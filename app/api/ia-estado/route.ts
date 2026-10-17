@@ -3,14 +3,16 @@
 // Requiere sesión. Nunca devuelve las keys.
 
 import { NextResponse } from 'next/server';
-import { usuarioAutenticado, noAutorizado } from '@/lib/authServidor';
+import { sesionConPermisos, tienePermiso, noAutorizado, sinPermiso } from '@/lib/authServidor';
 import { cadenaProveedores, probarProveedor, type ProveedorIA } from '@/lib/ia';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
 export async function GET(req: Request) {
-  if (!(await usuarioAutenticado(req))) return noAutorizado();
+  const ses = await sesionConPermisos(req);
+  if (!ses) return noAutorizado();
+  if (!tienePermiso(ses.permisos, 'configuracion.gestionar')) return sinPermiso();
   return NextResponse.json({
     orden: cadenaProveedores(),
     configurados: {
@@ -27,7 +29,9 @@ export async function GET(req: Request) {
 }
 
 export async function POST(req: Request) {
-  if (!(await usuarioAutenticado(req))) return noAutorizado();
+  const ses = await sesionConPermisos(req);
+  if (!ses) return noAutorizado();
+  if (!tienePermiso(ses.permisos, 'configuracion.gestionar')) return sinPermiso();
   const body = await req.json().catch(() => ({}));
   const p = body?.proveedor as ProveedorIA;
   if (!cadenaProveedores().includes(p)) {

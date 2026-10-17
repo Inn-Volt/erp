@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { usuarioAutenticado, noAutorizado } from '@/lib/authServidor';
+import { sesionConPermisos, tienePermiso, noAutorizado, sinPermiso } from '@/lib/authServidor';
 import { generarJSON, type GeminiSchema } from '@/lib/ia';
 import type { RecetaIA } from '@/types';
 
@@ -48,7 +48,9 @@ const SCHEMA: GeminiSchema = {
 };
 
 export async function POST(req: Request) {
-  if (!(await usuarioAutenticado(req))) return noAutorizado();
+  const ses = await sesionConPermisos(req);
+  if (!ses) return noAutorizado();
+  if (!tienePermiso(ses.permisos, 'ia.usar')) return sinPermiso();
   let descripcion = '';
   try {
     const body = await req.json();

@@ -18,6 +18,7 @@ import {
 } from '@/types';
 import { fetchConSesion } from '@/lib/fetchConSesion';
 import PageHeader from '@/components/PageHeader';
+import { usePermisos } from '@/hooks/usePermisos';
 
 // ─── Estilos base ─────────────────────────────────────────────────────────────
 const field: React.CSSProperties = {
@@ -347,6 +348,8 @@ function RecetaModal({ receta, catalogo, onClose, onSaved }: {
 // ══════════════════════════════════════════════════════════════════════════════
 export default function BibliotecaPage() {
   const { success, error: toastError } = useToast();
+  const { puede } = usePermisos();
+  const puedeEditar = puede('biblioteca.editar');
   const [tab, setTab] = useState<'items' | 'recetas'>('items');
 
   const [items, setItems] = useState<CatalogoItem[]>([]);
@@ -413,7 +416,7 @@ export default function BibliotecaPage() {
     try { last = localStorage.getItem('innvolt-sync-catalogo'); } catch {}
     setUltimaSync(last);
     const stale = !last || (Date.now() - new Date(last).getTime()) > 5 * 60 * 1000;
-    if (stale) sincronizarSheet(true);
+    if (stale && puedeEditar) sincronizarSheet(true);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -657,21 +660,21 @@ export default function BibliotecaPage() {
               Sync: {new Date(ultimaSync).toLocaleTimeString('es-CL', { hour: '2-digit', minute: '2-digit' })}
             </span>
           )}
-          <button onClick={() => sincronizarSheet(false)} disabled={sincronizando} className="btn btn-ghost btn-sm" title="Traer el catálogo actualizado desde Google Sheets" style={{ color: 'var(--y)', borderColor: 'var(--border)' }}>
+          {puedeEditar && <button onClick={() => sincronizarSheet(false)} disabled={sincronizando} className="btn btn-ghost btn-sm" title="Traer el catálogo actualizado desde Google Sheets" style={{ color: 'var(--y)', borderColor: 'var(--border)' }}>
             {sincronizando ? <Loader2 size={13} className="iv-spin" /> : <RefreshCw size={13} />} Sincronizar
-          </button>
+          </button>}
           <input ref={fileRef} type="file" accept=".xlsx,.xls,.csv" onChange={onFile} style={{ display: 'none' }} />
-          <button onClick={() => fileRef.current?.click()} disabled={importando} className="btn btn-ghost btn-sm" title={`Importar ${tab === 'items' ? 'ítems' : 'recetas'} desde Excel`}>
+          {puedeEditar && <button onClick={() => fileRef.current?.click()} disabled={importando} className="btn btn-ghost btn-sm" title={`Importar ${tab === 'items' ? 'ítems' : 'recetas'} desde Excel`}>
             {importando ? <Loader2 size={13} className="iv-spin" /> : <FileUp size={13} />} Importar
-          </button>
+          </button>}
           <button onClick={() => (tab === 'items' ? exportarItems() : exportarRecetas())} className="btn btn-ghost btn-sm" title={`Exportar ${tab === 'items' ? 'ítems' : 'recetas'} a Excel`}>
             <FileDown size={13} /> Exportar
           </button>
-          {tab === 'items' ? (
+          {puedeEditar && (tab === 'items' ? (
             <button onClick={() => setItemModal({ open: true, item: null })} className="btn btn-primary"><Plus size={14} /> Nuevo ítem</button>
           ) : (
             <button onClick={() => setRecetaModal({ open: true, receta: null })} className="btn btn-primary"><Plus size={14} /> Nueva receta</button>
-          )}
+          ))}
         </>}
       />
 
@@ -725,7 +728,7 @@ export default function BibliotecaPage() {
                     <a href={it.link} target="_blank" rel="noopener noreferrer" className="btn btn-ghost btn-xs" title="Abrir link del producto" onClick={e => e.stopPropagation()}><ExternalLink size={12} /></a>
                   ) : null}
                   <button onClick={() => setItemModal({ open: true, item: it })} className="btn btn-ghost btn-xs" title="Editar"><Edit3 size={12} /></button>
-                  <button onClick={() => eliminarItem(it.id, it.descripcion)} className="btn btn-danger btn-xs" title="Eliminar"><Trash2 size={12} /></button>
+                  {puedeEditar && <button onClick={() => eliminarItem(it.id, it.descripcion)} className="btn btn-danger btn-xs" title="Eliminar"><Trash2 size={12} /></button>}
                 </div>
               ))}
               {itemsFiltrados.length > LIMITE_RENDER && (
@@ -753,7 +756,7 @@ export default function BibliotecaPage() {
                 </div>
                 <div style={{ display: 'flex', gap: '0.25rem', flexShrink: 0 }}>
                   <button onClick={() => setRecetaModal({ open: true, receta: r })} className="btn btn-ghost btn-xs" title="Editar"><Edit3 size={12} /></button>
-                  <button onClick={() => eliminarReceta(r.id, r.nombre)} className="btn btn-danger btn-xs" title="Eliminar"><Trash2 size={12} /></button>
+                  {puedeEditar && <button onClick={() => eliminarReceta(r.id, r.nombre)} className="btn btn-danger btn-xs" title="Eliminar"><Trash2 size={12} /></button>}
                 </div>
               </div>
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: '3px' }}>

@@ -20,6 +20,7 @@ import {
 } from '@/types/solicitud';
 import { fetchConSesion } from '@/lib/fetchConSesion';
 import PageHeader from '@/components/PageHeader';
+import { usePermisos } from '@/hooks/usePermisos';
 
 const PRIORIDADES: PrioridadSolicitud[] = ['Baja', 'Media', 'Alta', 'Urgente'];
 
@@ -224,6 +225,7 @@ function DetalleSolicitud({ sol, onClose, onChange, onEdit, onDelete }: {
 }) {
   const router = useRouter();
   const { success, error: toastError } = useToast();
+  const { puede } = usePermisos();
   const [analizando, setAnalizando] = useState(false);
   const [infoExtra, setInfoExtra] = useState('');
 
@@ -321,10 +323,10 @@ function DetalleSolicitud({ sol, onClose, onChange, onEdit, onDelete }: {
               <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.4rem', fontFamily: 'var(--font-display)', fontWeight: 700, fontSize: '0.78rem', color: 'var(--y)' }}>
                 <Sparkles size={13} /> Análisis IA
               </span>
-              <button onClick={() => analizar(false)} disabled={analizando} className="btn btn-primary btn-sm">
+{puede('ia.usar') &&               <button onClick={() => analizar(false)} disabled={analizando} className="btn btn-primary btn-sm">
                 {analizando ? <Loader2 size={12} className="iv-spin" /> : <Wand2 size={12} />}
                 {a ? 'Analizar de nuevo' : 'Analizar con IA'}
-              </button>
+              </button>}
             </div>
 
             {!a && !analizando && (
@@ -433,7 +435,7 @@ function DetalleSolicitud({ sol, onClose, onChange, onEdit, onDelete }: {
           )}
           <div style={{ display: 'flex', gap: '0.4rem' }}>
             <button onClick={onEdit} className="btn btn-ghost btn-sm" style={{ flex: 1, justifyContent: 'center' }}><Edit3 size={13} /> Editar</button>
-            <button onClick={onDelete} className="btn btn-danger btn-sm" style={{ flex: 1, justifyContent: 'center' }}><Trash2 size={13} /> Eliminar</button>
+{puede('solicitudes.anular') &&             <button onClick={onDelete} className="btn btn-danger btn-sm" style={{ flex: 1, justifyContent: 'center' }}><Trash2 size={13} /> Eliminar</button>}
           </div>
         </div>
       </div>
@@ -443,6 +445,7 @@ function DetalleSolicitud({ sol, onClose, onChange, onEdit, onDelete }: {
 
 // ─── Página ───────────────────────────────────────────────────────────────────
 export default function SolicitudesPage() {
+  const { puede: puedeSol } = usePermisos();
   const { user, userName } = useAuth(true);
   const { success, error: toastError } = useToast();
   const [solicitudes, setSolicitudes] = useState<Solicitud[]>([]);
@@ -522,7 +525,7 @@ export default function SolicitudesPage() {
         title="Solicitudes"
         subtitle="Requerimientos de clientes por cotizar"
         actions={<>
-          <button onClick={() => setModal({ open: true, sol: null })} className="btn btn-primary"><Plus size={14} /> Nueva solicitud</button>
+{puedeSol('solicitudes.crear') &&           <button onClick={() => setModal({ open: true, sol: null })} className="btn btn-primary"><Plus size={14} /> Nueva solicitud</button>}
         </>}
       />
 

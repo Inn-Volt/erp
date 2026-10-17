@@ -8,7 +8,8 @@ import EnviarCotizacionModal from '@/components/EnviarCotizacionModal';
 import { clientesService } from '@/services/clientes';
 import { solicitudesService } from '@/services/solicitudes';
 import { agendaService } from '@/services/agenda';
-import type { KpiData, Cotizacion, Moneda } from '@/types';
+import type { KpiData, Cotizacion, Moneda, Vendedor } from '@/types';
+import { vendedoresService } from '@/services/vendedores';
 import { ESTADO_COLORS, INNVOLT_INFO } from '@/types';
 import { formatCLP, formatMoneda, formatFolio, formatDate, fechaLocal } from '@/utils';
 import PageHeader from '@/components/PageHeader';
@@ -50,6 +51,8 @@ export default function DashboardPage() {
   const [porSeguir, setPorSeguir] = useState<Cotizacion[]>([]);
   const [motivos, setMotivos] = useState<Record<string, number>>({});
   const [enviar, setEnviar] = useState<Cotizacion | null>(null);
+  const [vendedores, setVendedores] = useState<Record<string, Vendedor>>({});
+  useEffect(() => { vendedoresService.mapa().then(setVendedores); }, []);
   const [loading, setLoading] = useState(true);
 
   // Lista "Por seguir" y motivos de pérdida (se recargan tras un seguimiento).
@@ -92,7 +95,7 @@ export default function DashboardPage() {
   return (
     <div className="anim-in">
       {enviar && (
-        <EnviarCotizacionModal cot={enviar} empresaNombre={INNVOLT_INFO.nombre} onClose={() => setEnviar(null)} onCambio={cargarSeguimiento} />
+        <EnviarCotizacionModal cot={enviar} empresaNombre={INNVOLT_INFO.nombre} vendedor={enviar.vendedor_id ? vendedores[enviar.vendedor_id] : null} onClose={() => setEnviar(null)} onCambio={cargarSeguimiento} />
       )}
       {/* Header */}
       <PageHeader

@@ -23,6 +23,7 @@ import { fechaLocal } from '@/utils';
 import PageHeader from '@/components/PageHeader';
 import LinksMapa from '@/components/LinksMapa';
 import { tipoDia } from '@/lib/feriados';
+import { usePermisos } from '@/hooks/usePermisos';
 
 // ─── Utilidades de fecha ──────────────────────────────────────────────────────
 const DIAS = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'];
@@ -269,6 +270,8 @@ function AgendaModal({ cita, clientes, createdBy, prefill, onClose, onSaved, onD
 
 // ─── Página ───────────────────────────────────────────────────────────────────
 function AgendaContent() {
+  const { puede } = usePermisos();
+  const puedeAgendar = puede('agenda.gestionar');
   const { user, userName } = useAuth(true);
   const { error: toastError } = useToast();
   const router = useRouter();
@@ -348,7 +351,7 @@ function AgendaContent() {
         title="Agenda"
         subtitle="Visitas técnicas y citas de César y Joaquín"
         actions={<>
-          <button onClick={() => setModal({ open: true, cita: null })} className="btn btn-primary"><Plus size={14} /> Nueva cita</button>
+{puedeAgendar && <button onClick={() => setModal({ open: true, cita: null })} className="btn btn-primary"><Plus size={14} /> Nueva cita</button>}
         </>}
       />
 
@@ -401,7 +404,7 @@ function AgendaContent() {
                   const rm = RESPONSABLE_META[c.responsable];
                   const em = ESTADO_AGENDA_META[c.estado];
                   return (
-                    <div key={c.id} onClick={() => setModal({ open: true, cita: c })}
+                    <div key={c.id} onClick={() => { if (puedeAgendar) setModal({ open: true, cita: c }); }}
                       style={{ display: 'flex', gap: '0.85rem', padding: '0.8rem 1rem', borderTop: '1px solid var(--border2)', cursor: 'pointer', alignItems: 'flex-start' }}>
                       <div style={{ minWidth: 52, textAlign: 'center', flexShrink: 0 }}>
                         <div style={{ fontFamily: 'var(--font-display)', fontWeight: 800, fontSize: '0.95rem', color: 'var(--text)' }}>{hhmm(c.hora_inicio) || '—'}</div>

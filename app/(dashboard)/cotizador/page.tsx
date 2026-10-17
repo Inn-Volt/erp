@@ -31,12 +31,14 @@ import {
   calcularPartida, partidaDesdeReceta, borradorDesdeAnalisis,
   convertirItemsMoneda, formatMiles, nombreArchivo, formatDate,
 } from '@/utils';
-import type { CotizacionItem, Cliente, CategoriaItem, Supuestos, Moneda, Partida, RecetaConComponentes, PartidaIAResuelta, CatalogoItem, Cotizacion } from '@/types';
+import type { CotizacionItem, Cliente, CategoriaItem, Supuestos, Moneda, Partida, RecetaConComponentes, PartidaIAResuelta, CatalogoItem, Cotizacion, Vendedor } from '@/types';
 import {
   CATEGORIA_LABELS, CATEGORIAS_ORDEN, CATEGORIA_COLORS,
   SUPUESTOS_DEFAULT, UNIDADES,
 } from '@/types';
 import PresupuestoPDF from '@/components/pdf/PresupuestoPDF';
+import { usePermisos } from '@/hooks/usePermisos';
+import { supabase as supabaseCliente } from '@/lib/supabase';
 import type { EmpresaInfo } from '@/components/pdf/PresupuestoPDF';
 import ListadoInternoPDF from '@/components/pdf/ListadoInternoPDF';
 import EmpresaModal from '@/components/EmpresaModal';
@@ -109,19 +111,26 @@ const CAT_ICONS: Record<CategoriaItem, React.ElementType> = {
 
 // ─── Empresa Selector ─────────────────────────────────────────────────────────
 function EmpresaSelector({
-  empresas, selected, onSelect, onNew, onEdit,
+  empresas, selected, onSelect, onNew, onEdit, cotiza,
 }: {
   empresas: EmpresaInfo[];
   selected: EmpresaInfo | null;
   onSelect: (e: EmpresaInfo) => void;
   onNew: () => void;
   onEdit: (e: EmpresaInfo) => void;
+  /** Quién cotiza (automático: la cuenta que la hace). */
+  cotiza?: Vendedor | null;
 }) {
   const [open, setOpen] = useState(false);
 
   return (
     <div style={{ ...panelY, padding: '1rem', borderRadius: 'var(--r)' }}>
       <p style={sectionLabel}><Building2 size={12} /> Empresa Emisora</p>
+      {cotiza?.nombre && (
+        <p style={{ fontSize: '0.8rem', color: 'var(--muted)', margin: '-0.35rem 0 0.6rem' }} title="Se toma de la cuenta que hace la cotización">
+          Cotiza: <b style={{ color: 'var(--text)', fontWeight: 600 }}>{cotiza.nombre}</b>{cotiza.cargo ? ` · ${cotiza.cargo}` : ''}{cotiza.telefono ? ` · ${cotiza.telefono}` : ''}
+        </p>
+      )}
 
       {/* Dropdown selector */}
       <div style={{ position: 'relative' }}>
@@ -250,7 +259,7 @@ function PDFModal({
   folio, cliente, items, totals, descuentoPorcentajeMO,
   descripcionGeneral, garantia, condicionesComerciales,
   ocultarSuministros, empresa, moneda, valorUF, partidas, mostrarDetalle, onClose,
-  fechaEmision, hayCambios, onGuardar, levantamientoId, incluirFotos, onEnviar,
+  fechaEmision, hayCambios, onGuardar, levantamientoId, incluirFotos, onEnviar, vendedor,
 }: {
   folio: number; cliente: Cliente; items: CotizacionItem[];
   totals: ReturnType<typeof calcularTotals>; descuentoPorcentajeMO: number;
@@ -261,6 +270,8 @@ function PDFModal({
   levantamientoId: string | null; incluirFotos: boolean;
   /** Abre "Enviar al cliente" (link, WhatsApp, correo). */
   onEnviar?: () => void;
+  /** Quién cotiza: su contacto va en el PDF. */
+  vendedor?: Vendedor | null;
 }) {
   const [gen, setGen] = useState(false);
   const { error: toastError } = useToast();
@@ -298,7 +309,7 @@ function PDFModal({
             ocultarSuministros={ocultarSuministros}
             empresa={empresa} moneda={moneda} valorUF={valorUF}
             partidas={partidas} mostrarDetalle={mostrarDetalle}
-            fechaEmision={fechaEmision} fotos={fotos}
+            fechaEmision={fechaEmision} fotos={fotos} vendedor={vendedor}
           />
         ).toBlob();
         saveAs(blob, `Cotizacion_${folioStr}_${nombreArchivo(cliente.nombre_cliente)}.pdf`);
@@ -728,6 +739,9 @@ function CotizadorContent() {
   const searchParams = useSearchParams();
   const router = useRouter();
   const { success, error: toastError, warning } = useToast();
+  const { perfil, puede } = usePermisos();
+  /** Quién cotiza: la cuenta que la hace (nueva) o quien la hizo (al editar). */
+  const [vendedor, setVendedor] = useState<Vendedor | null>(null);
 
   const editId        = searchParams.get('edit');
   const cloneId       = searchParams.get('clone');
@@ -748,7 +762,11 @@ function CotizadorContent() {
   const [descripcionGeneral,     setDescripcionGeneral]     = useState('');
   const [descuentoPorcentajeMO,  setDescuentoPorcentajeMO] = useState(0);
   const [ocultarSuministros,     setOcultarSuministros]     = useState(false);
-  const [ocultarCostos,          setOcultarCostos]          = useState(false);
+  const [ocultarCostosPref,      setOcultarCostos]          = useState(false);
+  // Sin permiso «Ver costos y márgenes», los costos quedan siempre ocultos.
+  const verCostos = puede('cotizaciones.ver_costos');
+  const puedeEditarCot = puede('cotizaciones.crear');
+  const ocultarCostos = ocultarCostosPref || !verCostos;
   const [garantia,               setGarantia]               = useState(GARANTIA_DEFAULT);
   const [condicionesComerciales, setCondicionesComerciales] = useState(CONDICIONES_DEFAULT);
   // Textos por defecto tomados de Configuración (si existen). Se usan al crear
@@ -884,9 +902,9 @@ const [empresaEditing, setEmpresaEditing] = useState<EmpresaInfo | null>(null);
       if (error) throw error;
       const list = (data || []) as EmpresaInfo[];
       setEmpresas(list);
-      // Auto-seleccionar la primera si no hay ninguna seleccionada
+      // Por omisión, la empresa con la que cotiza la cuenta (Usuarios); si no, la primera.
       if (list.length > 0 && !empresaSelec) {
-        setEmpresaSelec(list[0]);
+        setEmpresaSelec(list.find(e => e.id === perfil?.empresa_id) || list[0]);
       }
       return list;
     } catch {
@@ -933,6 +951,10 @@ const [empresaEditing, setEmpresaEditing] = useState<EmpresaInfo | null>(null);
       setLevantamientoId(cot.levantamiento_id || null);
       setIncluirFotos(!!cot.incluir_fotos);
       setCotGuardada(isCloning ? null : cot);
+      if (!isCloning && cot.vendedor_id) {
+        const { data: v } = await supabaseCliente.from('profiles').select('id, nombre, email, cargo, telefono').eq('id', cot.vendedor_id).maybeSingle();
+        if (v) setVendedor({ id: v.id, nombre: v.nombre || v.email || '', cargo: v.cargo, telefono: v.telefono, email: v.email });
+      }
       if (!isCloning) { setFolioGenerado(cot.folio); setFechaEmision(cot.created_at); setCapturarFirma(true); }
       else            { obtenerUltimoFolio(); setFechaEmision(null); setFirmaGuardada(null); }
     }
@@ -1560,6 +1582,10 @@ const [empresaEditing, setEmpresaEditing] = useState<EmpresaInfo | null>(null);
   const hasFolio  = folioGenerado !== null;
 
   // ── Empresa fallback (para PDF siempre tener algo) ──
+  const vendedorEfectivo: Vendedor | null = vendedor || (perfil ? {
+    id: perfil.id, nombre: perfil.nombre || perfil.email || '', cargo: perfil.cargo, telefono: perfil.telefono, email: perfil.email,
+  } : null);
+
   const empresaPDF: EmpresaInfo = empresaSelec || {
     nombre: 'InnVolt SpA',
     slogan: 'Servicios Eléctricos y Tecnológicos',
@@ -1628,6 +1654,7 @@ const [empresaEditing, setEmpresaEditing] = useState<EmpresaInfo | null>(null);
           levantamientoId={levantamientoId} incluirFotos={incluirFotos}
           onEnviar={cotGuardada ? () => { setShowPDFModal(false); setShowEnviar(true); } : undefined}
           onClose={() => setShowPDFModal(false)}
+          vendedor={vendedorEfectivo}
         />
       )}
 
@@ -1685,6 +1712,7 @@ const [empresaEditing, setEmpresaEditing] = useState<EmpresaInfo | null>(null);
         <EnviarCotizacionModal
           cot={{ ...cotGuardada, total: totals.total, moneda, clientes: clienteSeleccionado }}
           empresaNombre={empresaSelec?.nombre || 'InnVolt'}
+          vendedor={vendedorEfectivo}
           onClose={() => setShowEnviar(false)}
           onCambio={() => { if (editId) cotizacionesService.getById(editId).then(c => c && setCotGuardada(c)); }}
         />
@@ -1734,16 +1762,17 @@ const [empresaEditing, setEmpresaEditing] = useState<EmpresaInfo | null>(null);
         </div>
 
         <div className="pg-actions">
-          <button onClick={nuevoPresupuesto} className="btn btn-ghost btn-sm"><RefreshCcw size={13} /> Nuevo</button>
+          {!puedeEditarCot && <span className="badge" style={{ background: 'var(--bg3)', color: 'var(--muted)', alignSelf: 'center' }} title="Tu rol puede ver cotizaciones, pero no crearlas ni cambiarlas">Solo lectura</span>}
+          {puedeEditarCot && <button onClick={nuevoPresupuesto} className="btn btn-ghost btn-sm"><RefreshCcw size={13} /> Nuevo</button>}
           <Link href="/cotizador/historial" onClick={e => { if (!confirmarSalida()) e.preventDefault(); }} className="btn btn-ghost btn-sm">
             <History size={13} /> Historial
           </Link>
-          <button onClick={() => fileInputRef.current?.click()} className="btn btn-ghost btn-sm" title="Importar partidas e ítems desde Excel">
+          {puedeEditarCot && <button onClick={() => fileInputRef.current?.click()} className="btn btn-ghost btn-sm" title="Importar partidas e ítems desde Excel">
             <FileUp size={13} /> Excel
-          </button>
-          <button onClick={descargarPlantilla} className="btn btn-ghost btn-sm" title="Descargar plantilla Excel (partidas + ítems)">
+          </button>}
+          {puedeEditarCot && <button onClick={descargarPlantilla} className="btn btn-ghost btn-sm" title="Descargar plantilla Excel (partidas + ítems)">
             <FileText size={13} /> Plantilla
-          </button>
+          </button>}
           {hasFolio && (
             <button
               onClick={() => {
@@ -1755,13 +1784,13 @@ const [empresaEditing, setEmpresaEditing] = useState<EmpresaInfo | null>(null);
               <Download size={13} /> PDF y envío
             </button>
           )}
-          <button onClick={handleGuardar} disabled={loading} className="btn btn-primary btn-sm">
+          {puedeEditarCot && <button onClick={handleGuardar} disabled={loading} className="btn btn-primary btn-sm">
             {loading ? <Loader2 size={13} className="iv-spin" /> : <Save size={13} />}
             {isEditing ? 'Actualizar' : 'Guardar cotización'}
             {hayCambios && !loading && (
               <span title="Hay cambios sin guardar" style={{ width: 7, height: 7, borderRadius: '50%', background: 'var(--danger)', boxShadow: '0 0 0 2px var(--on-accent)', marginLeft: 2 }} />
             )}
-          </button>
+          </button>}
         </div>
       </div>
 
@@ -1789,6 +1818,7 @@ const [empresaEditing, setEmpresaEditing] = useState<EmpresaInfo | null>(null);
             onSelect={setEmpresaSelec}
             onNew={() => { setEmpresaEditing(null); setShowEmpresaModal(true); }}
             onEdit={(emp) => { setEmpresaEditing(emp); setShowEmpresaModal(true); }}
+            cotiza={vendedorEfectivo}
           />
 
           {/* Cliente */}
