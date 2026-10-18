@@ -8,6 +8,7 @@
  * Diseño fijo en claro (como el PDF), independiente del tema del ERP.
  */
 
+import { planEnPalabras } from '@/lib/cotizador/tipos';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useParams } from 'next/navigation';
 import { CheckCircle2, Download, XCircle, Loader2, Clock, AlertTriangle, MessageCircle, Mail, ChevronDown, ChevronUp, FileText } from 'lucide-react';
@@ -91,7 +92,7 @@ export default function CotizacionClientePage() {
         <CotizacionPDF doc={doc} cliente={cliente} empresa={cot.empresa} vendedor={cot.vendedor}
           sucursal={cot.sucursal} contacto={cot.contacto} importante={cot.importante} correoAceptar={cot.correo_aceptar}
           enlace={typeof window !== 'undefined' ? window.location.href.split('?')[0] : null}
-          marca={cot.estado === 'Anulada' ? 'ANULADA' : null} fotos={cot.fotos}
+          marca={cot.estado === 'Anulada' ? 'ANULADA' : null} fotos={cot.fotos} planCobro={cot.plan_cobro}
           aceptacion={cot.estado === 'Aprobada' && cot.respondida_por && cot.respondida_at
             ? { nombre: cot.respondida_por, rut: cot.respondida_rut, fecha: cot.respondida_at, firma: cot.respuesta_firma }
             : null} />,
@@ -271,6 +272,12 @@ export default function CotizacionClientePage() {
                 </figure>
               ))}
             </div>
+          </Tarjeta>
+        )}
+
+        {(cot.plan_cobro || []).some(h => h.porcentaje > 0) && (
+          <Tarjeta titulo="Forma de pago">
+            <p style={{ fontSize: 14, color: '#333', margin: 0 }}>{(() => { const t = planEnPalabras(cot.plan_cobro || []); return t[0].toUpperCase() + t.slice(1) + '.'; })()}</p>
           </Tarjeta>
         )}
 

@@ -19,7 +19,7 @@ import { Document, Page, Text, View, StyleSheet, Image } from '@react-pdf/render
 import type { Cliente, Vendedor } from '@/types';
 import type { EmpresaInfo } from '@/components/pdf/PresupuestoPDF';
 import type { CotizacionDoc, Linea, PartidaCot, Seccion } from '@/lib/cotizador/tipos';
-import { TITULO_VALORIZACION } from '@/lib/cotizador/tipos';
+import { planEnPalabras, TITULO_VALORIZACION, type HitoCobro } from '@/lib/cotizador/tipos';
 import { calcular, cantidadLegible, filasDelCliente, formatMonto, type Resultado } from '@/lib/cotizador/calculo';
 import { formatDate } from '@/utils';
 
@@ -125,6 +125,8 @@ function TextoFormato({ texto, estilo = s.texto }: { texto?: string | null; esti
 }
 
 export interface CotizacionPDFProps {
+  /** Fase 7: cómo se cobra (hitos); se imprime como «Forma de pago». */
+  planCobro?: HitoCobro[] | null;
   doc: CotizacionDoc;
   cliente: Cliente | null;
   empresa: EmpresaInfo;
@@ -253,6 +255,12 @@ export default function CotizacionPDF(p: CotizacionPDFProps) {
           <Text style={s.invK}>Neto</Text><Text style={[s.invV, { marginBottom: 0 }]}>{fmt(r.totales.neto)}</Text>
         </View>
       </View>
+      {(p.planCobro || []).some(h => h.porcentaje > 0) ? (
+        <View style={[s.importante, { marginBottom: 4 }]} wrap={false}>
+          <Text style={s.rotulo}>FORMA DE PAGO</Text>
+          <Text style={{ ...s.texto, fontSize: 7.8 }}>{planEnPalabras(p.planCobro || [])[0].toUpperCase() + planEnPalabras(p.planCobro || []).slice(1)}.</Text>
+        </View>
+      ) : null}
       <View style={s.importante} wrap={false}>
         <Text style={s.rotulo}>IMPORTANTE</Text>
         <TextoFormato estilo={{ ...s.texto, fontSize: 7.6, color: MUTED }} texto={(p.importante || empresa.texto_importante || '').trim() ||

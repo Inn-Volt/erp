@@ -73,7 +73,7 @@ export default function TarjetaPartida(props: {
   const utilidad = neto - costo;
   const recetasF = props.recetas.filter(r => !buscaReceta.trim() || r.nombre.toLowerCase().includes(buscaReceta.trim().toLowerCase())).slice(0, 50);
 
-  const cols = `minmax(220px,1fr) 92px ${verCostos ? '86px 70px 70px ' : ''}${instalacion ? '96px 96px' : '100px'} 66px 108px 32px`;
+  const cols = `minmax(220px,1fr) 116px ${verCostos ? '124px 92px 92px ' : ''}${instalacion ? '100px 100px' : '108px'} 84px 112px 32px`;
   const th: React.CSSProperties = { fontSize: '0.66rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.4, color: 'var(--muted)', textAlign: 'right' };
 
   return (
@@ -204,12 +204,12 @@ export default function TarjetaPartida(props: {
                 : instalacion ? 'Busca arriba lo que lleva: cada producto trae su instalación.' : 'Busca arriba los productos que se venden.'}
             </p>
           ) : (
-            <div style={{ minWidth: verCostos ? 900 : 680 }}>
+            <div style={{ minWidth: verCostos ? 1080 : 760 }}>
               <div style={{ display: 'grid', gridTemplateColumns: cols, gap: 8, padding: '0.4rem 0.7rem', borderBottom: '1px solid var(--border2)' }}>
                 <span style={{ ...th, textAlign: 'left' }}>Descripción</span><span style={th}>Cant.</span>
-                {verCostos && <><span style={th}>Costo</span><span style={th} title="Sobre el costo">Ganancia</span><span style={th} title="Sobre lo que paga el cliente">Utilidad</span></>}
+                {verCostos && <><span style={th} title="Costo unitario">Costo unit.</span><span style={th} title="% sobre el costo">Ganancia</span><span style={th} title="% sobre lo que paga el cliente">Utilidad</span></>}
                 {instalacion ? <><span style={th} title="Valor del producto por unidad">Equipo</span><span style={th} title="Mano de obra por unidad del producto">HH</span></> : <span style={th}>Precio</span>}
-                <span style={th}>Desc. %</span><span style={th}>Total</span><span />
+                <span style={th}>Desc.</span><span style={th}>Total</span><span />
               </div>
               {grupos.map((g, n) => {
                 const conMano = instalacion && g.ligadas.length > 0;
@@ -312,10 +312,10 @@ function FilaLinea({ l, esLigada, cols, instalacion, calc, moneda, fila, ligadas
         {l.fuera && !l.ajustada && editable && (
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 4, paddingLeft: 4, alignItems: 'flex-end' }}>
             {!verCostos && <>
-              <label style={{ width: 110 }}><span style={{ fontSize: '0.66rem', color: 'var(--muted)' }}>Costo unitario</span>
-                <CeldaNum valor={l.costo} onCambiar={v => acc.cambiar(l.id, { costo: v ?? 0 })} etiqueta="Costo unitario" /></label>
-              <label style={{ width: 80 }}><span style={{ fontSize: '0.66rem', color: 'var(--muted)' }}>Ganancia %</span>
-                <CeldaNum valor={l.ganancia} decimales={1} vacio onCambiar={v => acc.cambiar(l.id, { ganancia: v })} etiqueta="Ganancia %" /></label>
+              <label style={{ width: 130 }}><span style={{ fontSize: '0.66rem', color: 'var(--muted)' }}>Costo unitario</span>
+                <CeldaNum valor={l.costo} onCambiar={v => acc.cambiar(l.id, { costo: v ?? 0 })} etiqueta="Costo unitario" prefijo={moneda === 'UF' ? 'UF' : '$'} decimales={moneda === 'UF' ? 4 : 0} /></label>
+              <label style={{ width: 96 }}><span style={{ fontSize: '0.66rem', color: 'var(--muted)' }}>Ganancia %</span>
+                <CeldaNum valor={l.ganancia} decimales={1} sufijo="%" vacio onCambiar={v => acc.cambiar(l.id, { ganancia: v })} etiqueta="Ganancia %" /></label>
             </>}
             <label style={{ width: 80 }}><span style={{ fontSize: '0.66rem', color: 'var(--muted)' }}>Unidad</span>
               <input className="input" style={campoChico} list="unidades-de-item" maxLength={20} value={l.unidad} onChange={e => acc.cambiar(l.id, { unidad: e.target.value })} /></label>
@@ -332,13 +332,14 @@ function FilaLinea({ l, esLigada, cols, instalacion, calc, moneda, fila, ligadas
         <NumeroInput className="input" min={0} decimales={3} disabled={!editable} value={l.cantidad} ariaLabel="Cantidad"
           onChange={v => acc.cantidad(l.id, v)} envoltura={{ width: 62 }}
           style={{ ...campoChico, textAlign: 'right', color: esLigada && !l.cantidadAMano ? 'var(--muted)' : undefined }} />
-        <span style={{ fontSize: '0.66rem', color: 'var(--muted)', width: 22, overflow: 'hidden' }}>{l.unidad}</span>
+        <span title={l.unidad} style={{ fontSize: '0.68rem', color: 'var(--muted)', width: 40, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{l.unidad}</span>
       </div>
       {verCostos && (editable ? <>
-        <CeldaNum valor={l.costo} etiqueta="Costo unitario (no cambia la biblioteca)" onCambiar={v => acc.ajustar(l.id, { costo: v ?? 0 })} />
-        <CeldaNum valor={l.fuera ? l.ganancia : c?.ganancia} decimales={1} vacio={!!l.fuera} etiqueta="Ganancia % sobre el costo (no cambia la biblioteca)"
+        <CeldaNum valor={l.costo} etiqueta="Costo unitario (no cambia la biblioteca)" onCambiar={v => acc.ajustar(l.id, { costo: v ?? 0 })}
+          prefijo={moneda === 'UF' ? 'UF' : '$'} decimales={moneda === 'UF' ? 4 : 0} />
+        <CeldaNum valor={l.fuera ? l.ganancia : c?.ganancia} decimales={1} sufijo="%" vacio={!!l.fuera} etiqueta="Ganancia % sobre el costo (no cambia la biblioteca)"
           onCambiar={v => acc.ajustar(l.id, { ganancia: v })} />
-        <CeldaNum valor={c?.margenReal} decimales={1} etiqueta="Utilidad % sobre lo que paga el cliente" color={bajoCosto ? 'var(--danger)' : undefined}
+        <CeldaNum valor={c?.margenReal} decimales={1} sufijo="%" etiqueta="Utilidad % sobre lo que paga el cliente" color={bajoCosto ? 'var(--danger)' : undefined}
           onCambiar={v => {
             if (v === null) return;
             // La ganancia que deja esa utilidad después del descuento de la línea.
@@ -360,7 +361,7 @@ function FilaLinea({ l, esLigada, cols, instalacion, calc, moneda, fila, ligadas
           <button type="button" onClick={onDesplegar} title="El producto y su instalación llevan distinto descuento: despliégala para cambiar cada uno"
             style={{ width: '100%', border: '1px dashed var(--border2)', borderRadius: 6, background: 'none', fontSize: '0.72rem', color: 'var(--muted)', cursor: 'pointer', padding: '0.3rem' }}>varios</button>
         ) : (
-          <NumeroInput className="input" min={0} max={100} disabled={!editable} value={l.descuento || 0} ariaLabel="% de descuento"
+          <NumeroInput className="input" min={0} max={100} sufijo="%" disabled={!editable} value={l.descuento || 0} ariaLabel="% de descuento"
             onChange={v => {
               if (delGrupo) [l, ...ligadas].forEach(x => acc.cambiar(x.id, { descuento: v })); else acc.cambiar(l.id, { descuento: v });
             }} style={{ ...campoChico, textAlign: 'right' }} />
@@ -402,12 +403,13 @@ function FilaLinea({ l, esLigada, cols, instalacion, calc, moneda, fila, ligadas
 
 /** Un número de la tabla, con formato chileno (42.330 · 24,8): mientras se escribe se respeta el
  *  texto; al salir se ve formateado. Cada cambio válido se aplica al tiro. */
-function CeldaNum({ valor, onCambiar, etiqueta, decimales = 4, vacio = false, color }: {
+function CeldaNum({ valor, onCambiar, etiqueta, decimales = 4, vacio = false, color, prefijo, sufijo }: {
   valor: number | null | undefined; onCambiar: (v: number | null) => void; etiqueta: string;
-  decimales?: number; vacio?: boolean; color?: string;
+  decimales?: number; vacio?: boolean; color?: string; prefijo?: string; sufijo?: string;
 }) {
   return (
     <NumeroInput className="input" value={valor} mostrarCero decimales={decimales} min={0} ariaLabel={etiqueta} title={etiqueta}
+      prefijo={prefijo} sufijo={sufijo}
       onChange={v => onCambiar(v)} onVacio={vacio ? () => onCambiar(null) : undefined}
       envoltura={{ alignSelf: 'center' }}
       style={{ ...campoChico, textAlign: 'right', color, fontWeight: color ? 700 : undefined }} />

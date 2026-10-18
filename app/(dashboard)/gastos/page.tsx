@@ -1,10 +1,10 @@
 'use client';
 
 /**
- * Finanzas → Rendiciones (como en TecApp, sin aprobar ni rechazar).
- * Cada uno rinde sus gastos con la foto de la boleta, siempre en una OT: el gasto suma al
- * costo real de esa OT y a su margen. Lo pagado de su bolsillo (sin anticipo) se le
- * reembolsa: quien paga las rendiciones lo marca «Pagado».
+ * Finanzas → Gastos y anticipos (sin aprobar ni rechazar).
+ * Cada uno rinde sus gastos con la foto de la boleta, siempre en un trabajo (cotización
+ * aprobada) o un proyecto: el gasto suma al costo real y se compara con lo cotizado. Lo
+ * pagado de su bolsillo (sin anticipo) se le reembolsa: quien paga lo marca «Pagado».
  */
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
@@ -12,14 +12,15 @@ import Link from 'next/link';
 import { Camera, Check, Plus, Trash2 } from 'lucide-react';
 import PageHeader from '@/components/PageHeader';
 import FaltaSQL from '@/components/FaltaSQL';
-import NuevoGasto from '@/components/gastos/NuevoGasto';
+import NuevoGasto, { type DestinoGasto } from '@/components/gastos/NuevoGasto';
+import { trabajosService } from '@/services/trabajos';
 import {
-  archivosOT, CATEGORIAS_GASTO, faltaFase2, folioOT, gastosService, otService,
-  type Gasto, type OrdenTrabajo,
+  archivosOT, CATEGORIAS_GASTO, faltaFase2, folioOT, gastosService,
+  type Gasto,
 } from '@/services/operacion';
 import { vendedoresService } from '@/services/vendedores';
 import Anticipos from '@/components/gastos/Anticipos';
-import { anticiposService, type Anticipo } from '@/services/fase5';
+import { anticiposService, folioProyecto, proyectosService, type Anticipo } from '@/services/fase5';
 import { usePermisos } from '@/hooks/usePermisos';
 import { useToast } from '@/hooks/useToast';
 import { fechaLocal, formatCLP, formatDate } from '@/utils';
@@ -34,6 +35,7 @@ const ESTADOS: Record<Gasto['estado'], { nombre: string; color: string }> = {
   rechazado: { nombre: 'Rechazado', color: '#dc2626' },
 };
 const categoria = (c: string) => CATEGORIAS_GASTO.find(x => x.clave === c)?.nombre || c;
+const destinoDe = (g: Gasto) => (g.cotizacion_id ? `cot:${g.cotizacion_id}` : g.proyecto_id ? `proy:${g.proyecto_id}` : g.ot_id ? `ot:${g.ot_id}` : '');
 const porPagar = (g: Gasto) => ['rendido', 'aprobado', 'pendiente'].includes(g.estado) && !g.anticipo_id;
 
 export default function GastosPage() {
@@ -42,22 +44,23 @@ export default function GastosPage() {
   const verTodos = puedeAlguno(['gastos.ver_todos', 'gastos.aprobar']);
   const paga = puede('gastos.aprobar');
   const [gastos, setGastos] = useState<Gasto[]>([]);
-  const [ots, setOts] = useState<OrdenTrabajo[]>([]);
+  const [destinos, setDestinos] = useState<DestinoGasto[]>([]);
   const [equipo, setEquipo] = useState<Record<string, Vendedor>>({});
   const [cargando, setCargando] = useState(true);
   const [falta, setFalta] = useState(false);
   const [vista, setVista] = useState<'mios' | 'todos'>('mios');
   const [persona, setPersona] = useState('');
-  const [otFiltro, setOtFiltro] = useState('');
+  const [destinoFiltro, setDestinoFiltro] = useState('');
   const [nuevo, setNuevo] = useState(false);
-  const [otInicial, setOtInicial] = useState('');
+  const [destinoInicial, setDestinoInicial] = useState('');
   const [urlBoleta, setUrlBoleta] = useState<string | null>(null);
   const [anticipos, setAnticipos] = useState<Anticipo[]>([]);
 
   useEffect(() => {
-    // /gastos?ot=<id> (desde una OT) abre el formulario con esa OT.
-    const ot = new URLSearchParams(window.location.search).get('ot');
-    if (ot) { setOtInicial(ot); setNuevo(true); }
+    // /gastos?cotizacion=<id> o ?proyecto=<id> (desde un trabajo o un proyecto) abre el formulario con ese destino.
+    const q = new URLSearchParams(window.location.search);
+    const d = q.get('cotizacion') ? `cot:${q.get('cotizacion')}` : q.get('proyecto') ? `proy:${q.get('proyecto')}` : q.get('ot') ? `ot:${q.get('ot')}` : '';
+    if (d) { setDestinoInicial(d); setNuevo(true); }
   }, []);
   useEffect(() => { if (paga) setVista('todos'); }, [paga]);
 
@@ -66,7 +69,10 @@ export default function GastosPage() {
     try {
       const [g, e] = await Promise.all([gastosService.listar(verTodos ? null : perfil.id), vendedoresService.mapa()]);
       setGastos(g); setEquipo(e);
-      otService.listar().then(o => setOts(o.filter(x => x.estado !== 'anulada'))).catch(() => {});
+      Promise.all([trabajosService.listar().catch(() => []), proyectosService.listar().catch(() => [])]).then(([t, p]) => setDestinos([
+        ...t.map(x => ({ valor: `cot:${x.id}`, etiqueta: `IV-${String(x.folio).padStart(4, '0')} · ${x.titulo || 'Cotización'}${x.clientes?.nombre_cliente ? ` · ${x.clientes.nombre_cliente}` : ''}`, grupo: 'Trabajos' as const })),
+        ...p.filter(x => !['terminado', 'cancelado'].includes(x.estado)).map(x => ({ valor: `proy:${x.id}`, etiqueta: `${folioProyecto(x.folio)} · ${x.nombre}`, grupo: 'Proyectos' as const })),
+      ]));
       anticiposService.listar(verTodos ? null : perfil.id).then(setAnticipos).catch(() => setAnticipos([]));
     } catch (err) { if (faltaFase2(err)) setFalta(true); else toastError('No se pudieron cargar las rendiciones: ' + (err instanceof Error ? err.message : '')); }
     finally { setCargando(false); }
@@ -76,7 +82,7 @@ export default function GastosPage() {
   const lista = useMemo(() => gastos
     .filter(g => vista === 'mios' ? g.usuario_id === perfil?.id : true)
     .filter(g => !persona || g.usuario_id === persona)
-    .filter(g => !otFiltro || g.ot_id === otFiltro), [gastos, vista, persona, otFiltro, perfil]);
+    .filter(g => !destinoFiltro || destinoDe(g) === destinoFiltro), [gastos, vista, persona, destinoFiltro, perfil]);
 
   // Por pagar: lo rendido de su bolsillo (sin anticipo) que aún no se reembolsa, por persona.
   const rendicion = useMemo(() => {
@@ -111,15 +117,15 @@ export default function GastosPage() {
 
   return (
     <div className="anim-in">
-      {nuevo && <NuevoGasto ots={ots.filter(o => o.estado !== 'cerrada' || o.id === otInicial)} otInicial={otInicial} anticipos={anticipos.filter(a => a.usuario_id === perfil?.id)}
+      {nuevo && <NuevoGasto destinos={destinos} destinoInicial={destinoInicial} anticipos={anticipos.filter(a => a.usuario_id === perfil?.id)}
         onClose={() => setNuevo(false)} onListo={() => { setNuevo(false); cargar(); }} />}
       {urlBoleta && (
         <div className="modal-overlay" onClick={() => setUrlBoleta(null)}>
           <img src={urlBoleta} alt="Boleta" style={{ maxWidth: '92vw', maxHeight: '88vh', borderRadius: 8 }} />
         </div>
       )}
-      <PageHeader eyebrow="Finanzas" title="Rendiciones" subtitle="Rinde cada gasto con su boleta en la OT. No se aprueba: queda rendido y suma al costo de la OT."
-        actions={puede('gastos.crear') ? <button className="btn btn-primary" onClick={() => { setOtInicial(''); setNuevo(true); }}><Plus size={14} /> Rendir gasto</button> : null} />
+      <PageHeader eyebrow="Finanzas" title="Gastos y anticipos" subtitle="Rinde cada gasto con su boleta en el trabajo o el proyecto: suma al costo real y se compara con lo cotizado."
+        actions={puede('gastos.crear') ? <button className="btn btn-primary" onClick={() => { setDestinoInicial(''); setNuevo(true); }}><Plus size={14} /> Rendir gasto</button> : null} />
 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: 8, marginBottom: 12 }}>
         <div className="kpi-card"><p className="label-muted">Rendí este mes</p><p className="kpi-value">{formatCLP(suma(mios.filter(g => g.fecha.startsWith(mes))))}</p></div>
@@ -127,7 +133,7 @@ export default function GastosPage() {
         {paga && <div className="kpi-card"><p className="label-muted">Por pagar a todos</p><p className="kpi-value">{formatCLP(rendicion.reduce((s, [, m]) => s + m, 0))}</p></div>}
       </div>
 
-      <Anticipos anticipos={anticipos} equipo={equipo} ots={ots} aprueba={paga} yo={perfil?.id} onCambio={cargar} />
+      <Anticipos anticipos={anticipos} equipo={equipo} destinos={destinos} aprueba={paga} yo={perfil?.id} onCambio={cargar} />
 
       {paga && rendicion.length > 0 && (
         <div className="panel-y" style={{ marginBottom: 12 }}>
@@ -154,8 +160,8 @@ export default function GastosPage() {
               <option value="">Todas las personas</option>{Object.values(equipo).map(p => <option key={p.id} value={p.id}>{p.nombre}</option>)}
             </select>
           )}
-          <select className="input" style={{ maxWidth: 260 }} value={otFiltro} onChange={e => setOtFiltro(e.target.value)}>
-            <option value="">Todas las OT</option>{ots.map(o => <option key={o.id} value={o.id}>{folioOT(o.folio)} · {o.titulo}</option>)}
+          <select className="input" style={{ maxWidth: 300 }} value={destinoFiltro} onChange={e => setDestinoFiltro(e.target.value)}>
+            <option value="">Todos los trabajos y proyectos</option>{destinos.map(d => <option key={d.valor} value={d.valor}>{d.etiqueta}</option>)}
           </select>
         </div>
         {cargando ? <div style={{ padding: '1.5rem' }}><div className="skeleton" style={{ height: 120 }} /></div>
@@ -166,7 +172,9 @@ export default function GastosPage() {
                 <span style={{ display: 'block', fontWeight: 600, color: 'var(--text)', fontSize: '0.9rem' }}>{categoria(g.categoria)}{g.descripcion ? ` · ${g.descripcion}` : ''}</span>
                 <span style={{ fontSize: '0.78rem', color: 'var(--muted)' }}>
                   {formatDate(g.fecha)}{g.usuario_id !== perfil?.id ? ` · ${equipo[g.usuario_id]?.nombre || ''}` : ''}
-                  {g.ot_id ? <> · <Link href={`/ordenes/${g.ot_id}`}>{folioOT(g.ordenes_trabajo?.folio)}</Link></> : ' · sin OT'}
+                  {g.cotizacion_id ? <> · <Link href={`/cotizador?edit=${g.cotizacion_id}`}>IV-{String(g.cotizaciones?.folio ?? '').padStart(4, '0')}</Link></>
+                    : g.proyecto_id ? <> · <Link href={`/proyectos/${g.proyecto_id}`}>{folioProyecto(g.proyectos?.folio ?? 0)}</Link></>
+                    : g.ot_id ? <> · {folioOT(g.ordenes_trabajo?.folio)}</> : ''}
                   {g.anticipo_id ? ' · contra anticipo' : ''}
                 </span>
               </span>

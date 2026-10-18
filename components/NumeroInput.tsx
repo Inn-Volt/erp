@@ -65,12 +65,12 @@ export default function NumeroInput({
 
   const adorno: React.CSSProperties = {
     position: 'absolute', top: '50%', transform: 'translateY(-50%)',
-    color: 'var(--muted)', fontSize: '0.82rem', pointerEvents: 'none',
+    color: 'var(--muted)', fontSize: '0.78rem', pointerEvents: 'none',
   };
 
   return (
     <div style={{ position: 'relative', width: '100%', ...envoltura }}>
-      {prefijo && <span style={{ ...adorno, left: 10 }}>{prefijo}</span>}
+      {prefijo && <span style={{ ...adorno, left: 8 }}>{prefijo}</span>}
       <input
         type="text"
         inputMode="decimal"
@@ -101,11 +101,12 @@ export default function NumeroInput({
         className={className}
         style={{
           ...style,
-          paddingLeft: prefijo ? '1.5rem' : style?.paddingLeft,
-          paddingRight: sufijo ? '1.5rem' : style?.paddingRight,
+          // El espacio del adorno según su largo ($ · UF · %), para que el número nunca lo pise.
+          paddingLeft: prefijo ? `${0.85 + prefijo.length * 0.5}rem` : style?.paddingLeft,
+          paddingRight: sufijo ? `${0.85 + sufijo.length * 0.5}rem` : style?.paddingRight,
         }}
       />
-      {sufijo && <span style={{ ...adorno, right: 10 }}>{sufijo}</span>}
+      {sufijo && <span style={{ ...adorno, right: 8 }}>{sufijo}</span>}
     </div>
   );
 }

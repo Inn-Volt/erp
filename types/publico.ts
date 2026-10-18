@@ -1,6 +1,7 @@
 // Datos de una cotización tal como los ve el CLIENTE en el link público (/c/<token>).
 // Nunca incluye costos, márgenes, imprevistos ni supuestos internos.
 
+import type { HitoCobro } from '@/lib/cotizador/tipos';
 import type { Cliente, CotizacionItem, Moneda, Partida } from '@/types';
 import type { EstadoCot, QueVe, Seccion } from '@/lib/cotizador/tipos';
 import type { EmpresaInfo } from '@/components/pdf/PresupuestoPDF';
@@ -22,6 +23,8 @@ export interface CotizacionPublica {
   titulo_valorizacion: string | null;
   aclaraciones: string;
   secciones: Seccion[];
+  /** Fase 7: forma de pago (cobros por hitos). */
+  plan_cobro: HitoCobro[] | null;
   /** Ajustes: si el cliente puede responder en línea, «Importante» y el correo de «Cómo aceptar». */
   responde_en_linea: boolean;
   importante: string | null;

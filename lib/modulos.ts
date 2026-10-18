@@ -6,8 +6,10 @@
  *  · bodega   — stock, movimientos, pedidos de material y catastro (InnVolt aún no tiene stock;
  *               el material de cada trabajo se rinde como gasto de la OT).
  *  · personas — competencias y organigrama (para equipos grandes).
+ *  · ot       — órdenes de trabajo, Mis OT e informes de visita: InnVolt es de cotizaciones y
+ *               trabajo administrativo; el trabajo aprobado se sigue en la cotización (fase 7).
  */
-export const MODULOS_APAGADOS: readonly string[] = ['bodega', 'personas'];
+export const MODULOS_APAGADOS: readonly string[] = ['bodega', 'personas', 'ot'];
 
 export const encendido = (modulo: string) => !MODULOS_APAGADOS.includes(modulo);
 
@@ -15,6 +17,7 @@ export const encendido = (modulo: string) => !MODULOS_APAGADOS.includes(modulo);
 const RUTAS: Record<string, string[]> = {
   bodega: ['/bodega'],
   personas: ['/personas'],
+  ot: ['/ordenes', '/mis-ot'],
 };
 
 /** ¿La dirección es de un módulo apagado? */

@@ -7,7 +7,8 @@
  *   /cotizador?clone=<id>           clonar (copia nueva en borrador)
  *   /cotizador?cliente=<id>         nueva para ese cliente
  *   /cotizador?solicitud=<id>       nueva desde una solicitud analizada con IA
- *   /cotizador?ot=<id>              nueva desde una OT (lo que vio el técnico y sus fotos)
+ *   /cotizador?visita=<id>          nueva desde una visita de la agenda (lo que se vio y sus fotos)
+ *   /cotizador?ot=<id>              nueva desde una OT (de antes)
  */
 
 import { Suspense } from 'react';
@@ -21,7 +22,7 @@ function Cotizador() {
   const clone = sp.get('clone');
   return (
     <EditorCotizacion key={id || clone || 'nueva'} id={id} clonarDe={clone}
-      clienteInicial={sp.get('cliente')} solicitudInicial={sp.get('solicitud')} otInicial={sp.get('ot')} proyectoInicial={sp.get('proyecto')} />
+      clienteInicial={sp.get('cliente')} solicitudInicial={sp.get('solicitud')} otInicial={sp.get('ot')} visitaInicial={sp.get('visita')} proyectoInicial={sp.get('proyecto')} />
   );
 }
 

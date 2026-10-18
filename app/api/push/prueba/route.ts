@@ -13,7 +13,7 @@ export async function POST(req: Request) {
   const falta = pushConfigurado();
   if (falta) return NextResponse.json({ error: falta }, { status: 503 });
   try {
-    const r = await enviarPush(user.id, { titulo: 'Avisos de InnVolt activos', cuerpo: 'Así te llegará cuando te asignen una OT.', url: '/mis-ot', tipo: 'prueba' });
+    const r = await enviarPush(user.id, { titulo: 'Avisos de InnVolt activos', cuerpo: 'Así te llegarán las solicitudes nuevas, las cotizaciones aprobadas y lo demás.', url: '/inicio', tipo: 'prueba' });
     if (!r.dispositivos) return NextResponse.json({ error: 'Este usuario no tiene equipos con avisos activos.' }, { status: 404 });
     return NextResponse.json(r);
   } catch (e) {

@@ -268,7 +268,7 @@ export default function DetalleOTPage() {
     <div className="anim-in">
       {abierto && <InformeVisita ot={ot} informe={abierto} empresa={empresa} tecnicoNombre={nombre(abierto.tecnico_id)} puedeReabrir={puedeCerrar}
         onCerrar={() => setInformeAbierto(null)} onCambio={cargar} />}
-      {rindiendo && <NuevoGasto ots={[ot]} otInicial={ot.id} anticipos={misAnticipos} onClose={() => setRindiendo(false)}
+      {rindiendo && <NuevoGasto destinos={[{ valor: `ot:${ot.id}`, etiqueta: `${folioOT(ot.folio)} · ${ot.titulo}`, grupo: 'OT' }]} destinoInicial={`ot:${ot.id}`} anticipos={misAnticipos} onClose={() => setRindiendo(false)}
         onListo={() => { setRindiendo(false); cargar(); }} />}
       {motivoPara && (
         <div className="modal-overlay">

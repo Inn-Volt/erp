@@ -1,5 +1,6 @@
 'use client';
 
+import { encendido } from '@/lib/modulos';
 import { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import {
@@ -439,7 +440,7 @@ function DetalleSolicitud({ sol, onClose, onChange, onEdit, onDelete }: {
               <ExternalLink size={13} /> Ver OT-{String(o.folio).padStart(4, '0')} ({estadoOT(o.estado).nombre.toLowerCase()})
             </button>
           ))}
-          {puede('ot.crear') && (
+          {encendido('ot') && puede('ot.crear') && (
             <button onClick={() => router.push(`/ordenes?solicitud=${sol.id}`)} className="btn btn-ghost btn-sm" style={{ width: '100%', justifyContent: 'center' }}
               title="El técnico recibe el aviso en el celular, hace el informe con fotos y desde la OT se cotiza">
               <CalendarPlus size={13} /> Crear OT de visita técnica

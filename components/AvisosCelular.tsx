@@ -18,7 +18,7 @@ const AYUDA: Record<EstadoPush, string> = {
   'instalar-ios': 'En iPhone: toca Compartir → «Agregar a pantalla de inicio», abre InnVolt desde ese ícono y actívalos ahí.',
   'sin-servidor': 'Falta configurar el envío en el servidor (claves VAPID en Netlify). Avísale al administrador.',
   bloqueado: 'Bloqueaste los avisos para InnVolt. Actívalos en los ajustes del navegador o del teléfono (Notificaciones).',
-  inactivo: 'Actívalos para que te llegue al celular cuando te asignen una OT o una visita, aunque la app esté cerrada.',
+  inactivo: 'Actívalos para que te llegue al celular cuando entre una solicitud, el cliente responda una cotización o te asignen algo, aunque la app esté cerrada.',
   activo: 'Activos en este equipo. Te llegan aunque InnVolt esté cerrada.',
 };
 

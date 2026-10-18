@@ -7,6 +7,8 @@
  * (nombre, RUT, logo, giro, banco) siguen en Configuración → Empresas.
  */
 
+import PlanCobro, { sumaPlan } from '@/components/cotizador/PlanCobro';
+import { PLAN_COBRO_BASE } from '@/lib/cotizador/tipos';
 import EditorFormato from '@/components/EditorFormato';
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
@@ -35,12 +37,14 @@ export default function AjustesCotPage() {
   if (!a) return <div className="skeleton" style={{ height: 300 }} />;
 
   const guardar = async () => {
+    if (a.plan_cobro && sumaPlan(a.plan_cobro) !== 100) { toastError('Los cobros de la forma de pago tienen que sumar 100 %.'); return; }
     setGuardando(true);
     try {
       await ajustesService.guardar({
         dias_validez: Math.min(Math.max(Number(a.dias_validez) || 15, 1), 365), aclaraciones: a.aclaraciones || null, importante: a.importante || null,
         correo_aceptar: a.correo_aceptar || null, usa_presentacion: a.usa_presentacion, responde_en_linea: a.responde_en_linea,
         asunto_correo: a.asunto_correo, mensaje_correo: a.mensaje_correo, mensaje_whatsapp: a.mensaje_whatsapp,
+        ...('plan_cobro' in a ? { plan_cobro: a.plan_cobro && a.plan_cobro.length ? a.plan_cobro : PLAN_COBRO_BASE } : {}),
       });
       success('Ajustes guardados. Las cotizaciones ya hechas no cambian.');
     } catch (e) { toastError(e instanceof Error ? e.message : 'No se pudo guardar'); }
@@ -73,6 +77,10 @@ export default function AjustesCotPage() {
           <EditorFormato valor={a.aclaraciones || ''} onCambiar={t => setA({ ...a, aclaraciones: t })} alto={150} etiqueta="Aclaraciones y garantías por omisión" /></div>
         <div><span className="label-muted">Texto «Importante» (va con la inversión total; vacío usa el de la empresa)</span>
           <EditorFormato valor={a.importante || ''} onCambiar={t => setA({ ...a, importante: t })} alto={70} etiqueta="Texto Importante" /></div>
+        {'plan_cobro' in a && (
+          <div><span className="label-muted">Forma de pago de las cotizaciones nuevas (cobros por hitos; cada cotización la puede cambiar)</span>
+            <PlanCobro plan={a.plan_cobro && a.plan_cobro.length ? a.plan_cobro : PLAN_COBRO_BASE} onCambiar={p => setA({ ...a, plan_cobro: p })} /></div>
+        )}
         <div style={fila}>
           <label style={{ display: 'flex', gap: 8, alignItems: 'center', color: 'var(--text)' }}>
             <input type="checkbox" checked={a.usa_presentacion} onChange={e => setA({ ...a, usa_presentacion: e.target.checked })} style={{ accentColor: 'var(--y-brand)', width: 16, height: 16 }} />

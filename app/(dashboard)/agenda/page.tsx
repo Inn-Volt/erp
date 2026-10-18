@@ -1,10 +1,11 @@
 'use client';
 
-import { useState, useEffect, useCallback, Suspense } from 'react';
+import { fotosService } from '@/services/fotos';
+import { useState, useEffect, useCallback, useRef, Suspense } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import {
   Calendar, Plus, X, Loader2, Search, Trash2, MapPin, User,
-  CalendarPlus, Download, Inbox, AlertTriangle,
+  CalendarPlus, Download, Inbox, AlertTriangle, Camera, FileText,
 } from 'lucide-react';
 import { agendaService } from '@/services/agenda';
 import { clientesService } from '@/services/clientes';
@@ -80,6 +81,26 @@ function AgendaModal({ cita, clientes, createdBy, prefill, onClose, onSaved, onD
   const [estado, setEstado] = useState<EstadoAgenda>(cita?.estado || 'Agendada');
   const [notas, setNotas] = useState(cita?.notas || '');
   const [saving, setSaving] = useState(false);
+  // Fase 7: lo que se vio en la visita (notas y fotos), que pasa a la cotización.
+  const conVisita = !!cita && 'fotos' in cita;
+  const [notasVisita, setNotasVisita] = useState(cita?.notas_visita || '');
+  const [fotos, setFotos] = useState<{ path: string; caption: string }[]>(cita?.fotos || []);
+  const [urlsFotos, setUrlsFotos] = useState<Record<string, string>>({});
+  const [subiendo, setSubiendo] = useState(false);
+  const router = useRouter();
+  useEffect(() => {
+    if (fotos.length) fotosService.urls(fotos.map(f => f.path)).then(u => setUrlsFotos(x => ({ ...x, ...u }))).catch(() => {});
+  }, [fotos]);
+  const subirFotos = async (files: FileList | null) => {
+    if (!files?.length || !cita) return;
+    setSubiendo(true);
+    try {
+      const nuevas: { path: string; caption: string }[] = [];
+      for (const f of Array.from(files).slice(0, 12)) nuevas.push({ path: await fotosService.subir(`visitas/${cita.id}`, f), caption: '' });
+      setFotos(x => [...x, ...nuevas]);
+    } catch (e) { toastError(e instanceof Error ? e.message : 'No se pudo subir la foto'); }
+    finally { setSubiendo(false); }
+  };
 
   const toggleTipo = (t: TipoServicio) => setTipos(p => p.includes(t) ? p.filter(x => x !== t) : [...p, t]);
 
@@ -103,6 +124,8 @@ function AgendaModal({ cita, clientes, createdBy, prefill, onClose, onSaved, onD
   const evento = eventoDe({ titulo, direccion, fecha, hora_inicio: horaIni, hora_fin: horaFin, notas, folio: cita?.folio });
   const diaFecha = fecha ? tipoDia(fecha) : { tipo: 'laboral' as const, nombre: null };
 
+  // «Guardar y cotizar»: se lee en el mismo clic que envía el formulario (un estado llegaría tarde).
+  const cotizarDespues = useRef(false);
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!titulo.trim()) { toastError('Ponle un título a la cita'); return; }
@@ -119,15 +142,18 @@ function AgendaModal({ cita, clientes, createdBy, prefill, onClose, onSaved, onD
         hora_fin: horaFin || null,
         responsable,
         tipos_servicio: tipos,
-        estado,
+        estado: cotizarDespues.current ? 'Realizada' as EstadoAgenda : estado,
         notas: notas.trim() || null,
         created_by: cita?.created_by || createdBy,
+        ...(conVisita ? { notas_visita: notasVisita.trim() || null, fotos } : {}),
       };
       if (cita) { await agendaService.update(cita.id, payload); success('Cita actualizada'); }
       else { await agendaService.create(payload); success('Cita agendada'); }
       onSaved();
       onClose();
+      if (cotizarDespues.current && cita) router.push(`/cotizador?visita=${cita.id}${cita.solicitud_id ? `&solicitud=${cita.solicitud_id}` : ''}`);
     } catch (err) {
+      cotizarDespues.current = false;
       toastError('Error: ' + (err instanceof Error ? err.message : 'desconocido'));
     } finally {
       setSaving(false);
@@ -239,6 +265,37 @@ function AgendaModal({ cita, clientes, createdBy, prefill, onClose, onSaved, onD
               <label className="label-muted" style={{ display: 'block', marginBottom: '0.4rem' }}>Notas</label>
               <textarea className="input" value={notas} onChange={e => setNotas(e.target.value)} rows={2} placeholder="Detalles, contacto en sitio, materiales a llevar…" style={{ resize: 'vertical' }} />
             </div>
+
+            {conVisita && (
+              <div style={{ borderTop: '1px dashed var(--border2)', paddingTop: '0.9rem', display: 'flex', flexDirection: 'column', gap: 8 }}>
+                <p className="label-muted" style={{ margin: 0 }}>Lo que se vio en la visita (pasa a la cotización; las fotos, al PDF si quieres)</p>
+                <textarea className="input" rows={3} value={notasVisita} onChange={e => setNotasVisita(e.target.value)}
+                  placeholder="Estado del tablero, distancias, qué hay que cambiar, qué pidió el cliente…" style={{ resize: 'vertical' }} />
+                {fotos.length > 0 && (
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(120px, 1fr))', gap: 8 }}>
+                    {fotos.map((f, i) => (
+                      <div key={f.path} style={{ position: 'relative' }}>
+                        {urlsFotos[f.path] ? <img src={urlsFotos[f.path]} alt={f.caption || 'Foto de la visita'} style={{ width: '100%', aspectRatio: '4/3', objectFit: 'cover', borderRadius: 6 }} />
+                          : <div className="skeleton" style={{ aspectRatio: '4/3' }} />}
+                        <input className="input" style={{ marginTop: 4, fontSize: '0.78rem', padding: '0.3rem 0.5rem' }} placeholder="Descripción" value={f.caption}
+                          onChange={e => setFotos(x => x.map((y, j) => (j === i ? { ...y, caption: e.target.value } : y)))} />
+                        <button type="button" aria-label="Quitar foto" onClick={() => setFotos(x => x.filter((_, j) => j !== i))}
+                          style={{ position: 'absolute', top: 4, right: 4, background: 'rgba(0,0,0,.6)', color: '#fff', border: 'none', borderRadius: 99, width: 24, height: 24, cursor: 'pointer' }}>×</button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+                <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                  <label className="btn btn-ghost btn-sm" style={{ cursor: 'pointer' }}>
+                    {subiendo ? <Loader2 size={13} className="iv-spin" /> : <Camera size={13} />} Agregar fotos
+                    <input type="file" accept="image/*" capture="environment" multiple hidden onChange={e => { subirFotos(e.target.files); e.target.value = ''; }} />
+                  </label>
+                  <button type="submit" className="btn btn-primary btn-sm" disabled={saving || !clienteId} title={clienteId ? 'Guarda la visita como realizada y abre una cotización con lo que se vio' : 'Elige el cliente primero'}
+                    onClick={() => { cotizarDespues.current = true; }}>
+                    <FileText size={13} /> Guardar y cotizar con esta visita</button>
+                </div>
+              </div>
+            )}
 
             {/* Exportar a calendario */}
             <div style={{ borderTop: '1px dashed var(--border2)', paddingTop: '0.9rem' }}>

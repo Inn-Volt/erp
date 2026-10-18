@@ -6,10 +6,12 @@
  * OT y tareas. Se le unen cotizaciones u OT existentes, o se crean nuevas.
  */
 
+import { ChipTrabajo } from '@/components/trabajos/TrabajoPanel';
+import { encendido } from '@/lib/modulos';
 import { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
-import { ArrowLeft, ClipboardList, Edit3, FileText, ListTodo, Plus } from 'lucide-react';
+import { ArrowLeft, ClipboardList, Edit3, FileText, ListTodo, Plus, Receipt } from 'lucide-react';
 import PageHeader from '@/components/PageHeader';
 import ChipEstadoOT from '@/components/ChipEstadoOT';
 import NuevoProyecto from '@/components/proyectos/NuevoProyecto';
@@ -24,7 +26,7 @@ import { useToast } from '@/hooks/useToast';
 import { formatCLP, formatDate } from '@/utils';
 import type { Vendedor } from '@/types';
 
-interface CotFila { id: string; folio: number; titulo: string | null; estado: string; total: number; total_clp: number | null; enviada_at: string | null; proyecto_id: string | null; cliente_id: string | null }
+interface CotFila { id: string; folio: number; titulo: string | null; estado: string; total: number; total_clp: number | null; enviada_at: string | null; proyecto_id: string | null; cliente_id: string | null; trabajo_estado?: string | null }
 interface OTFila { id: string; folio: number; titulo: string; estado: EstadoOT; fecha_programada: string | null; proyecto_id: string | null }
 interface TareaFila { id: string; titulo: string; estado: string; asignado_id: string | null; fecha_limite: string | null }
 
@@ -48,7 +50,7 @@ export default function DetalleProyectoPage() {
     if (!pr) return;
     const [res, c, o, t] = await Promise.all([
       proyectosService.resumenes(),
-      supabase.from('cotizaciones').select('id, folio, titulo, estado, total, total_clp, enviada_at, proyecto_id, cliente_id').eq('proyecto_id', id).order('folio'),
+      supabase.from('cotizaciones').select('*').eq('proyecto_id', id).order('folio'),
       supabase.from('ordenes_trabajo').select('id, folio, titulo, estado, fecha_programada, proyecto_id').eq('proyecto_id', id).order('folio'),
       supabase.from('tareas').select('id, titulo, estado, asignado_id, fecha_limite').eq('proyecto_id', id).order('fecha_limite'),
     ]);
@@ -77,9 +79,12 @@ export default function DetalleProyectoPage() {
 
   if (!p) return <div className="anim-in"><div className="skeleton" style={{ height: 240 }} /></div>;
   const e = ESTADOS_PROYECTO.find(x => x.clave === p.estado)!;
+  // Fase 7: el avance son sus trabajos terminados; la venta y el costo cotizado, la suma de sus trabajos.
+  const conTrabajos = r?.trabajos !== undefined;
   const costo = Number(r?.costo_materiales || 0) + Number(r?.gastos || 0);
-  const ventaNeta = Number(r?.venta || 0) / 1.19;
-  const avance = r && r.ots ? Math.round((r.ots_terminadas / r.ots) * 100) : 0;
+  const ventaNeta = conTrabajos ? Number(r?.venta_neta || 0) : Number(r?.venta || 0) / 1.19;
+  const avance = conTrabajos ? (r?.trabajos ? Math.round((Number(r.trabajos_terminados) / Number(r.trabajos)) * 100) : 0)
+    : r && r.ots ? Math.round((r.ots_terminadas / r.ots) * 100) : 0;
   const verCostos = puede('cotizaciones.ver_costos');
   const fila: React.CSSProperties = { display: 'flex', flexWrap: 'wrap', gap: 10, alignItems: 'center', padding: '0.55rem 1rem', borderTop: '1px solid var(--border2)', fontSize: '0.86rem' };
 
@@ -101,10 +106,12 @@ export default function DetalleProyectoPage() {
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: 8, marginBottom: 12 }}>
         <div className="kpi-card"><p className="label-muted">Vendido (aprobado)</p><p className="kpi-value">{formatCLP(Number(r?.venta || 0))}</p></div>
         <div className="kpi-card"><p className="label-muted">Esperando al cliente</p><p className="kpi-value" style={{ color: '#2563eb' }}>{formatCLP(Number(r?.por_aprobar || 0))}</p></div>
-        {verCostos && <div className="kpi-card"><p className="label-muted">Costo (materiales + gastos)</p><p className="kpi-value">{formatCLP(costo)}</p>
+        {verCostos && conTrabajos && <div className="kpi-card"><p className="label-muted">Costo cotizado</p><p className="kpi-value">{formatCLP(Number(r?.costo_cotizado || 0))}</p></div>}
+        {verCostos && <div className="kpi-card"><p className="label-muted">{conTrabajos ? 'Gastos reales' : 'Costo (materiales + gastos)'}</p><p className="kpi-value">{formatCLP(costo)}</p>
           {p.presupuesto ? <p style={{ fontSize: '0.74rem', margin: 0, color: costo > Number(p.presupuesto) ? 'var(--danger)' : 'var(--muted)' }}>de {formatCLP(Number(p.presupuesto))} presupuestado</p> : null}</div>}
-        {verCostos && <div className="kpi-card"><p className="label-muted">Margen sobre lo vendido</p><p className="kpi-value" style={{ color: ventaNeta - costo >= 0 ? 'var(--success)' : 'var(--danger)' }}>{formatCLP(ventaNeta - costo)}</p></div>}
-        <div className="kpi-card"><p className="label-muted">Avance</p><p className="kpi-value">{avance} %</p><p style={{ fontSize: '0.74rem', margin: 0, color: 'var(--muted)' }}>{r?.ots_terminadas || 0} de {r?.ots || 0} OT terminadas</p></div>
+        {conTrabajos && <div className="kpi-card"><p className="label-muted">Cobrado</p><p className="kpi-value" style={{ color: 'var(--success)' }}>{formatCLP(Number(r?.cobrado || 0))}</p></div>}
+        {verCostos && <div className="kpi-card"><p className="label-muted">Margen real (venta neta − gastos)</p><p className="kpi-value" style={{ color: ventaNeta - costo >= 0 ? 'var(--success)' : 'var(--danger)' }}>{formatCLP(ventaNeta - costo)}</p></div>}
+        <div className="kpi-card"><p className="label-muted">Avance</p><p className="kpi-value">{avance} %</p><p style={{ fontSize: '0.74rem', margin: 0, color: 'var(--muted)' }}>{conTrabajos ? `${r?.trabajos_terminados || 0} de ${r?.trabajos || 0} trabajos terminados` : `${r?.ots_terminadas || 0} de ${r?.ots || 0} OT terminadas`}</p></div>
       </div>
 
       <div className="panel-y" style={{ marginBottom: 12 }}>
@@ -114,6 +121,7 @@ export default function DetalleProyectoPage() {
             <Link href={`/cotizador?edit=${c.id}`} style={{ fontWeight: 700 }}>IV-{String(c.folio).padStart(4, '0')}</Link>
             <span style={{ flex: 1, color: 'var(--text)' }}>{c.titulo || 'Cotización'}</span>
             <EstadoPill estado={normalizarEstado(c.estado, !!c.enviada_at)} />
+            {c.estado === 'Aprobada' && c.trabajo_estado && <ChipTrabajo estado={c.trabajo_estado} />}
             <b style={{ fontVariantNumeric: 'tabular-nums' }}>{formatCLP(Number(c.total_clp ?? c.total))}</b>
             {gestiona && <button className="btn btn-ghost btn-xs" onClick={() => unir('cotizaciones', c.id, null)}>Quitar</button>}
           </div>
@@ -129,6 +137,15 @@ export default function DetalleProyectoPage() {
       </div>
 
       <div className="panel-y" style={{ marginBottom: 12 }}>
+        <div style={{ display: 'flex', alignItems: 'center', padding: '0.8rem 1rem', gap: 8, flexWrap: 'wrap' }}>
+          <p className="section-label" style={{ margin: 0, flex: 1 }}><Receipt size={15} /> Gastos del proyecto · {formatCLP(Number(r?.gastos || 0))}</p>
+          {puede('gastos.crear') && <Link className="btn btn-ghost btn-sm" href={`/gastos?proyecto=${p.id}`}><Plus size={13} /> Rendir gasto</Link>}
+        </div>
+        <p style={{ margin: 0, padding: '0 1rem 0.8rem', fontSize: '0.8rem', color: 'var(--muted)' }}>
+          Suma lo rendido en cada trabajo del proyecto y lo rendido directo en el proyecto (visitas, trámites, lo que es de toda la obra).</p>
+      </div>
+
+      {encendido('ot') && <div className="panel-y" style={{ marginBottom: 12 }}>
         <p className="section-label" style={{ margin: 0, padding: '0.8rem 1rem' }}><ClipboardList size={15} /> Órdenes de trabajo ({ots.length})</p>
         {ots.map(o => (
           <div key={o.id} style={fila}>
@@ -148,7 +165,7 @@ export default function DetalleProyectoPage() {
           </div>
         )}
         <p style={{ margin: 0, padding: '0.5rem 1rem', fontSize: '0.74rem', color: 'var(--muted)', borderTop: '1px solid var(--border2)' }}>Las OT que nacen de una cotización del proyecto entran solas.</p>
-      </div>
+      </div>}
 
       <div className="panel-y">
         <div style={{ display: 'flex', alignItems: 'center', padding: '0.8rem 1rem' }}>

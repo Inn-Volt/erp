@@ -1,41 +1,47 @@
 'use client';
 
 /**
- * Rendir un gasto (como en TecApp): monto, fecha, tipo, detalle, foto de la boleta y la OT
- * a la que corresponde (obligatoria: el gasto suma al costo real de esa OT). Si la persona
- * tiene un anticipo vigente, se rinde contra él. No se aprueba: queda «rendido».
+ * Rendir un gasto: monto, fecha, tipo, detalle, foto de la boleta y a qué corresponde
+ * (obligatorio): un trabajo (cotización aprobada) o un proyecto — así suma al costo real y
+ * se compara con lo cotizado. Si la persona tiene un anticipo vigente, se rinde contra él.
+ * No se aprueba: queda «rendido».
  */
 
 import { useState } from 'react';
 import { Camera, Loader2, Plus, Receipt, X } from 'lucide-react';
 import NumeroInput from '@/components/NumeroInput';
-import { archivosOT, CATEGORIAS_GASTO, folioOT, gastosService, type CategoriaGasto, type Gasto, type OrdenTrabajo } from '@/services/operacion';
+import { archivosOT, CATEGORIAS_GASTO, gastosService, type CategoriaGasto, type Gasto } from '@/services/operacion';
 import type { Anticipo } from '@/services/fase5';
 import { useToast } from '@/hooks/useToast';
 import { fechaLocal, formatCLP } from '@/utils';
 
-export default function NuevoGasto({ ots, otInicial, anticipos, onClose, onListo }: {
-  ots: OrdenTrabajo[]; otInicial: string; anticipos: Anticipo[]; onClose: () => void; onListo: () => void;
+/** A qué va el gasto: «cot:<id>» (trabajo), «proy:<id>» (proyecto) u «ot:<id>» (de antes). */
+export interface DestinoGasto { valor: string; etiqueta: string; grupo: 'Trabajos' | 'Proyectos' | 'OT' }
+
+export default function NuevoGasto({ destinos, destinoInicial, anticipos, onClose, onListo }: {
+  destinos: DestinoGasto[]; destinoInicial: string; anticipos: Anticipo[]; onClose: () => void; onListo: () => void;
 }) {
   const { success, error: toastError } = useToast();
   const vigentes = anticipos.filter(a => a.estado === 'entregado');
-  const [f, setF] = useState({ fecha: fechaLocal(), monto: 0, categoria: 'combustible' as CategoriaGasto, descripcion: '', ot_id: otInicial, anticipo_id: vigentes[0]?.id || '' });
+  const [f, setF] = useState({ fecha: fechaLocal(), monto: 0, categoria: 'combustible' as CategoriaGasto, descripcion: '', destino: destinoInicial, anticipo_id: vigentes[0]?.id || '' });
   const [boleta, setBoleta] = useState<File | null>(null);
   const [guardando, setGuardando] = useState(false);
   const lbl = { display: 'block', marginBottom: 6 } as const;
-  const otFija = !!otInicial && ots.some(o => o.id === otInicial);
+  const fijo = !!destinoInicial && destinos.some(o => o.valor === destinoInicial);
 
   const guardar = async () => {
     if (!(f.monto > 0)) { toastError('Ingresa el monto'); return; }
-    if (!f.ot_id) { toastError('Elige la OT del gasto'); return; }
+    if (!f.destino) { toastError('Elige el trabajo o el proyecto del gasto'); return; }
+    const [tipo, id] = f.destino.split(':');
     setGuardando(true);
     try {
       const boleta_path = boleta ? await archivosOT.subir('gastos', boleta) : null;
       await gastosService.crear({
-        fecha: f.fecha, monto: f.monto, categoria: f.categoria, descripcion: f.descripcion.trim() || null, ot_id: f.ot_id, boleta_path,
+        fecha: f.fecha, monto: f.monto, categoria: f.categoria, descripcion: f.descripcion.trim() || null, boleta_path,
+        ...(tipo === 'cot' ? { cotizacion_id: id } : tipo === 'proy' ? { proyecto_id: id } : { ot_id: id }),
         ...(f.anticipo_id ? { anticipo_id: f.anticipo_id } : {}),
       } as Partial<Gasto>);
-      success('Gasto rendido en la OT'); onListo();
+      success('Gasto rendido'); onListo();
     } catch (e) { toastError(e instanceof Error ? e.message : 'No se pudo rendir'); }
     finally { setGuardando(false); }
   };
@@ -48,11 +54,16 @@ export default function NuevoGasto({ ots, otInicial, anticipos, onClose, onListo
           <button onClick={onClose} aria-label="Cerrar" style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--muted)' }}><X size={17} /></button>
         </div>
         <div style={{ padding: '1.25rem', display: 'flex', flexDirection: 'column', gap: 12, overflowY: 'auto' }}>
-          <div><label className="label-muted" style={lbl}>OT *</label>
-            <select className="input" value={f.ot_id} disabled={otFija} onChange={e => setF({ ...f, ot_id: e.target.value })}>
-              <option value="">Elegir la OT…</option>
-              {ots.map(o => <option key={o.id} value={o.id}>{folioOT(o.folio)} · {o.titulo}</option>)}
-            </select></div>
+          <div><label className="label-muted" style={lbl}>¿De qué trabajo o proyecto? *</label>
+            <select className="input" value={f.destino} disabled={fijo} onChange={e => setF({ ...f, destino: e.target.value })}>
+              <option value="">Elegir…</option>
+              {(['Trabajos', 'Proyectos', 'OT'] as const).map(g => destinos.some(d => d.grupo === g) && (
+                <optgroup key={g} label={g}>
+                  {destinos.filter(d => d.grupo === g).map(d => <option key={d.valor} value={d.valor}>{d.etiqueta}</option>)}
+                </optgroup>
+              ))}
+            </select>
+            {destinos.length === 0 && <p style={{ margin: '4px 0 0', fontSize: '0.76rem', color: 'var(--muted)' }}>Aún no hay trabajos aprobados ni proyectos.</p>}</div>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
             <div><label className="label-muted" style={lbl}>Monto *</label><NumeroInput className="input" prefijo="$" value={f.monto} onChange={v => setF({ ...f, monto: v })} /></div>
             <div><label className="label-muted" style={lbl}>Fecha</label><input className="input" type="date" value={f.fecha} onChange={e => setF({ ...f, fecha: e.target.value })} /></div>

@@ -60,6 +60,7 @@ export const plantillasInformeService = {
 // ── Anticipos ──
 export interface Anticipo {
   id: string; folio: number; usuario_id: string; monto: number; fecha: string; motivo: string | null; ot_id: string | null;
+  cotizacion_id?: string | null; proyecto_id?: string | null;
   estado: 'entregado' | 'rendido' | 'anulado'; entregado_por: string | null; motivo_anulacion: string | null; created_at: string;
   saldo?: number; rendido?: number;
 }
@@ -153,7 +154,11 @@ export interface Proyecto {
   estado: EstadoProyecto; fecha_inicio: string | null; fecha_fin: string | null; presupuesto: number | null; responsable_id: string | null;
   created_at: string; clientes?: { nombre_cliente: string } | null;
 }
-export interface ResumenProyecto { proyecto_id: string; venta: number; por_aprobar: number; costo_materiales: number; gastos: number; ots: number; ots_terminadas: number }
+export interface ResumenProyecto {
+  proyecto_id: string; venta: number; por_aprobar: number; costo_materiales: number; gastos: number; ots: number; ots_terminadas: number;
+  /** Fase 7: suma de sus trabajos (cotizaciones aprobadas). */
+  venta_neta?: number; costo_cotizado?: number; cobrado?: number; trabajos?: number; trabajos_terminados?: number;
+}
 export const folioProyecto = (n: number) => `PR-${String(n || 0).padStart(4, '0')}`;
 export const proyectosService = {
   async listar(): Promise<Proyecto[]> {
