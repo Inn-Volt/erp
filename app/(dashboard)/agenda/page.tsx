@@ -83,6 +83,13 @@ function AgendaModal({ cita, clientes, createdBy, prefill, onClose, onSaved, onD
   const [tipos, setTipos] = useState<TipoServicio[]>(cita?.tipos_servicio || []);
   const [estado, setEstado] = useState<EstadoAgenda>(cita?.estado || 'Agendada');
   const [notas, setNotas] = useState(cita?.notas || '');
+  // Fase 10: el técnico encargado (usuario); le llega el aviso y la ve en Inicio.
+  const [tecnicoId, setTecnicoId] = useState(cita?.tecnico_id || '');
+  const [usuarios, setUsuarios] = useState<{ id: string; nombre: string | null; email: string | null }[]>([]);
+  useEffect(() => {
+    supabase.from('profiles').select('id, nombre, email, activo').order('nombre')
+      .then(({ data }) => setUsuarios(((data || []) as { id: string; nombre: string | null; email: string | null; activo: boolean | null }[]).filter(u => u.activo !== false)));
+  }, []);
   const [saving, setSaving] = useState(false);
   // Fase 7: lo que se vio en la visita (notas y fotos), que pasa a la cotización.
   const conVisita = !!cita && 'fotos' in cita;
@@ -178,6 +185,7 @@ function AgendaModal({ cita, clientes, createdBy, prefill, onClose, onSaved, onD
         tipos_servicio: tipos,
         estado: cotizarDespues.current ? 'Realizada' as EstadoAgenda : estado,
         notas: notas.trim() || null,
+        ...(tecnicoId || (cita && 'tecnico_id' in cita) ? { tecnico_id: tecnicoId || null } : {}),
         created_by: cita?.created_by || createdBy,
         ...(conVisita ? { notas_visita: notasVisita.trim() || null, fotos } : {}),
       };
@@ -188,7 +196,8 @@ function AgendaModal({ cita, clientes, createdBy, prefill, onClose, onSaved, onD
       if (cotizarDespues.current && cita) router.push(`/cotizador?visita=${cita.id}${cita.solicitud_id ? `&solicitud=${cita.solicitud_id}` : ''}`);
     } catch (err) {
       cotizarDespues.current = false;
-      toastError('Error: ' + (err instanceof Error ? err.message : 'desconocido'));
+      const m = err instanceof Error ? err.message : 'desconocido';
+      toastError(/tecnico_id/.test(m) ? 'Falta ejecutar supabase_fase10_visita_tecnico.sql en Supabase.' : 'Error: ' + m);
     } finally {
       setSaving(false);
     }
@@ -205,7 +214,8 @@ function AgendaModal({ cita, clientes, createdBy, prefill, onClose, onSaved, onD
     <div className="modal-overlay">
       <div className="modal-box" style={{ maxWidth: 560, maxHeight: '92vh', display: 'flex', flexDirection: 'column' }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '1.25rem 1.5rem', borderBottom: '1px solid var(--border2)' }}>
-          <p className="section-label" style={{ margin: 0 }}><Calendar size={13} /> {cita ? 'Editar cita' : 'Nueva cita'}</p>
+          <p className="section-label" style={{ margin: 0, flex: 1 }}><Calendar size={13} /> {cita ? 'Editar cita' : 'Nueva cita'}</p>
+          {cita && <a href={`/visita/${cita.id}`} className="btn btn-ghost btn-sm" style={{ marginRight: 8 }} title="Lo que ve el técnico: información e informes">Panel de la visita</a>}
           <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--muted)' }}><X size={16} /></button>
         </div>
 
@@ -278,6 +288,15 @@ function AgendaModal({ cita, clientes, createdBy, prefill, onClose, onSaved, onD
                   {ESTADOS_AGENDA.map(s => <option key={s} value={s}>{s}</option>)}
                 </select>
               </div>
+            </div>
+
+            <div>
+              <label className="label-muted" style={{ display: 'block', marginBottom: '0.4rem' }}>Técnico encargado</label>
+              <select className="input" value={tecnicoId} onChange={e => setTecnicoId(e.target.value)}>
+                <option value="">Sin asignar</option>
+                {usuarios.map(u => <option key={u.id} value={u.id}>{u.nombre || u.email}</option>)}
+              </select>
+              <p style={{ margin: '0.3rem 0 0', fontSize: '0.74rem', color: 'var(--muted)' }}>Le llega el aviso al celular y la ve en su Inicio, con la dirección y para hacer los informes.</p>
             </div>
 
             <div>
@@ -377,6 +396,7 @@ function AgendaContent() {
   const prefillCliente = searchParams.get('cliente') || undefined;
   const prefillSolicitud = searchParams.get('solicitud') || undefined;
   const abrirNueva = searchParams.get('nueva') === '1' || !!prefillSolicitud || !!prefillCliente;
+  const abrirCita = searchParams.get('cita');
 
   const [citas, setCitas] = useState<Agendamiento[]>([]);
   const [clientes, setClientes] = useState<Cliente[]>([]);
@@ -410,6 +430,15 @@ function AgendaContent() {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [abrirNueva, loading]);
+
+  // Abrir una cita al llegar con ?cita= (desde el panel de la visita).
+  useEffect(() => {
+    if (!abrirCita || loading) return;
+    const c = citas.find(x => x.id === abrirCita);
+    if (c) setModal({ open: true, cita: c });
+    router.replace('/agenda');
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [abrirCita, loading]);
 
   const hoy = hoyStr();
   const finSemana = (() => { const d = new Date(); d.setDate(d.getDate() + 7); return fechaLocal(d); })();

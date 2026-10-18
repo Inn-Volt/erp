@@ -13,7 +13,7 @@ import InformeVisitaModal from '@/components/informes/InformeVisitaModal';
 import { supabase } from '@/lib/supabase';
 import { fotosService } from '@/services/fotos';
 import {
-  folioInforme, informeDesde, informesVisitaService, pathsDe, plantillasInformeServicio,
+  folioInforme, informeDesde, tipoDe, informesVisitaService, pathsDe, plantillasInformeServicio,
   type InformeVisita, type PlantillaInformeCompleta,
 } from '@/services/informes';
 import { useToast } from '@/hooks/useToast';
@@ -64,7 +64,14 @@ export default function InformesDeVisita({ agendaId, editable, datos, tiposServi
 
   const crear = async (p: PlantillaInformeCompleta) => {
     setEligiendo(false); setOcupado('nuevo');
-    try { const nuevo = await informesVisitaService.crear(agendaId, informeDesde(p)); setAbierto(nuevo); cargar(); }
+    try {
+      // Todo informe lleva sus fotos: si la planilla no pide fotos, se agrega un paso «Fotos» al final.
+      const inf = informeDesde(p);
+      if (!inf.campos.some(c => tipoDe(c) === 'foto')) {
+        inf.campos.push({ clave: '_s_fotos', etiqueta: 'Fotos', tipo: 'seccion' }, { clave: 'fotos', etiqueta: 'Fotos de la visita', tipo: 'foto' });
+      }
+      const nuevo = await informesVisitaService.crear(agendaId, inf); setAbierto(nuevo); cargar();
+    }
     catch (e) { toastError(e instanceof Error ? e.message : 'No se pudo crear el informe'); }
     finally { setOcupado(null); }
   };

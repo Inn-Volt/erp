@@ -33,6 +33,8 @@ export interface Agendamiento {
   fotos?: { path: string; caption: string }[];
   /** Fase 8: el informe de la visita, llenado con una plantilla. */
   informe?: import('@/services/informes').InformeLleno | null;
+  /** Fase 10: el técnico encargado (usuario): la ve en Inicio y llena sus informes. */
+  tecnico_id?: string | null;
   created_by: string | null;
   created_at: string;
   updated_at: string;
