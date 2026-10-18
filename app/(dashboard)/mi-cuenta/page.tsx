@@ -1,13 +1,14 @@
 'use client';
 
 /**
- * Mi cuenta (TecApp): mis datos (nombre, teléfono, cargo), cambiar mi contraseña, mis roles
- * y mis competencias. El correo y los roles los cambia quien administra usuarios.
+ * Mi cuenta (TecApp): mis datos (nombre, teléfono, cargo), cambiar mi contraseña, avisos en
+ * este equipo, mis roles y mis competencias. El correo y los roles los cambia quien administra usuarios.
  */
 
 import { useEffect, useState } from 'react';
 import { Award, Eye, EyeOff, KeyRound, Loader2, Save, UserRound } from 'lucide-react';
 import PageHeader from '@/components/PageHeader';
+import AvisosCelular from '@/components/AvisosCelular';
 import { supabase } from '@/lib/supabase';
 import { usePermisos } from '@/hooks/usePermisos';
 import { useToast } from '@/hooks/useToast';
@@ -78,6 +79,7 @@ export default function MiCuentaPage() {
           <label><span className="label-muted">Repetir</span><input className="input" type={ver ? 'text' : 'password'} autoComplete="new-password" value={clave.repetir} onChange={e => setClave({ ...clave, repetir: e.target.value })} /></label>
           <button className="btn btn-primary" style={{ alignSelf: 'flex-end' }} onClick={cambiarClave} disabled={cambiando || !clave.nueva}>{cambiando ? <Loader2 size={14} className="iv-spin" /> : <KeyRound size={14} />} Cambiar</button>
         </div>
+        <AvisosCelular />
         <div className="panel-y" style={{ padding: '1rem', display: 'flex', flexDirection: 'column', gap: 8 }}>
           <p className="section-label" style={{ margin: 0 }}><Award size={15} /> Mis competencias</p>
           {mias.length === 0 ? <p style={{ margin: 0, fontSize: '0.84rem', color: 'var(--muted)' }}>Sin competencias anotadas.</p> : mias.map(m => (

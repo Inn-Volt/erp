@@ -21,6 +21,8 @@ import {
 import { fetchConSesion } from '@/lib/fetchConSesion';
 import PageHeader from '@/components/PageHeader';
 import { usePermisos } from '@/hooks/usePermisos';
+import { supabase } from '@/lib/supabase';
+import { estadoOT } from '@/services/operacion';
 
 const PRIORIDADES: PrioridadSolicitud[] = ['Baja', 'Media', 'Alta', 'Urgente'];
 
@@ -269,6 +271,13 @@ function DetalleSolicitud({ sol, onClose, onChange, onEdit, onDelete }: {
     } catch (e) { toastError('Error: ' + (e instanceof Error ? e.message : '')); }
   };
 
+  // La visita técnica es una OT (reemplaza al levantamiento): si ya la tiene, se muestra.
+  const [otsSol, setOtsSol] = useState<{ id: string; folio: number; estado: string }[]>([]);
+  useEffect(() => {
+    supabase.from('ordenes_trabajo').select('id, folio, estado').eq('solicitud_id', sol.id).order('folio')
+      .then(({ data }) => setOtsSol((data || []) as { id: string; folio: number; estado: string }[]));
+  }, [sol.id]);
+
   const generarBorrador = () => {
     // Reutiliza el cotizador existente; el enganche vincula la cotización.
     router.push(`/cotizador?solicitud=${sol.id}`);
@@ -425,6 +434,17 @@ function DetalleSolicitud({ sol, onClose, onChange, onEdit, onDelete }: {
           <button onClick={generarBorrador} className="btn btn-primary btn-sm" style={{ width: '100%', justifyContent: 'center' }}>
             <FileText size={13} /> Generar borrador de cotización
           </button>
+          {otsSol.map(o => (
+            <button key={o.id} onClick={() => router.push(`/ordenes/${o.id}`)} className="btn btn-ghost btn-sm" style={{ width: '100%', justifyContent: 'center' }}>
+              <ExternalLink size={13} /> Ver OT-{String(o.folio).padStart(4, '0')} ({estadoOT(o.estado).nombre.toLowerCase()})
+            </button>
+          ))}
+          {puede('ot.crear') && (
+            <button onClick={() => router.push(`/ordenes?solicitud=${sol.id}`)} className="btn btn-ghost btn-sm" style={{ width: '100%', justifyContent: 'center' }}
+              title="El técnico recibe el aviso en el celular, hace el informe con fotos y desde la OT se cotiza">
+              <CalendarPlus size={13} /> Crear OT de visita técnica
+            </button>
+          )}
           <button onClick={() => router.push(`/agenda?solicitud=${sol.id}${sol.cliente_id ? `&cliente=${sol.cliente_id}` : ''}`)} className="btn btn-ghost btn-sm" style={{ width: '100%', justifyContent: 'center' }}>
             <CalendarPlus size={13} /> Agendar visita
           </button>

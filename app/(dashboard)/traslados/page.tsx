@@ -83,7 +83,7 @@ export default function TrasladosPage() {
             <label><span className="label-muted">Valor por km</span><NumeroInput className="input" prefijo="$" value={Number(tarifa.valor_por_km)} onChange={v => setTarifa({ ...tarifa, valor_por_km: v })} /></label>
             <label><span className="label-muted">Recargo si sale de otra base</span>
               <div style={{ display: 'flex', gap: 4 }}>
-                <input className="input" type="number" min={0} value={tarifa.recargo_otra_base} onChange={e => setTarifa({ ...tarifa, recargo_otra_base: Number(e.target.value) || 0 })} />
+                <NumeroInput className="input" min={0} value={tarifa.recargo_otra_base} onChange={v => setTarifa({ ...tarifa, recargo_otra_base: v })} />
                 <select className="input" style={{ width: 90 }} value={tarifa.tipo_recargo} onChange={e => setTarifa({ ...tarifa, tipo_recargo: e.target.value as Tarifa['tipo_recargo'] })}>
                   <option value="porcentaje">%</option><option value="monto">$</option></select>
               </div></label>
@@ -137,8 +137,10 @@ export default function TrasladosPage() {
           <div style={{ padding: '0.7rem 1rem', display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center', background: 'var(--bg3)' }}>
             <input className="input" style={{ flex: 1, minWidth: 150 }} value={nueva.comuna} onChange={e => setNueva({ ...nueva, comuna: e.target.value })} placeholder="Comuna" />
             <select className="input" style={{ width: 160 }} value={nueva.base_id} onChange={e => setNueva({ ...nueva, base_id: e.target.value })}>{bases.map(b => <option key={b.id} value={b.id}>{b.nombre}</option>)}</select>
-            <input className="input" style={{ width: 90 }} type="number" min={0} step="0.1" value={nueva.km} onChange={e => setNueva({ ...nueva, km: e.target.value })} placeholder="km ida" />
-            <input className="input" style={{ width: 130 }} type="number" min={0} value={nueva.valor_propio} onChange={e => setNueva({ ...nueva, valor_propio: e.target.value })} placeholder="Valor propio (opc.)" />
+            <NumeroInput className="input" envoltura={{ width: 90 }} min={0} decimales={1} value={nueva.km === '' ? null : Number(String(nueva.km).replace(',', '.'))}
+              onChange={v => setNueva({ ...nueva, km: String(v) })} onVacio={() => setNueva({ ...nueva, km: '' })} placeholder="km ida" />
+            <NumeroInput className="input" envoltura={{ width: 130 }} min={0} prefijo="$" value={nueva.valor_propio === '' ? null : Number(String(nueva.valor_propio).replace(',', '.'))}
+              onChange={v => setNueva({ ...nueva, valor_propio: String(v) })} onVacio={() => setNueva({ ...nueva, valor_propio: '' })} placeholder="Valor propio (opc.)" />
             <button className="btn btn-primary btn-sm" onClick={agregar}><Plus size={13} /> Agregar</button>
           </div>
         )}

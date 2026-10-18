@@ -48,6 +48,7 @@ export interface FilaCotizacion {
   empresa_id: string | null;
   solicitud_id: string | null;
   levantamiento_id: string | null;
+  ot_id?: string | null;
   incluir_fotos: boolean | null;
   vista_at: string | null;
   respondida_at: string | null;
@@ -139,10 +140,19 @@ async function empresaDe(empresaId: string | null): Promise<EmpresaInfo> {
   };
 }
 
-/** Links firmados (1 h) de las fotos del levantamiento, si la cotización las incluye. */
-export async function fotosDe(levantamientoId: string | null, incluir: boolean | null): Promise<FotoPublica[]> {
-  if (!levantamientoId || !incluir) return [];
+/** Links firmados (1 h) de las fotos de la visita (informes de la OT) o, en las de antes, del
+ *  levantamiento, si la cotización las incluye. */
+export async function fotosDe(levantamientoId: string | null, incluir: boolean | null, otId?: string | null): Promise<FotoPublica[]> {
+  if (!incluir) return [];
   const admin = getSupabaseAdmin();
+  if (otId) {
+    const { data: infs } = await admin.from('informes_ot').select('fotos').eq('ot_id', otId).order('folio');
+    const fotosOT = ((infs || []) as { fotos: { path: string; caption?: string }[] | null }[]).flatMap(x => x.fotos || []).slice(0, 24);
+    if (!fotosOT.length) return [];
+    const { data: firmadasOT } = await admin.storage.from('ot-archivos').createSignedUrls(fotosOT.map(f => f.path), 3600);
+    return (firmadasOT || []).map((f, i) => ({ url: f.signedUrl || '', caption: fotosOT[i]?.caption || '' })).filter(f => f.url);
+  }
+  if (!levantamientoId) return [];
   const { data } = await admin.from('levantamientos').select('data').eq('id', levantamientoId).maybeSingle();
   const fotos = ((data?.data as { fotos?: { path: string; caption?: string }[] } | undefined)?.fotos || []).slice(0, 24);
   if (!fotos.length) return [];
@@ -167,7 +177,7 @@ async function vendedorDe(id: string | null | undefined): Promise<CotizacionPubl
 export async function aPublica(cot: FilaCotizacion): Promise<CotizacionPublica> {
   const { vence, vigente } = vigencia(cot);
   const [empresa, fotos, vendedor, ajustes, lugar] = await Promise.all([
-    empresaDe(cot.empresa_id), fotosDe(cot.levantamiento_id, cot.incluir_fotos), vendedorDe(cot.vendedor_id),
+    empresaDe(cot.empresa_id), fotosDe(cot.levantamiento_id, cot.incluir_fotos, cot.ot_id), vendedorDe(cot.vendedor_id),
     ajustesPublicos(), lugarDe(cot.sucursal_id, cot.contacto_id),
   ]);
   const estado = normalizarEstado(cot.estado, !!cot.enviada_at || !!cot.vista_at);

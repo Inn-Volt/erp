@@ -1,30 +1,35 @@
 'use client';
 
 /**
- * Detalle de una orden de trabajo (traído de TecApp): estado, coordinación,
- * informes técnicos con firma, materiales sacados de bodega, gastos, rentabilidad y notas.
+ * Detalle de una orden de trabajo (como el ticket de TecApp): estado, coordinación, visitas,
+ * informes de visita con firma, cotizaciones de la OT (se cotiza desde aquí), materiales de
+ * bodega, rendiciones, resultado (venta, costo cotizado y costo real) y bitácora.
  */
 
+import NumeroInput from '@/components/NumeroInput';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
-import { useParams } from 'next/navigation';
+import { useParams, useRouter } from 'next/navigation';
 import {
-  ArrowLeft, CalendarPlus, Check, FileText, Loader2, MessageSquare, Package, Pause, Play, Plus,
+  ArrowLeft, CalendarPlus, Check, ChevronRight, FileDown, FileText, Loader2, MessageSquare, Package, Pause, Play, Plus,
   Receipt, RotateCcw, Save, Send, TrendingUp, X, XCircle,
 } from 'lucide-react';
 import PageHeader from '@/components/PageHeader';
 import FaltaSQL from '@/components/FaltaSQL';
 import ChipEstadoOT from '@/components/ChipEstadoOT';
 import LinksMapa from '@/components/LinksMapa';
-import InformeEditor, { CHECKLIST_BASE } from '@/components/InformeEditor';
+import InformeVisita, { CHECKLIST_BASE, descargarInformePDF, folioInforme } from '@/components/ot/InformeVisita';
+import NuevoGasto from '@/components/gastos/NuevoGasto';
+import { anticiposService, type Anticipo } from '@/services/fase5';
+import { EstadoPill } from '@/components/cotizador/ui';
 import VisitasOT from '@/components/ot/VisitasOT';
 import PedidosMaterial from '@/components/bodega/PedidosMaterial';
 import { plantillasInformeService, proyectosService, folioProyecto, type PlantillaInforme, type Proyecto } from '@/services/fase5';
 import { TIPO_SERVICIO_OPCIONES } from '@/types/solicitud';
 import type { EmpresaInfo } from '@/components/pdf/PresupuestoPDF';
 import {
-  bodegaService, CATEGORIAS_GASTO, faltaFase2, folioOT, gastosService, informesService, otService,
-  type Bodega, type EstadoOT, type Gasto, type InformeOT, type Movimiento, type NotaOT, type OrdenTrabajo,
+  bodegaService, CATEGORIAS_GASTO, faltaFase2, folioOT, gastosService, informesService, otService, RESULTADOS,
+  type Bodega, type CotizacionDeOT, type EstadoOT, type Gasto, type InformeOT, type Movimiento, type NotaOT, type OrdenTrabajo, type ResultadoOT,
 } from '@/services/operacion';
 import { vendedoresService } from '@/services/vendedores';
 import { catalogoService } from '@/services/catalogo';
@@ -69,6 +74,14 @@ export default function DetalleOTPage() {
   const [motivo, setMotivo] = useState('');
   const [ocupado, setOcupado] = useState(false);
   const [nota, setNota] = useState('');
+  // Fase 6: informe abierto a pantalla completa, rendir gasto, cotizaciones y resultado de la OT.
+  const [informeAbierto, setInformeAbierto] = useState<string | null>(null);
+  const [rindiendo, setRindiendo] = useState(false);
+  const [misAnticipos, setMisAnticipos] = useState<Anticipo[]>([]);
+  const [cotizaciones, setCotizaciones] = useState<CotizacionDeOT[]>([]);
+  const [resultado, setResultado] = useState<ResultadoOT | null>(null);
+  const [pdfDe, setPdfDe] = useState<string | null>(null);
+  const router = useRouter();
 
   // Sacar de bodega
   const [bodegas, setBodegas] = useState<Bodega[]>([]);
@@ -102,6 +115,8 @@ export default function DetalleOTPage() {
       // Estos pueden fallar por permisos (p. ej. técnico sin bodega.ver): no rompen la página.
       bodegaService.movimientos({ otId: id }).then(setMovs).catch(() => setMovs([]));
       gastosService.deOT(id).then(setGastos).catch(() => setGastos([]));
+      otService.cotizaciones(o).then(setCotizaciones).catch(() => setCotizaciones([]));
+      otService.resultado(id).then(setResultado).catch(() => setResultado(null));
     } catch (err) {
       if (faltaFase2(err)) setFalta(true); else toastError('No se pudo cargar la OT: ' + (err instanceof Error ? err.message : ''));
     } finally { setCargando(false); }
@@ -179,6 +194,7 @@ export default function DetalleOTPage() {
       const checklist = pl ? pl.checklist.map(c => ({ texto: c.texto, ok: false })) : CHECKLIST_BASE;
       const inf = await informesService.crear(ot.id, checklist);
       setInformes(x => [...x, inf]);
+      setInformeAbierto(inf.id);
       if (['por_coordinar', 'coordinada'].includes(ot.estado)) await cambiarEstado('en_progreso');
     } catch (e) { toastError(e instanceof Error ? e.message : 'No se pudo crear el informe'); }
   };
@@ -208,14 +224,19 @@ export default function DetalleOTPage() {
   }, [mat.busca, mat.articulo_id, catalogo]);
 
   const renta = useMemo(() => {
+    if (resultado) {
+      const venta = Number(resultado.venta_neta), materiales = Number(resultado.materiales), gas = Number(resultado.gastos);
+      const margen = venta - materiales - gas;
+      return { venta, materiales, gastos: gas, margen, pct: venta > 0 ? margen / venta : 0, cotizado: Number(resultado.costo_cotizado) };
+    }
     const bruto = Number(ot?.cotizaciones?.total_clp ?? ot?.cotizaciones?.total ?? 0);
     const venta = bruto / 1.19;
     const materiales = movs.filter(m => m.tipo === 'salida').reduce((s, m) => s + m.cantidad * Number(m.costo_unitario || 0), 0)
       - movs.filter(m => m.tipo === 'entrada').reduce((s, m) => s + m.cantidad * Number(m.costo_unitario || 0), 0);
     const gas = gastos.filter(g => g.estado !== 'rechazado').reduce((s, g) => s + Number(g.monto), 0);
     const margen = venta - materiales - gas;
-    return { venta, materiales, gastos: gas, margen, pct: venta > 0 ? margen / venta : 0 };
-  }, [ot, movs, gastos]);
+    return { venta, materiales, gastos: gas, margen, pct: venta > 0 ? margen / venta : 0, cotizado: null as number | null };
+  }, [ot, movs, gastos, resultado]);
 
   if (falta) return <div className="anim-in"><PageHeader eyebrow="Operación" title="Orden de trabajo" /><FaltaSQL /></div>;
   if (cargando) return <div className="anim-in"><div className="skeleton" style={{ height: 300 }} /></div>;
@@ -241,8 +262,13 @@ export default function DetalleOTPage() {
   if (!abierta && puedeCerrar)
     acciones.push(<button key="rea" className="btn btn-ghost" disabled={ocupado} onClick={() => cambiarEstado('en_progreso')}><RotateCcw size={14} /> Reabrir</button>);
 
+  const abierto = informes.find(x => x.id === informeAbierto) || null;
   return (
     <div className="anim-in">
+      {abierto && <InformeVisita ot={ot} informe={abierto} empresa={empresa} tecnicoNombre={nombre(abierto.tecnico_id)} puedeReabrir={puedeCerrar}
+        onCerrar={() => setInformeAbierto(null)} onCambio={cargar} />}
+      {rindiendo && <NuevoGasto ots={[ot]} otInicial={ot.id} anticipos={misAnticipos} onClose={() => setRindiendo(false)}
+        onListo={() => { setRindiendo(false); cargar(); }} />}
       {motivoPara && (
         <div className="modal-overlay" onClick={e => { if (e.target === e.currentTarget) setMotivoPara(null); }}>
           <div className="modal-box" style={{ maxWidth: 440, padding: '1.25rem', display: 'flex', flexDirection: 'column', gap: 10 }}>
@@ -322,14 +348,45 @@ export default function DetalleOTPage() {
         <VisitasOT ot={ot} equipo={equipo} puedeProgramar={puede('ot.crear')} puedeEjecutar={puedeEjecutar} uid={perfil?.id} onCambio={cargar} />
       </Seccion>
 
-      <Seccion icono={<FileText size={15} />} titulo={`Informes técnicos (${informes.length})`}
+      <Seccion icono={<FileText size={15} />} titulo={`Informes de visita (${informes.length})`}
         accion={puedeEjecutar && abierta ? <span style={{ display: 'flex', gap: 6 }}>
           {plantillasInf.length > 0 && <select className="input" style={{ width: 190, padding: '0.3rem' }} value={plantillaSel} onChange={e => setPlantillaSel(e.target.value)} title="Checklist del informe">
             <option value="">Checklist según el tipo</option>{plantillasInf.map(p => <option key={p.id} value={p.id}>{p.nombre}</option>)}</select>}
           <button className="btn btn-primary btn-sm" onClick={nuevoInforme}><Plus size={13} /> Nuevo informe</button></span> : null}>
-        {informes.length === 0 ? <p style={{ color: 'var(--muted)', margin: 0 }}>Aún no hay informes. Créalo en terreno y fírmalo con el cliente.</p>
+        {informes.length === 0 ? <p style={{ color: 'var(--muted)', margin: 0 }}>Aún no hay informes. El técnico lo hace en terreno y lo firma con el cliente.</p>
           : informes.map(inf => (
-            <InformeEditor key={inf.id} ot={ot} informe={inf} empresa={empresa} tecnicoNombre={nombre(inf.tecnico_id)} puedeReabrir={puedeCerrar} onCambio={cargar} />
+            <div key={inf.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '0.6rem 0.75rem', border: '1px solid var(--border2)', borderRadius: 10, flexWrap: 'wrap' }}>
+              <button type="button" onClick={() => setInformeAbierto(inf.id)} style={{ flex: 1, minWidth: 200, display: 'flex', alignItems: 'center', gap: 10, background: 'none', border: 'none', cursor: 'pointer', textAlign: 'left', padding: 0 }}>
+                <span style={{ flex: 1, minWidth: 0 }}>
+                  <span style={{ display: 'block', fontWeight: 700, fontSize: '0.9rem', color: 'var(--text)' }}>
+                    {folioInforme(inf.folio)} · {formatDate(inf.fecha)} · {nombre(inf.tecnico_id)}</span>
+                  <span style={{ display: 'block', fontSize: '0.8rem', color: 'var(--muted)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    {RESULTADOS.find(r => r.clave === inf.resultado)?.nombre || 'Sin resultado'}{inf.trabajos ? ` · ${inf.trabajos}` : ''}{inf.fotos.length ? ` · ${inf.fotos.length} foto${inf.fotos.length === 1 ? '' : 's'}` : ''}</span>
+                </span>
+                <span className="badge" style={{ background: inf.estado === 'firmado' ? 'var(--success-soft)' : 'var(--y-soft)', color: inf.estado === 'firmado' ? 'var(--success)' : 'var(--text)' }}>
+                  {inf.estado === 'firmado' ? `Firmado ${formatDate(inf.firmado_at)}` : 'Borrador'}</span>
+                <ChevronRight size={16} color="var(--muted)" />
+              </button>
+              {inf.estado === 'firmado' && empresa && (
+                <button className="btn btn-ghost btn-sm" disabled={pdfDe === inf.id} title="Descargar el PDF del informe"
+                  onClick={async () => { setPdfDe(inf.id); try { await descargarInformePDF(ot, inf, empresa, nombre(inf.tecnico_id)); } catch { toastError('No se pudo generar el PDF'); } finally { setPdfDe(null); } }}>
+                  {pdfDe === inf.id ? <Loader2 size={13} className="iv-spin" /> : <FileDown size={13} />} PDF</button>
+              )}
+            </div>
+          ))}
+      </Seccion>
+
+      <Seccion icono={<FileText size={15} />} titulo={`Cotizaciones de la OT (${cotizaciones.length})`}
+        accion={puede('cotizaciones.crear') && abierta ? <button className="btn btn-primary btn-sm" onClick={() => router.push(`/cotizador?ot=${ot.id}`)}><Plus size={13} /> Cotizar</button> : null}>
+        {cotizaciones.length === 0
+          ? <p style={{ color: 'var(--muted)', margin: 0 }}>Sin cotizaciones. Después de la visita, cotiza desde aquí: lleva el cliente, lo que encontró el técnico y sus fotos. Al aprobarse, el trabajo sigue en esta misma OT.</p>
+          : cotizaciones.map(c => (
+            <Link key={c.id} href={`/cotizador?edit=${c.id}`} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '0.5rem 0.75rem', border: '1px solid var(--border2)', borderRadius: 10, textDecoration: 'none', color: 'var(--text)', flexWrap: 'wrap' }}>
+              <strong style={{ fontSize: '0.88rem' }}>{formatFolio(c.folio)}</strong>
+              <span style={{ flex: 1, minWidth: 120, fontSize: '0.85rem', color: 'var(--muted)' }}>{c.titulo || 'Cotización'}</span>
+              <EstadoPill estado={c.estado} />
+              {puede('cotizaciones.ver') && <span style={{ fontVariantNumeric: 'tabular-nums', fontSize: '0.86rem' }}>{formatCLP(Number(c.total_clp ?? c.total ?? 0))}</span>}
+            </Link>
           ))}
       </Seccion>
 
@@ -350,7 +407,7 @@ export default function DetalleOTPage() {
               </div>
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 90px', gap: 8 }}>
                 <select className="input" value={mat.bodega_id} onChange={e => setMat({ ...mat, bodega_id: e.target.value })}>{bodegas.map(b => <option key={b.id} value={b.id}>{b.nombre}</option>)}</select>
-                <input className="input" type="number" min={0} step="any" value={mat.cantidad} onChange={e => setMat({ ...mat, cantidad: Number(e.target.value) })} />
+                <NumeroInput className="input" min={0} decimales={3} value={mat.cantidad} onChange={v => setMat({ ...mat, cantidad: v })} />
               </div>
               <input className="input" placeholder="N° de serie (opcional)" value={mat.serie} onChange={e => setMat({ ...mat, serie: e.target.value })} />
               <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
@@ -373,32 +430,38 @@ export default function DetalleOTPage() {
           <PedidosMaterial otId={ot.id} equipo={equipo} />
         </Seccion>
 
-        <Seccion icono={<Receipt size={15} />} titulo="Gastos de la OT"
-          accion={puede('gastos.crear') ? <Link href={`/gastos?ot=${ot.id}`} className="btn btn-ghost btn-sm"><Plus size={13} /> Registrar gasto</Link> : null}>
-          {gastos.length === 0 ? <p style={{ color: 'var(--muted)', margin: 0 }}>Sin gastos asociados.</p>
+        <Seccion icono={<Receipt size={15} />} titulo={`Rendiciones de la OT · ${formatCLP(gastos.filter(g => g.estado !== 'rechazado').reduce((x, g) => x + Number(g.monto), 0))}`}
+          accion={puede('gastos.crear') && ot.estado !== 'anulada' ? <button className="btn btn-ghost btn-sm" onClick={() => {
+            if (perfil) anticiposService.listar(perfil.id).then(setMisAnticipos).catch(() => setMisAnticipos([]));
+            setRindiendo(true);
+          }}><Plus size={13} /> Rendir gasto</button> : null}>
+          {gastos.length === 0 ? <p style={{ color: 'var(--muted)', margin: 0 }}>Sin gastos rendidos en esta OT.</p>
             : gastos.map(g => (
               <div key={g.id} style={{ display: 'flex', gap: 8, fontSize: '0.86rem', color: 'var(--text)', borderBottom: '1px solid var(--border2)', paddingBottom: 6 }}>
                 <span style={{ flex: 1 }}>{CATEGORIAS_GASTO.find(c => c.clave === g.categoria)?.nombre}{g.descripcion ? ` · ${g.descripcion}` : ''}<span style={{ color: 'var(--muted)' }}> · {nombre(g.usuario_id)}</span></span>
                 <span style={{ fontVariantNumeric: 'tabular-nums' }}>{formatCLP(Number(g.monto))}</span>
-                <span style={{ fontSize: '0.75rem', color: g.estado === 'rechazado' ? 'var(--danger)' : 'var(--muted)' }}>{g.estado}</span>
+                <span style={{ fontSize: '0.75rem', color: g.estado === 'rechazado' ? 'var(--danger)' : 'var(--muted)' }}>{g.estado === 'reembolsado' ? 'reembolsado' : g.estado === 'rechazado' ? 'rechazado' : 'rendido'}</span>
               </div>
             ))}
         </Seccion>
       </div>
 
-      {verCostos && ot.cotizaciones && (
-        <Seccion icono={<TrendingUp size={15} />} titulo="Rentabilidad (neto)">
+      {verCostos && (ot.cotizaciones || cotizaciones.some(c => c.estado === 'Aprobada') || renta.gastos > 0 || renta.materiales > 0) && (
+        <Seccion icono={<TrendingUp size={15} />} titulo="Resultado de la OT (neto)">
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: 8 }}>
             {[
               ['Venta neta', renta.venta, 'var(--text)'],
+              ...(renta.cotizado !== null ? [['Costo cotizado', -renta.cotizado, 'var(--muted)']] : []),
               ['Materiales bodega', -renta.materiales, 'var(--muted)'],
               ['Gastos', -renta.gastos, 'var(--muted)'],
-              ['Margen', renta.margen, renta.margen >= 0 ? 'var(--success)' : 'var(--danger)'],
+              ['Margen real', renta.margen, renta.margen >= 0 ? 'var(--success)' : 'var(--danger)'],
             ].map(([t, v, c]) => (
               <div key={t as string} className="kpi-card"><p className="label-muted">{t as string}</p><p className="kpi-value" style={{ color: c as string, fontSize: '1.1rem' }}>{formatCLP(v as number)}</p></div>
             ))}
           </div>
-          <p style={{ color: 'var(--muted)', fontSize: '0.8rem', margin: 0 }}>Margen {(renta.pct * 100).toFixed(1)} % sobre la venta neta. No incluye mano de obra interna.</p>
+          <p style={{ color: 'var(--muted)', fontSize: '0.8rem', margin: 0 }}>
+            Margen real {(renta.pct * 100).toFixed(1).replace('.', ',')} % sobre la venta neta (venta − materiales de bodega − rendiciones).
+            {renta.cotizado !== null && renta.venta > 0 ? ` Cotizado: ${(((renta.venta - renta.cotizado) / renta.venta) * 100).toFixed(1).replace('.', ',')} %.` : ''} No incluye las horas del equipo propio.</p>
         </Seccion>
       )}
 

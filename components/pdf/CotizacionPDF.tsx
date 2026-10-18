@@ -14,7 +14,7 @@
  */
 
 import React from 'react';
-import { aDoc, esLista, esTituloDeAntes, type Lista, type NodoTexto } from '@/lib/textoFormato';
+import { aDoc, esLista, esTituloDeAntes, tituloRepiteIntro, type Lista, type NodoTexto } from '@/lib/textoFormato';
 import { Document, Page, Text, View, StyleSheet, Image } from '@react-pdf/renderer';
 import type { Cliente, Vendedor } from '@/types';
 import type { EmpresaInfo } from '@/components/pdf/PresupuestoPDF';
@@ -41,7 +41,7 @@ const s = StyleSheet.create({
   fila: { flexDirection: 'row', marginBottom: 2 },
   k: { width: 78, fontSize: 7.5, color: FAINT },
   v: { flex: 1, fontSize: 8 },
-  titulo: { fontSize: 15, fontFamily: 'Helvetica-Bold', marginBottom: 12, lineHeight: 1.3 },
+  titulo: { fontSize: 13, fontFamily: 'Helvetica-Bold', marginBottom: 10, lineHeight: 1.3 },
   texto: { fontSize: 8.3, color: '#333', lineHeight: 1.55 },
   seccionTitulo: { fontSize: 9.5, fontFamily: 'Helvetica-Bold', marginTop: 10, marginBottom: 4 },
   bloqueTitulo: { fontSize: 11, fontFamily: 'Helvetica-Bold', letterSpacing: 1.5, marginBottom: 10, paddingBottom: 5, borderBottomWidth: 2, borderBottomColor: SPARK },
@@ -448,7 +448,9 @@ export default function CotizacionPDF(p: CotizacionPDFProps) {
           </View>
         ) : (
           <>
-            <Text style={s.titulo}>{doc.titulo}</Text>
+            {/* El título va corto, como nombre del proyecto; si solo repite el comienzo de la
+                introducción (títulos de antes armados con ella), no se imprime dos veces. */}
+            {doc.titulo && !tituloRepiteIntro(doc.titulo, doc.descripcion_general) ? <Text style={s.titulo}>{doc.titulo}</Text> : null}
             <Presentacion />
           </>
         )}

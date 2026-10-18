@@ -6,6 +6,7 @@
  * operación con ese valor.
  */
 
+import NumeroInput from '@/components/NumeroInput';
 import { useEffect, useState } from 'react';
 import { Car, Loader2, Plus } from 'lucide-react';
 import { Modal } from './ui';
@@ -48,7 +49,7 @@ export default function TrasladoModal({ onCerrar, onAgregar }: { onCerrar: () =>
           <select className="input" value={base} onChange={e => setBase(e.target.value)}>
             <option value="">Su base habitual (la más cercana)</option>
             {(lista?.bases || []).filter(b => b.activo).map(b => <option key={b.id} value={b.id}>{b.nombre}</option>)}</select></label>
-        <label><span className="label-muted">Visitas</span><input className="input" type="number" min={1} value={visitas} onChange={e => setVisitas(Math.max(1, parseInt(e.target.value) || 1))} /></label>
+        <label><span className="label-muted">Visitas</span><NumeroInput className="input" min={1} value={visitas} onChange={v => setVisitas(Math.max(1, Math.round(v) || 1))} /></label>
       </div>
       {ocupado && <Loader2 size={16} className="iv-spin" />}
       {error && <p style={{ margin: 0, color: 'var(--danger)', fontSize: '0.84rem' }}>{error}</p>}

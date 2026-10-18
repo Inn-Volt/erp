@@ -34,11 +34,16 @@ export interface OrdenTrabajo {
   cotizaciones?: { id: string; folio: number; total: number; total_clp: number | null; moneda: string | null; subtotal: number | null; items: unknown } | null;
 }
 
+export interface ResultadoOT { ot_id: string; venta_neta: number; costo_cotizado: number; materiales: number; gastos: number }
+export interface CotizacionDeOT { id: string; folio: number; titulo: string | null; estado: string; total: number; total_clp: number | null; moneda: string | null; created_at: string }
+
 export interface ItemChecklist { texto: string; ok: boolean }
-export interface MaterialInforme { descripcion: string; cantidad: number; unidad: string; articulo_id?: string | null }
+export interface MaterialInforme { descripcion: string; cantidad: number; unidad: string; serie?: string | null; articulo_id?: string | null }
 export interface FotoInforme { path: string; caption: string }
 export interface InformeOT {
   id: string; folio: number; ot_id: string; estado: 'borrador' | 'firmado'; fecha: string; trabajos: string | null;
+  /** Fase 6: lo que se encontró al llegar, qué quedó pendiente y el correo de quien recibe. */
+  falla_observada?: string | null; pendiente?: string | null; recibido_email?: string | null;
   resultado: 'solucionado' | 'parcial' | 'no_solucionado' | 'segunda_visita' | null; observaciones: string | null;
   checklist: ItemChecklist[]; materiales: MaterialInforme[]; fotos: FotoInforme[];
   recibido_por: string | null; recibido_rut: string | null; firma_path: string | null; firmado_at: string | null;
@@ -91,7 +96,9 @@ export const CATEGORIAS_GASTO: { clave: CategoriaGasto; nombre: string }[] = [
 ];
 export interface Gasto {
   id: string; fecha: string; monto: number; categoria: CategoriaGasto; descripcion: string | null; ot_id: string | null;
-  usuario_id: string; boleta_path: string | null; estado: 'pendiente' | 'aprobado' | 'rechazado' | 'reembolsado';
+  usuario_id: string; boleta_path: string | null;
+  /** Fase 6: se rinde y queda «rendido»; quien paga lo marca «reembolsado». Los otros son de antes. */
+  estado: 'rendido' | 'reembolsado' | 'rechazado' | 'pendiente' | 'aprobado';
   revisado_por: string | null; revisado_at: string | null; motivo_rechazo: string | null; created_at: string;
   anticipo_id?: string | null;
   ordenes_trabajo?: { folio: number } | null;
@@ -171,6 +178,25 @@ export const otService = {
   async deCotizacion(cotizacionId: string): Promise<OrdenTrabajo | null> {
     const { data } = await supabase.from('ordenes_trabajo').select('id, folio, estado').eq('cotizacion_id', cotizacionId).maybeSingle();
     return data as OrdenTrabajo | null;
+  },
+  /** Venta, costo cotizado y costo real (materiales + gastos) de la OT (fase 6). */
+  async resultado(otId: string): Promise<ResultadoOT | null> {
+    const { data, error } = await supabase.from('ot_resultado').select('*').eq('ot_id', otId).maybeSingle();
+    if (error) return null;
+    return data as ResultadoOT | null;
+  },
+  /** Las cotizaciones de la OT: la que la originó y las cotizadas desde ella (fase 6). */
+  async cotizaciones(ot: Pick<OrdenTrabajo, 'id' | 'cotizacion_id'>): Promise<CotizacionDeOT[]> {
+    const filtro = ot.cotizacion_id ? `ot_id.eq.${ot.id},id.eq.${ot.cotizacion_id}` : `ot_id.eq.${ot.id}`;
+    const { data, error } = await supabase.from('cotizaciones').select('id, folio, titulo, estado, total, total_clp, moneda, created_at').or(filtro).order('folio');
+    if (error) {
+      if (ot.cotizacion_id) {
+        const r = await supabase.from('cotizaciones').select('id, folio, titulo, estado, total, total_clp, moneda, created_at').eq('id', ot.cotizacion_id);
+        return (r.data || []) as CotizacionDeOT[];
+      }
+      return [];
+    }
+    return (data || []) as CotizacionDeOT[];
   },
   async notas(otId: string): Promise<NotaOT[]> {
     const { data, error } = await supabase.from('ot_notas').select('*').eq('ot_id', otId).order('created_at');

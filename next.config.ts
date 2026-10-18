@@ -17,6 +17,9 @@ const nextConfig = {
         // forma dura y rompería el día que exista una home en '/'.
         permanent: false,
       },
+      // Los levantamientos se reemplazaron por la OT de visita técnica (fase 6).
+      { source: '/levantamiento', destination: '/ordenes', permanent: false },
+      { source: '/levantamiento/:ruta*', destination: '/ordenes', permanent: false },
     ]
   },
 };

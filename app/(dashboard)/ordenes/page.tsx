@@ -1,9 +1,10 @@
 'use client';
 
 /**
- * Operación → Órdenes de trabajo (traído de TecApp).
- * Cada cotización aceptada genera su OT sola; también se pueden crear a mano
- * (mantenciones, garantías, urgencias). El técnico ve solo las suyas.
+ * Operación → Órdenes de trabajo (como los tickets de TecApp).
+ * La visita técnica es una OT: se crea a mano o desde una solicitud (/ordenes?solicitud=<id>),
+ * el técnico recibe el aviso en el celular, hace el informe y desde la OT se cotiza. Una
+ * cotización aprobada sin OT genera la suya sola. El técnico ve solo las suyas.
  */
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
@@ -16,6 +17,8 @@ import ChipEstadoOT from '@/components/ChipEstadoOT';
 import PlantillasInforme from '@/components/ot/PlantillasInforme';
 import { otService, sucursalesService, ESTADOS_OT, folioOT, faltaFase2, type OrdenTrabajo, type EstadoOT, type Sucursal } from '@/services/operacion';
 import { clientesService } from '@/services/clientes';
+import { solicitudesService } from '@/services/solicitudes';
+import { tituloCorto } from '@/lib/textoFormato';
 import { vendedoresService } from '@/services/vendedores';
 import { usePermisos } from '@/hooks/usePermisos';
 import { useToast } from '@/hooks/useToast';
@@ -24,9 +27,12 @@ import type { Cliente, Vendedor } from '@/types';
 
 const ABIERTAS: EstadoOT[] = ['por_coordinar', 'coordinada', 'en_progreso', 'en_pausa', 'ejecutada'];
 
-function NuevaOT({ clientes, equipo, onClose, onCreada }: { clientes: Cliente[]; equipo: Vendedor[]; onClose: () => void; onCreada: (id: string) => void }) {
+interface InicialOT { titulo?: string; descripcion?: string; cliente_id?: string | null; direccion?: string | null; solicitud_id?: string | null; prioridad?: string }
+
+function NuevaOT({ clientes, equipo, inicial, onClose, onCreada }: { clientes: Cliente[]; equipo: Vendedor[]; inicial?: InicialOT | null; onClose: () => void; onCreada: (id: string) => void }) {
   const { error: toastError } = useToast();
-  const [f, setF] = useState({ titulo: '', descripcion: '', cliente_id: '', direccion: '', prioridad: 'Media', fecha_programada: '', tecnicos: [] as string[], sucursal_id: '' });
+  const [f, setF] = useState({ titulo: inicial?.titulo || '', descripcion: inicial?.descripcion || '', cliente_id: inicial?.cliente_id || '', direccion: inicial?.direccion || '',
+    prioridad: inicial?.prioridad || 'Media', fecha_programada: '', tecnicos: [] as string[], sucursal_id: '' });
   const [sucursales, setSucursales] = useState<Sucursal[]>([]);
   useEffect(() => {
     setSucursales([]);
@@ -41,7 +47,7 @@ function NuevaOT({ clientes, equipo, onClose, onCreada }: { clientes: Cliente[];
       const ot = await otService.crear({
         titulo: f.titulo.trim(), descripcion: f.descripcion.trim() || null, cliente_id: f.cliente_id || null,
         direccion: f.direccion.trim() || null, sucursal_id: f.sucursal_id || null, prioridad: f.prioridad as OrdenTrabajo['prioridad'],
-        fecha_programada: f.fecha_programada || null, tecnicos: f.tecnicos,
+        fecha_programada: f.fecha_programada || null, tecnicos: f.tecnicos, solicitud_id: inicial?.solicitud_id || null,
         estado: f.fecha_programada && f.tecnicos.length ? 'coordinada' : 'por_coordinar',
       });
       onCreada(ot.id);
@@ -52,7 +58,7 @@ function NuevaOT({ clientes, equipo, onClose, onCreada }: { clientes: Cliente[];
     <div className="modal-overlay" onClick={e => { if (e.target === e.currentTarget) onClose(); }}>
       <form onSubmit={enviar} className="modal-box" style={{ maxWidth: 560, display: 'flex', flexDirection: 'column', maxHeight: '92vh' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '1rem 1.25rem', borderBottom: '1px solid var(--border2)' }}>
-          <p className="section-label" style={{ margin: 0 }}><ClipboardList size={16} /> Nueva orden de trabajo</p>
+          <p className="section-label" style={{ margin: 0 }}><ClipboardList size={16} /> {inicial?.solicitud_id ? 'OT de visita técnica (desde la solicitud)' : 'Nueva orden de trabajo'}</p>
           <button type="button" onClick={onClose} aria-label="Cerrar" style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--muted)' }}><X size={17} /></button>
         </div>
         <div style={{ padding: '1.25rem', display: 'flex', flexDirection: 'column', gap: 12, overflowY: 'auto' }}>
@@ -109,6 +115,23 @@ export default function OrdenesPage() {
   const [busca, setBusca] = useState('');
   const [nueva, setNueva] = useState(false);
   const [plantillas, setPlantillas] = useState(false);
+  const [inicial, setInicial] = useState<InicialOT | null>(null);
+
+  // /ordenes?nueva=1 abre el formulario; /ordenes?solicitud=<id> lo llena con la solicitud.
+  useEffect(() => {
+    const q = new URLSearchParams(window.location.search);
+    const sol = q.get('solicitud');
+    if (sol) {
+      solicitudesService.getById(sol).then(x => {
+        if (!x) return;
+        setInicial({
+          titulo: `Visita técnica: ${tituloCorto(x.descripcion, 60)}`, descripcion: x.descripcion, cliente_id: x.cliente_id,
+          direccion: x.clientes?.direccion || null, solicitud_id: x.id, prioridad: x.prioridad,
+        });
+        setNueva(true);
+      }).catch(() => setNueva(true));
+    } else if (q.get('nueva')) setNueva(true);
+  }, []);
 
   const cargar = useCallback(async () => {
     try {
@@ -134,7 +157,7 @@ export default function OrdenesPage() {
 
   return (
     <div className="anim-in">
-      {nueva && <NuevaOT clientes={clientes} equipo={Object.values(equipo)} onClose={() => setNueva(false)} onCreada={id => router.push(`/ordenes/${id}`)} />}
+      {nueva && <NuevaOT clientes={clientes} equipo={Object.values(equipo)} inicial={inicial} onClose={() => { setNueva(false); setInicial(null); }} onCreada={id => router.push(`/ordenes/${id}`)} />}
       <PageHeader eyebrow="Operación" title="Órdenes de trabajo"
         subtitle="Lo que hay que ejecutar. Cada cotización aceptada crea su OT sola."
         actions={puede('ot.crear') ? <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>

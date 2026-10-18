@@ -8,6 +8,7 @@
  */
 
 import EditorFormato from '@/components/EditorFormato';
+import NumeroInput from '@/components/NumeroInput';
 import { textoPlano } from '@/lib/textoFormato';
 import { useState } from 'react';
 import { Layers, Package, Plus } from 'lucide-react';
@@ -15,6 +16,7 @@ import BuscadorCatalogo from './BuscadorCatalogo';
 import { MenuAcciones, opcionMenu, campoChico } from './ui';
 import type { ArticuloCatalogo, Linea, Moneda, PartidaCot, QueVe, TipoPartida } from '@/lib/cotizador/tipos';
 import { UNIDADES_PARTIDA } from '@/lib/cotizador/tipos';
+import { CATEGORIA_COLORS, CATEGORIA_LABELS } from '@/types';
 import { agrupar, cantidadLegible, filasDelCliente, formatMonto, porcentaje, type Resultado } from '@/lib/cotizador/calculo';
 import type { RecetaCompleta } from '@/lib/cotizador/recetas';
 
@@ -119,8 +121,8 @@ export default function TarjetaPartida(props: {
           </summary>
           <div style={{ display: 'grid', gridTemplateColumns: '100px 120px', gap: 8, marginTop: 8 }}>
             <label><span className="label-muted" style={{ display: 'block', fontSize: '0.7rem' }} title="Para el valor unitario del PDF: «3 puertas»">Cantidad</span>
-              <input className="input" style={campoChico} type="number" min={0} step="any" disabled={!editable} value={p.cantidad}
-                onChange={e => acciones.onCambiar({ cantidad: num(e.target.value) })} /></label>
+              <NumeroInput className="input" style={campoChico} min={0} decimales={3} disabled={!editable} value={p.cantidad}
+                onChange={v => acciones.onCambiar({ cantidad: v })} /></label>
             <label><span className="label-muted" style={{ display: 'block', fontSize: '0.7rem' }}>Unidad</span>
               <input className="input" style={campoChico} list="unidades-de-partida" maxLength={20} disabled={!editable} value={p.unidad}
                 onChange={e => acciones.onCambiar({ unidad: e.target.value })} /></label>
@@ -235,8 +237,9 @@ export default function TarjetaPartida(props: {
           {editable && lineas.length > 1 ? (
             <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
               Descuento a toda la partida
-              <input className="input" type="number" min={0} max={100} step="any" value={descPartida} onChange={e => setDescPartida(e.target.value)}
-                aria-label="Descuento a toda la partida" style={{ ...campoChico, width: 64 }} /> %
+              <NumeroInput className="input" min={0} max={100} value={descPartida === '' ? null : num(descPartida)} mostrarCero
+                onChange={v => setDescPartida(String(v))} onVacio={() => setDescPartida('')}
+                ariaLabel="Descuento a toda la partida" envoltura={{ width: 64 }} style={{ ...campoChico }} /> %
               <button type="button" className="btn btn-ghost btn-xs" disabled={descPartida.trim() === ''}
                 onClick={() => { acciones.onDescuento(Math.min(Math.max(num(descPartida), 0), 100)); setDescPartida(''); }}>Aplicar</button>
             </span>
@@ -275,7 +278,9 @@ function FilaLinea({ l, esLigada, cols, instalacion, calc, moneda, fila, ligadas
       unit !== null && unit !== undefined ? <span style={der}>{formatMonto(unit, moneda, true)}</span>
         : <span style={der} title="No da exacto por unidad: el PDF imprime «—» y el total">—<span style={{ display: 'block', fontSize: '0.66rem', color: 'var(--muted)' }}>suma {formatMonto(total, moneda)}</span></span>;
   return (
-    <div style={{ display: 'grid', gridTemplateColumns: cols, gap: 8, padding: '0.45rem 0.7rem', alignItems: 'start', background: esLigada ? 'var(--bg3)' : undefined }}>
+    <div style={{ display: 'grid', gridTemplateColumns: cols, gap: 8, padding: '0.45rem 0.7rem', alignItems: 'start', background: esLigada ? 'var(--bg3)' : undefined,
+      // Cada tipo con su color (como el cotizador de antes): material, mano de obra, servicio, operación.
+      borderLeft: `3px solid ${CATEGORIA_COLORS[l.categoria] || 'transparent'}` }}>
       <div style={{ minWidth: 0, paddingLeft: esLigada ? 18 : 0 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
           {esLigada && <span style={{ color: 'var(--muted)' }}>↳</span>}
@@ -291,6 +296,7 @@ function FilaLinea({ l, esLigada, cols, instalacion, calc, moneda, fila, ligadas
           </button>
         )}
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, fontSize: '0.66rem', color: 'var(--muted)', paddingLeft: 4 }}>
+          <span style={{ color: CATEGORIA_COLORS[l.categoria], border: `1px solid color-mix(in srgb, ${CATEGORIA_COLORS[l.categoria]} 40%, transparent)`, borderRadius: 4, padding: '0 4px', fontWeight: 700 }}>{CATEGORIA_LABELS[l.categoria]}</span>
           {l.codigo && (!l.fuera || l.ajustada) && <span style={{ fontFamily: 'monospace' }}>{l.codigo}</span>}
           {l.fuera && !l.ajustada && <span style={{ background: 'rgba(217,119,6,.15)', color: '#d97706', borderRadius: 4, padding: '0 4px', fontWeight: 600 }}>Fuera del catálogo</span>}
           {l.ajustada && <span style={{ background: 'var(--y-soft)', color: 'var(--text)', borderRadius: 4, padding: '0 4px', fontWeight: 600 }}
@@ -323,9 +329,9 @@ function FilaLinea({ l, esLigada, cols, instalacion, calc, moneda, fila, ligadas
         )}
       </div>
       <div style={{ display: 'flex', alignItems: 'center', gap: 3, justifyContent: 'flex-end' }}>
-        <input className="input" type="number" min={0} step="any" disabled={!editable} value={l.cantidad} aria-label="Cantidad"
-          onChange={e => acc.cantidad(l.id, num(e.target.value))}
-          style={{ ...campoChico, width: 62, textAlign: 'right', color: esLigada && !l.cantidadAMano ? 'var(--muted)' : undefined }} />
+        <NumeroInput className="input" min={0} decimales={3} disabled={!editable} value={l.cantidad} ariaLabel="Cantidad"
+          onChange={v => acc.cantidad(l.id, v)} envoltura={{ width: 62 }}
+          style={{ ...campoChico, textAlign: 'right', color: esLigada && !l.cantidadAMano ? 'var(--muted)' : undefined }} />
         <span style={{ fontSize: '0.66rem', color: 'var(--muted)', width: 22, overflow: 'hidden' }}>{l.unidad}</span>
       </div>
       {verCostos && (editable ? <>
@@ -354,9 +360,8 @@ function FilaLinea({ l, esLigada, cols, instalacion, calc, moneda, fila, ligadas
           <button type="button" onClick={onDesplegar} title="El producto y su instalación llevan distinto descuento: despliégala para cambiar cada uno"
             style={{ width: '100%', border: '1px dashed var(--border2)', borderRadius: 6, background: 'none', fontSize: '0.72rem', color: 'var(--muted)', cursor: 'pointer', padding: '0.3rem' }}>varios</button>
         ) : (
-          <input className="input" type="number" min={0} max={100} step="any" disabled={!editable} value={l.descuento || ''} aria-label="% de descuento"
-            onChange={e => {
-              const v = Math.min(Math.max(num(e.target.value), 0), 100);
+          <NumeroInput className="input" min={0} max={100} disabled={!editable} value={l.descuento || 0} ariaLabel="% de descuento"
+            onChange={v => {
               if (delGrupo) [l, ...ligadas].forEach(x => acc.cambiar(x.id, { descuento: v })); else acc.cambiar(l.id, { descuento: v });
             }} style={{ ...campoChico, textAlign: 'right' }} />
         )}
@@ -395,26 +400,16 @@ function FilaLinea({ l, esLigada, cols, instalacion, calc, moneda, fila, ligadas
   );
 }
 
-/** Un número que se escribe en la tabla: mientras se escribe se respeta el texto (decimales a medio
- *  escribir, coma); al salir vuelve a mostrar el valor. Cada cambio válido se aplica al tiro. */
+/** Un número de la tabla, con formato chileno (42.330 · 24,8): mientras se escribe se respeta el
+ *  texto; al salir se ve formateado. Cada cambio válido se aplica al tiro. */
 function CeldaNum({ valor, onCambiar, etiqueta, decimales = 4, vacio = false, color }: {
   valor: number | null | undefined; onCambiar: (v: number | null) => void; etiqueta: string;
   decimales?: number; vacio?: boolean; color?: string;
 }) {
-  const [texto, setTexto] = useState<string | null>(null);
-  const f = 10 ** decimales;
-  const mostrado = texto ?? (valor === null || valor === undefined ? '' : String(Math.round(valor * f) / f));
   return (
-    <input className="input" inputMode="decimal" value={mostrado} aria-label={etiqueta} title={etiqueta}
-      onFocus={e => { setTexto(mostrado); e.currentTarget.select(); }}
-      onBlur={() => setTexto(null)}
-      onChange={e => {
-        const t = e.target.value;
-        setTexto(t);
-        if (t.trim() === '') { if (vacio) onCambiar(null); return; }
-        const v = Number(t.replace(',', '.'));
-        if (Number.isFinite(v) && v >= 0) onCambiar(v);
-      }}
-      style={{ ...campoChico, textAlign: 'right', alignSelf: 'center', color, fontWeight: color ? 700 : undefined }} />
+    <NumeroInput className="input" value={valor} mostrarCero decimales={decimales} min={0} ariaLabel={etiqueta} title={etiqueta}
+      onChange={v => onCambiar(v)} onVacio={vacio ? () => onCambiar(null) : undefined}
+      envoltura={{ alignSelf: 'center' }}
+      style={{ ...campoChico, textAlign: 'right', color, fontWeight: color ? 700 : undefined }} />
   );
 }

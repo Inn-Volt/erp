@@ -50,11 +50,6 @@ export const CATALOGO: AreaDef[] = [
       { clave: 'agenda.ver', nombre: 'Ver' },
       { clave: 'agenda.gestionar', nombre: 'Agendar, editar y eliminar' },
     ] },
-    { modulo: 'levantamientos', nombre: 'Levantamientos', permisos: [
-      { clave: 'levantamientos.ver', nombre: 'Ver' },
-      { clave: 'levantamientos.crear', nombre: 'Crear, editar y subir fotos' },
-      { clave: 'levantamientos.anular', nombre: 'Eliminar' },
-    ] },
     { modulo: 'ot', nombre: 'Órdenes de trabajo', permisos: [
       { clave: 'ot.ver', nombre: 'Ver todas' },
       { clave: 'ot.crear', nombre: 'Crear, asignar y coordinar' },
@@ -77,9 +72,9 @@ export const CATALOGO: AreaDef[] = [
       { clave: 'facturacion.gestionar', nombre: 'Registrar OC, HES, facturas y pagos' },
     ] },
     { modulo: 'gastos', nombre: 'Gastos y rendiciones', permisos: [
-      { clave: 'gastos.crear', nombre: 'Registrar mis gastos' },
+      { clave: 'gastos.crear', nombre: 'Rendir mis gastos (en una OT)' },
       { clave: 'gastos.ver_todos', nombre: 'Ver los de todos' },
-      { clave: 'gastos.aprobar', nombre: 'Aprobar, rechazar y reembolsar' },
+      { clave: 'gastos.aprobar', nombre: 'Pagar rendiciones y entregar anticipos' },
     ] },
   ] },
   { area: 'Mi empresa', modulos: [
@@ -154,12 +149,11 @@ export const PERMISO_DE_RUTA: { prefijo: string; permisos: string[] }[] = [
   { prefijo: '/cotizador/ajustes', permisos: ['cotizaciones.aprobar'] },
   { prefijo: '/cotizador', permisos: ['cotizaciones.crear', 'cotizaciones.ver'] },
   { prefijo: '/agenda', permisos: ['agenda.ver'] },
-  { prefijo: '/levantamiento/historial', permisos: ['levantamientos.ver'] },
-  { prefijo: '/levantamiento', permisos: ['levantamientos.crear', 'levantamientos.ver'] },
   { prefijo: '/clientes', permisos: ['clientes.ver'] },
   { prefijo: '/biblioteca', permisos: ['biblioteca.ver'] },
   { prefijo: '/configuracion', permisos: ['configuracion.gestionar'] },
   { prefijo: '/ordenes', permisos: ['ot.ver', 'ot.ejecutar'] },
+  { prefijo: '/mis-ot', permisos: ['ot.ejecutar', 'ot.ver', 'ot.crear'] },
   { prefijo: '/facturacion', permisos: ['facturacion.ver', 'facturacion.gestionar'] },
   { prefijo: '/bodega', permisos: ['bodega.ver', 'bodega.mover'] },
   { prefijo: '/gastos', permisos: ['gastos.crear', 'gastos.ver_todos', 'gastos.aprobar'] },

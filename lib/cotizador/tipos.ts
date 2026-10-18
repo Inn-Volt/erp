@@ -94,6 +94,8 @@ export interface CotizacionDoc {
   vendedor_id?: string | null;
   solicitud_id?: string | null;
   levantamiento_id?: string | null;
+  /** La OT de donde se cotizó (fase 6): al aprobarse, el trabajo sigue en ella. */
+  ot_id?: string | null;
   incluir_fotos?: boolean;
   proyecto_id?: string | null;
   plantilla_id?: string | null;
