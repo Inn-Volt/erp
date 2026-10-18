@@ -2,6 +2,7 @@
 
 /**
  * Inicio → Mi día: lo que toca hoy en el flujo administrativo, en orden.
+ *   Mis visitas (las que tengo a cargo como técnico: se abren en su panel) ·
  *   Agenda de hoy y de la semana · solicitudes por atender · cotizaciones esperando al
  *   cliente (para hacer seguimiento) · trabajos en curso · cobros por facturar o vencidos ·
  *   mis tareas · anticipos por rendir.
@@ -10,7 +11,7 @@
 
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
-import { CalendarDays, ClipboardCheck, FileText, HandCoins, Inbox, ListTodo, Wallet } from 'lucide-react';
+import { CalendarDays, MapPinned, ClipboardCheck, FileText, HandCoins, Inbox, ListTodo, Wallet } from 'lucide-react';
 import PageHeader from '@/components/PageHeader';
 import LinksMapa from '@/components/LinksMapa';
 import { ChipTrabajo } from '@/components/trabajos/TrabajoPanel';
@@ -44,6 +45,7 @@ const diasDesde = (iso: string | null) => (iso ? Math.max(0, Math.floor((Date.no
 export default function MiDiaPage() {
   const { perfil, puede } = usePermisos();
   const [citas, setCitas] = useState<Cita[]>([]);
+  const [misVisitas, setMisVisitas] = useState<Cita[]>([]);
   const [sols, setSols] = useState<Sol[]>([]);
   const [esperando, setEsperando] = useState<CotEsp[]>([]);
   const [trabajos, setTrabajos] = useState<TrabajoFila[]>([]);
@@ -55,6 +57,11 @@ export default function MiDiaPage() {
   useEffect(() => {
     if (!perfil) return;
     const uid = perfil.id;
+    // Fase 10: las visitas que tengo a cargo (ayer en adelante, sin las canceladas).
+    supabase.from('agendamientos').select('id, titulo, fecha, hora_inicio, direccion, estado, responsable, clientes(nombre_cliente)')
+      .eq('tecnico_id', uid).gte('fecha', sumarDias(hoy, -1)).neq('estado', 'Cancelada')
+      .order('fecha').order('hora_inicio', { nullsFirst: true }).limit(20)
+      .then(({ data, error }) => { if (!error) setMisVisitas((data || []) as unknown as Cita[]); });
     if (puede('agenda.ver')) {
       supabase.from('agendamientos').select('id, titulo, fecha, hora_inicio, direccion, estado, responsable, clientes(nombre_cliente)')
         .gte('fecha', hoy).lte('fecha', sumarDias(hoy, 7)).not('estado', 'in', '(Cancelada,Realizada)')
@@ -95,7 +102,7 @@ export default function MiDiaPage() {
     <div style={fila}>
       <span style={{ fontWeight: 700, minWidth: 64 }}>{c.fecha === hoy ? 'Hoy' : formatDate(c.fecha).slice(0, 5)}{c.hora_inicio ? ` ${c.hora_inicio.slice(0, 5)}` : ''}</span>
       <span style={{ flex: 1 }}>
-        <Link href="/agenda" style={{ fontWeight: 600 }}>{c.titulo}</Link>
+        <Link href={`/visita/${c.id}`} style={{ fontWeight: 600 }}>{c.titulo}</Link>
         <span style={sub}>{c.clientes?.nombre_cliente || ''}{c.direccion ? ` · ${c.direccion}` : ''} · {c.responsable}</span>
         {c.direccion && <LinksMapa direccion={c.direccion} compacto />}
       </span>
@@ -107,6 +114,18 @@ export default function MiDiaPage() {
       <PageHeader eyebrow="Inicio" title={`Hola${perfil?.nombre ? `, ${perfil.nombre.split(' ')[0]}` : ''}`} subtitle={`Lo que toca hoy, ${formatDate(hoy)}.`} />
       <div style={{ marginBottom: 12 }}><AvisosCelular compacto /></div>
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: 12 }}>
+        {misVisitas.length > 0 && (
+          <Caja titulo={`Mis visitas (${misVisitas.length})`} icono={<MapPinned size={15} />}>
+            {misVisitas.map(c => (
+              <Link key={c.id} href={`/visita/${c.id}`} style={{ ...fila, alignItems: 'center' }}>
+                <span style={{ fontWeight: 700, minWidth: 64 }}>{c.fecha === hoy ? 'Hoy' : formatDate(c.fecha).slice(0, 5)}{c.hora_inicio ? ` ${c.hora_inicio.slice(0, 5)}` : ''}</span>
+                <span style={{ flex: 1 }}>{c.titulo}
+                  <span style={sub}>{c.clientes?.nombre_cliente || ''}{c.direccion ? ` · ${c.direccion}` : ''}</span></span>
+                <span style={{ fontSize: '0.72rem', fontWeight: 600, color: c.estado === 'Realizada' ? 'var(--success)' : 'var(--y)' }}>{c.estado}</span>
+              </Link>
+            ))}
+          </Caja>
+        )}
         {puede('agenda.ver') && <>
           <Caja titulo={`Agenda de hoy (${deHoy.length})`} icono={<CalendarDays size={15} />} href="/agenda" vacio={!deHoy.length}>
             {deHoy.map(c => <CitaFila key={c.id} c={c} />)}
