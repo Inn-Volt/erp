@@ -540,7 +540,7 @@ aside.sidebar-desktop { border-right-color: rgb(var(--line)) !important; }
   display: flex;
   flex-direction: column;
   gap: 0.5rem;
-  z-index: 9999;
+  z-index: 10001;   /* sobre los modales y las pantallas completas (10000) */
   pointer-events: none;
 }
 .toast {

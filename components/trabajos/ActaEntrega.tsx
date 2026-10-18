@@ -17,7 +17,7 @@ import { supabase } from '@/lib/supabase';
 import { BUCKET_FOTOS, fotosService } from '@/services/fotos';
 import { dataUriABlob } from '@/services/operacion';
 import {
-  entregasService, folioActa, informeDesde, plantillasInformeServicio,
+  pathsDe, entregasService, folioActa, informeDesde, plantillasInformeServicio,
   type EntregaTrabajo, type InformeLleno, type PlantillaInformeCompleta,
 } from '@/services/informes';
 import { usePermisos } from '@/hooks/usePermisos';
@@ -35,14 +35,14 @@ export async function descargarActaPDF(acta: EntregaTrabajo, cot: Cot, responsab
   const { data: emps } = await supabase.from('empresas').select('*').limit(1);
   const empresa = (emps || [])[0] as EmpresaInfo | undefined;
   if (!empresa) throw new Error('Falta configurar la empresa');
-  const urls = await fotosService.urls([...acta.fotos.map(f => f.path), acta.firma_path || ''].filter(Boolean));
+  const urls = await fotosService.urls([...acta.fotos.map(f => f.path), acta.firma_path || '', ...pathsDe(acta)].filter(Boolean));
   const blob = await pdf(
     <InformeGeneralPDF empresa={empresa} tipo="entrega" folio={folioActa(acta.folio)} fecha={acta.fecha}
       cliente={{ nombre: cot.cliente?.nombre || 'Sin cliente', rut: cot.cliente?.rut, direccion: cot.cliente?.direccion }}
       referencia={`IV-${String(cot.folio).padStart(4, '0')} · ${cot.titulo}`} responsable={responsable}
       informe={acta} trabajos={acta.trabajos} observaciones={acta.observaciones}
       fotos={acta.fotos.filter(f => urls[f.path]).map(f => ({ url: urls[f.path], caption: f.caption }))}
-      recibidoPor={acta.recibido_por} recibidoRut={acta.recibido_rut} firmaUrl={acta.firma_path ? urls[acta.firma_path] : null} firmadoAt={acta.firmado_at} />,
+      urls={urls} recibidoPor={acta.recibido_por} recibidoRut={acta.recibido_rut} firmaUrl={acta.firma_path ? urls[acta.firma_path] : null} firmadoAt={acta.firmado_at} />,
   ).toBlob();
   saveAs(blob, `Acta_${folioActa(acta.folio)}_IV-${String(cot.folio).padStart(4, '0')}.pdf`);
 }
@@ -178,7 +178,7 @@ export default function ActaEntrega({ cot, acta: inicial, responsable, onCerrar,
                   <option value="">{plantillas.length ? 'Sin plantilla' : 'Sin plantillas de entrega: créalas en Mi empresa → Plantillas de informe'}</option>
                   {plantillas.map(p => <option key={p.id} value={p.id}>{p.nombre}</option>)}
                 </select></label>
-              {(d.campos.length > 0 || d.checklist.length > 0) && <div className="rounded-2xl border border-line bg-surface p-3"><FormularioInforme informe={d} onCambiar={setInforme} grande /></div>}
+              {(d.campos.length > 0 || d.checklist.length > 0) && <div className="rounded-2xl border border-line bg-surface p-3"><FormularioInforme informe={d} onCambiar={setInforme} grande carpetaFotos={`entregas/${cot.id}`} /></div>}
               <label><Rotulo>Trabajos realizados *</Rotulo>
                 <textarea className={campo} rows={4} value={d.trabajos || ''} onChange={e => set({ trabajos: e.target.value })} placeholder="Qué se instaló, qué se probó, qué se entrega." /></label>
               <div>

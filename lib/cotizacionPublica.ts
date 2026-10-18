@@ -152,7 +152,12 @@ export async function fotosDe(levantamientoId: string | null, incluir: boolean |
   if (agendamientoId) {
     // Fase 7: las fotos de la visita de la agenda.
     const { data: v } = await admin.from('agendamientos').select('fotos').eq('id', agendamientoId).maybeSingle();
-    const fv = (((v as { fotos?: { path: string; caption?: string }[] } | null)?.fotos) || []).slice(0, 24);
+    // Fase 9: más las fotos de las preguntas de sus informes.
+    const { data: infs } = await admin.from('informes_visita').select('campos, respuestas').eq('agendamiento_id', agendamientoId).order('folio');
+    const deInformes = ((infs || []) as { campos: { clave: string; etiqueta: string; tipo: string }[]; respuestas: Record<string, unknown> }[])
+      .flatMap(i => (i.campos || []).filter(c => c.tipo === 'foto')
+        .flatMap(c => ((i.respuestas?.[c.clave] as { path: string; caption?: string }[]) || []).map(f => ({ path: f.path, caption: f.caption || c.etiqueta }))));
+    const fv = [...(((v as { fotos?: { path: string; caption?: string }[] } | null)?.fotos) || []), ...deInformes].filter(f => f?.path).slice(0, 24);
     if (!fv.length) return [];
     const { data: fir } = await admin.storage.from(BUCKET_FOTOS).createSignedUrls(fv.map(f => f.path), 3600);
     return (fir || []).map((f, i) => ({ url: f.signedUrl || '', caption: fv[i]?.caption || '' })).filter(f => f.url);

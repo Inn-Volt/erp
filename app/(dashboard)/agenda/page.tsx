@@ -2,8 +2,7 @@
 
 import type { EmpresaInfo } from '@/components/pdf/PresupuestoPDF';
 import { supabase } from '@/lib/supabase';
-import { informeDesde, plantillasInformeServicio, type InformeLleno, type PlantillaInformeCompleta } from '@/services/informes';
-import FormularioInforme from '@/components/informes/FormularioInforme';
+import InformesDeVisita from '@/components/informes/InformesDeVisita';
 import { fotosService } from '@/services/fotos';
 import { useState, useEffect, useCallback, useRef, Suspense } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
@@ -92,17 +91,13 @@ function AgendaModal({ cita, clientes, createdBy, prefill, onClose, onSaved, onD
   const [urlsFotos, setUrlsFotos] = useState<Record<string, string>>({});
   const [subiendo, setSubiendo] = useState(false);
   const router = useRouter();
-  // Fase 8: el informe de la visita con una plantilla (preguntas y checklist) y su PDF.
-  const conInforme = !!cita && 'informe' in cita;
-  const [informe, setInforme] = useState<InformeLleno | null>(cita?.informe || null);
-  const [plantillas, setPlantillas] = useState<PlantillaInformeCompleta[]>([]);
+  // Fase 9: los informes de la visita (varios, cada uno con su planilla) van aparte; acá, el
+  // PDF de la visita con las notas y las fotos.
+  const { puede } = usePermisos();
   const [generando, setGenerando] = useState(false);
-  useEffect(() => {
-    if (conInforme) plantillasInformeServicio.listar({ tipo: 'visita' }).then(setPlantillas).catch(() => setPlantillas([]));
-  }, [conInforme]);
-  const elegirPlantilla = (pid: string) => {
-    if (informe && Object.keys(informe.respuestas || {}).length && !confirm('Cambiar de plantilla borra lo respondido. ¿Seguir?')) return;
-    setInforme(pid ? informeDesde(plantillas.find(p => p.id === pid) || null) : null);
+  const datosPDF = () => {
+    const cli = clientes.find(c => c.id === clienteId);
+    return { fecha, titulo, responsable: RESPONSABLE_LABEL[responsable], cliente: { nombre: cli?.nombre_cliente || 'Sin cliente', rut: cli?.rut, direccion: direccion || cli?.direccion } };
   };
   const pdfVisita = async () => {
     if (!cita) return;
@@ -120,7 +115,7 @@ function AgendaModal({ cita, clientes, createdBy, prefill, onClose, onSaved, onD
         <InformeGeneralPDF empresa={empresa} tipo="visita" folio={`VT-${String(cita.folio).padStart(4, '0')}`} fecha={fecha}
           cliente={{ nombre: cli?.nombre_cliente || 'Sin cliente', rut: cli?.rut, direccion: direccion || cli?.direccion }}
           referencia={titulo} responsable={RESPONSABLE_LABEL[responsable]}
-          informe={{ ...(informe || { campos: [], respuestas: {}, checklist: [] }) }}
+          informe={{ campos: [], respuestas: {}, checklist: [] }}
           observaciones={notasVisita} fotos={fotos.filter(f => urls[f.path]).map(f => ({ url: urls[f.path], caption: f.caption }))} />,
       ).toBlob();
       saveAs(blob, `Informe_visita_VT-${String(cita.folio).padStart(4, '0')}.pdf`);
@@ -185,7 +180,6 @@ function AgendaModal({ cita, clientes, createdBy, prefill, onClose, onSaved, onD
         notas: notas.trim() || null,
         created_by: cita?.created_by || createdBy,
         ...(conVisita ? { notas_visita: notasVisita.trim() || null, fotos } : {}),
-        ...(conInforme ? { informe } : {}),
       };
       if (cita) { await agendaService.update(cita.id, payload); success('Cita actualizada'); }
       else { await agendaService.create(payload); success('Cita agendada'); }
@@ -309,15 +303,11 @@ function AgendaModal({ cita, clientes, createdBy, prefill, onClose, onSaved, onD
             {conVisita && (
               <div style={{ borderTop: '1px dashed var(--border2)', paddingTop: '0.9rem', display: 'flex', flexDirection: 'column', gap: 8 }}>
                 <p className="label-muted" style={{ margin: 0 }}>Lo que se vio en la visita (pasa a la cotización; las fotos, al PDF si quieres)</p>
-                {conInforme && (
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                    <select className="input" value={informe?.plantilla_id || ''} onChange={e => elegirPlantilla(e.target.value)}>
-                      <option value="">{plantillas.length ? 'Informe con plantilla (opcional)…' : 'Sin plantillas de visita: créalas en Mi empresa → Plantillas de informe'}</option>
-                      {plantillas.map(p => <option key={p.id} value={p.id}>{p.nombre}</option>)}
-                    </select>
-                    {informe && <FormularioInforme informe={informe} onCambiar={setInforme} />}
-                  </div>
-                )}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                  <span className="label-muted">Informes (levantamiento, checklist… cada uno con su planilla)</span>
+                  <InformesDeVisita agendaId={cita.id} editable={puede('agenda.gestionar')} datos={datosPDF} tiposServicio={tipos} />
+                </div>
+                <span className="label-muted">Notas y fotos de la visita</span>
                 <textarea className="input" rows={3} value={notasVisita} onChange={e => setNotasVisita(e.target.value)}
                   placeholder="Estado del tablero, distancias, qué hay que cambiar, qué pidió el cliente…" style={{ resize: 'vertical' }} />
                 {fotos.length > 0 && (
