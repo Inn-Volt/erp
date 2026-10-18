@@ -13,6 +13,7 @@ import Link from 'next/link';
 import { KeyRound, Loader2, Eye, EyeOff, CheckCircle2 } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { LogoImg } from '@/components/Logo';
+import ThemeToggle from '@/components/ThemeToggle';
 
 export default function RestablecerPage() {
   const router = useRouter();
@@ -62,10 +63,11 @@ export default function RestablecerPage() {
   };
 
   return (
-    <div style={{ minHeight: '100svh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--bg)', padding: '1rem' }}>
-      <div className="anim-in" style={{ width: '100%', maxWidth: 400 }}>
-        <div style={{ textAlign: 'center', marginBottom: '1.75rem' }}><LogoImg height={72} /></div>
-        <div style={{ background: 'var(--bg2)', border: '1px solid var(--border2)', borderTop: '2px solid var(--y-brand)', borderRadius: 14, padding: '1.75rem' }}>
+    <main className="relative flex min-h-dvh items-center justify-center bg-surface-2 px-6">
+      <div className="absolute right-5 top-5"><ThemeToggle /></div>
+      <div className="anim-in w-full max-w-sm">
+        <div className="mb-8 flex justify-center"><LogoImg height={72} /></div>
+        <div className="rounded-2xl border border-line bg-surface p-8 shadow-sm">
           {estado === 'cargando' && (
             <p style={{ display: 'flex', alignItems: 'center', gap: 8, color: 'var(--muted)', justifyContent: 'center' }}><Loader2 size={16} className="iv-spin" /> Verificando el enlace…</p>
           )}
@@ -107,6 +109,6 @@ export default function RestablecerPage() {
           )}
         </div>
       </div>
-    </div>
+    </main>
   );
 }
