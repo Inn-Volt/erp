@@ -9,7 +9,7 @@
 
 import { useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { Bell, CheckCheck, X, Eye, CircleCheck, CircleX } from 'lucide-react';
+import { Bell, CheckCheck, X, Eye, CircleCheck, CircleX, CalendarPlus, CalendarClock, CalendarX, CalendarCheck, AlarmClock, UserMinus, UserPlus, ClipboardCheck, HelpCircle } from 'lucide-react';
 import { confirmarSalida } from '@/hooks/useSinGuardar';
 import type { Aviso, DatosAvisos } from '@/hooks/useAvisos';
 
@@ -26,6 +26,17 @@ const ICONO: Record<string, { Icon: React.ElementType; color: string }> = {
   cotizacion_vista: { Icon: Eye, color: 'var(--info)' },
   cotizacion_aceptada: { Icon: CircleCheck, color: 'var(--success)' },
   cotizacion_rechazada: { Icon: CircleX, color: 'var(--danger)' },
+  // Agenda y visitas (fase 12)
+  visita_asignada: { Icon: UserPlus, color: 'var(--y)' },
+  visita_quitada: { Icon: UserMinus, color: 'var(--muted)' },
+  agenda_nueva: { Icon: CalendarPlus, color: 'var(--info)' },
+  agenda_cambio: { Icon: CalendarClock, color: '#d97706' },
+  agenda_confirmada: { Icon: CalendarCheck, color: 'var(--success)' },
+  agenda_cancelada: { Icon: CalendarX, color: 'var(--danger)' },
+  recordatorio_visita: { Icon: AlarmClock, color: 'var(--y)' },
+  visita_sin_cerrar: { Icon: HelpCircle, color: '#d97706' },
+  visita_realizada: { Icon: CalendarCheck, color: 'var(--success)' },
+  informe_visita: { Icon: ClipboardCheck, color: 'var(--success)' },
 };
 
 /** Botón de la campana + lista. Los datos vienen de useAvisos (una sola suscripción). */
