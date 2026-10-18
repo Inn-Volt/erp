@@ -286,7 +286,7 @@ export default function DashboardPage() {
               {[
                 { label: 'Nueva solicitud',     path: '/solicitudes',              icon: Inbox         },
                 { label: 'Agendar visita',      path: '/agenda?nueva=1',           icon: Calendar      },
-                { label: 'Nueva OT (visita técnica)', path: '/ordenes?nueva=1', icon: FileText    },
+                { label: 'Trabajos en curso',   path: '/trabajos',                 icon: FileText      },
                 { label: 'Nueva cotización',    path: '/cotizador',                icon: FileText      },
                 { label: 'Ver historial',        path: '/cotizador/historial',      icon: Clock         },
                 { label: 'Agregar cliente',      path: '/clientes',                 icon: Users         },

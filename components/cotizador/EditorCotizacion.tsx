@@ -10,6 +10,8 @@
  * Solo un Borrador se edita; el estado cambia solo con sus botones (lo exige la base).
  */
 
+import TrabajoPanel from '@/components/trabajos/TrabajoPanel';
+import PlanCobro from './PlanCobro';
 import NumeroInput from '@/components/NumeroInput';
 import { textoPlano, tituloCorto } from '@/lib/textoFormato';
 import EditorFormato from '@/components/EditorFormato';
@@ -34,9 +36,9 @@ import { proyectosService, folioProyecto, type Proyecto } from '@/services/fase5
 import { BloquePlegable, EstadoPill, MenuAcciones, opcionMenu, PedirMotivo, etiqueta } from './ui';
 import { AprobarModal, HistorialModal, RechazarModal, RevisarYEnviar, type Canal } from './Modales';
 import {
-  IVA, QUE_VE, UNIDADES_ITEM, VERSION_COTIZADOR, TITULO_VALORIZACION,
+  IVA, PLAN_COBRO_BASE, QUE_VE, UNIDADES_ITEM, VERSION_COTIZADOR, TITULO_VALORIZACION,
   type AjustesCot, type ArticuloCatalogo, type CotizacionDoc, type EnvioCot, type Linea, type Moneda, type PartidaCot,
-  type Plantilla, type Seccion, type TipoPartida,
+  type HitoCobro, type Plantilla, type Seccion, type TipoPartida,
 } from '@/lib/cotizador/tipos';
 import {
   aMoneda, calcular, calcularLinea, formatMonto, lineaFuera, lineasDeArticulo, nuevoId, porcentaje, q, sinDescuentoGlobal,
@@ -80,8 +82,8 @@ const huella = (d: CotizacionDoc) => JSON.stringify([
   d.valida_hasta_a_mano, d.incluir_fotos, d.proyecto_id,
 ]);
 
-export default function EditorCotizacion({ id, clonarDe, clienteInicial, solicitudInicial, otInicial, proyectoInicial }: {
-  id: string | null; clonarDe?: string | null; clienteInicial?: string | null; solicitudInicial?: string | null; otInicial?: string | null; proyectoInicial?: string | null;
+export default function EditorCotizacion({ id, clonarDe, clienteInicial, solicitudInicial, otInicial, visitaInicial, proyectoInicial }: {
+  id: string | null; clonarDe?: string | null; clienteInicial?: string | null; solicitudInicial?: string | null; otInicial?: string | null; visitaInicial?: string | null; proyectoInicial?: string | null;
 }) {
   const router = useRouter();
   const { perfil, puede } = usePermisos();
@@ -197,6 +199,7 @@ export default function EditorCotizacion({ id, clonarDe, clienteInicial, solicit
           secciones: aj.usa_presentacion ? (pl?.secciones || []) : [],
           dias_validez: aj.dias_validez,
           valida_hasta: sumarDias(fechaLocal(), aj.dias_validez),
+          plan_cobro: aj.plan_cobro ? aj.plan_cobro.map(h => ({ ...h })) : null,
           partidas: [{ id: pid, nombre: '', cantidad: 1, unidad: 'global', tipo: 'instalacion' }],
           cliente_id: clienteInicial || null,
           proyecto_id: proyectoInicial || null,
@@ -230,6 +233,24 @@ export default function EditorCotizacion({ id, clonarDe, clienteInicial, solicit
               if (an.resumen) nuevo.descripcion_general = an.resumen;
             }
           }
+        }
+        // La visita (agenda): la pedida, o la última realizada de la solicitud. Lo que se vio va a la
+        // introducción y sus fotos, al PDF.
+        let visita: { id: string; fecha: string; direccion: string | null; titulo: string; cliente_id: string | null; notas_visita?: string | null; fotos?: { path: string }[] } | null = null;
+        if (visitaInicial) {
+          visita = (await supabase.from('agendamientos').select('*').eq('id', visitaInicial).maybeSingle()).data;
+        } else if (solicitudInicial) {
+          visita = (await supabase.from('agendamientos').select('*').eq('solicitud_id', solicitudInicial).eq('estado', 'Realizada')
+            .order('fecha', { ascending: false }).limit(1).maybeSingle()).data;
+        }
+        if (visita && ('notas_visita' in visita || 'fotos' in visita)) {
+          const partes = [`Según la visita técnica del ${formatDate(visita.fecha)}${visita.direccion ? `, en ${visita.direccion}` : ''}.`];
+          if (visita.notas_visita?.trim()) partes.push(`**Lo que vimos:**\n${visita.notas_visita.trim()}`);
+          Object.assign(nuevo, {
+            agendamiento_id: visita.id, cliente_id: nuevo.cliente_id || visita.cliente_id, incluir_fotos: (visita.fotos || []).length > 0,
+            descripcion_general: nuevo.descripcion_general?.trim() ? `${partes.join('\n\n')}\n\n${nuevo.descripcion_general}` : partes.join('\n\n'),
+            titulo: nuevo.titulo || tituloCorto(visita.titulo),
+          });
         }
         setD(nuevo); setGuardadaHuella(huella({ ...nuevo, partidas: [] }));
       } catch (e) {
@@ -424,6 +445,8 @@ export default function EditorCotizacion({ id, clonarDe, clienteInicial, solicit
       costo_directo: r.internos.costoConImprevistos, utilidad: r.internos.utilidad,
       solicitud_id: x.solicitud_id || null, levantamiento_id: x.levantamiento_id || null, incluir_fotos: !!x.incluir_fotos,
       ...(x.ot_id ? { ot_id: x.ot_id } : {}),
+      ...(x.agendamiento_id ? { agendamiento_id: x.agendamiento_id } : {}),
+      ...(ajustes && 'plan_cobro' in ajustes ? { plan_cobro: x.plan_cobro ?? ajustes.plan_cobro ?? null } : {}),
       ...(proyectos.length || x.proyecto_id ? { proyecto_id: x.proyecto_id || null } : {}),
     };
   };
@@ -454,11 +477,18 @@ export default function EditorCotizacion({ id, clonarDe, clienteInicial, solicit
     } finally { setGuardando(false); }
   };
 
+  /** El plan de cobro de la cotización, o el de los ajustes, o un solo cobro al terminar. */
+  const planDe = (x: Pick<CotizacionDoc, 'plan_cobro'>): HitoCobro[] =>
+    (x.plan_cobro && x.plan_cobro.length ? x.plan_cobro : ajustes?.plan_cobro && ajustes.plan_cobro.length ? ajustes.plan_cobro : PLAN_COBRO_BASE);
+
   // ── PDF ──
   const armarPDF = async (doc: CotizacionDoc, marca: 'BORRADOR' | 'ANULADA' | null) => {
     if (!empresa) throw new Error('Falta la empresa emisora.');
     let fotos: { url: string; caption: string }[] = [];
-    if (doc.incluir_fotos && doc.ot_id) {
+    if (doc.incluir_fotos && doc.agendamiento_id) {
+      const v = (await supabase.from('agendamientos').select('fotos').eq('id', doc.agendamiento_id).maybeSingle()).data as { fotos?: { path: string; caption: string }[] } | null;
+      fotos = await fotosService.paraPDF(v?.fotos).catch(() => []);
+    } else if (doc.incluir_fotos && doc.ot_id) {
       // Las fotos de los informes de visita de la OT, con su descripción.
       const infs = await informesService.deOT(doc.ot_id).catch(() => [] as InformeOT[]);
       const lista = infs.flatMap(x => x.fotos).slice(0, 24);
@@ -476,7 +506,7 @@ export default function EditorCotizacion({ id, clonarDe, clienteInicial, solicit
         contacto={contactos.find(c => c.id === doc.contacto_id) || null}
         importante={ajustes?.importante} correoAceptar={ajustes?.correo_aceptar}
         enlace={doc.token_publico && doc.estado !== 'Borrador' ? linkPublico(doc.token_publico) : null}
-        marca={marca} fotos={fotos}
+        marca={marca} fotos={fotos} planCobro={planDe(doc)}
         aceptacion={doc.estado === 'Aprobada' && doc.respondida_por && doc.respondida_at
           ? { nombre: doc.respondida_por, rut: doc.respondida_rut, fecha: doc.respondida_at, firma: doc.respuesta_firma } : null} />,
     ).toBlob();
@@ -741,6 +771,10 @@ export default function EditorCotizacion({ id, clonarDe, clienteInicial, solicit
         </div>
       </div>
 
+      {cot && d.estado === 'Aprobada' && 'trabajo_estado' in cot && (
+        <TrabajoPanel cot={{ id: cot.id, folio: cot.folio, titulo: d.titulo, total: Number(cot.total_clp ?? cot.total ?? 0), trabajo_estado: cot.trabajo_estado,
+          trabajo_inicio: cot.trabajo_inicio, trabajo_termino: cot.trabajo_termino }} plan={planDe(cot)} onCambio={() => cargarDoc(cot.id)} />
+      )}
       {cot && d.estado !== 'Borrador' && <EstadoActual d={d} envios={envios} equipo={equipo} onAbrir={async p => { const u = await cotizadorService.urlArchivo(p); if (u) window.open(u, '_blank'); }} />}
       {!puedeEditar && <p style={{ fontSize: '0.84rem', color: 'var(--muted)', marginBottom: 10 }}>Solo lectura: no tienes permiso para editar cotizaciones.</p>}
 
@@ -838,15 +872,16 @@ export default function EditorCotizacion({ id, clonarDe, clienteInicial, solicit
                     {proyectos.filter(p => !d.cliente_id || !p.cliente_id || p.cliente_id === d.cliente_id || p.id === d.proyecto_id).map(p => <option key={p.id} value={p.id}>{folioProyecto(p.folio)} · {p.nombre}</option>)}
                   </select></label>
               )}
-              {(d.solicitud_id || d.levantamiento_id || d.ot_id) && (
+              {(d.solicitud_id || d.levantamiento_id || d.ot_id || d.agendamiento_id) && (
                 <div style={{ fontSize: '0.82rem', color: 'var(--muted)', display: 'flex', flexDirection: 'column', gap: 4 }}>
                   <span style={etiqueta}>Origen</span>
                   {d.ot_id && <Link href={`/ordenes/${d.ot_id}`}>Viene de una OT: al aprobarse, el trabajo sigue en ella</Link>}
                   {d.solicitud_id && <Link href="/solicitudes">Viene de una solicitud</Link>}
-                  {(d.levantamiento_id || d.ot_id) && (
+                  {d.agendamiento_id && <Link href="/agenda">Viene de una visita de la agenda</Link>}
+                  {(d.levantamiento_id || d.ot_id || d.agendamiento_id) && (
                     <label style={{ display: 'flex', gap: 6, alignItems: 'center', color: 'var(--text)' }}>
                       <input type="checkbox" checked={!!d.incluir_fotos} onChange={e => set({ incluir_fotos: e.target.checked })} style={{ accentColor: 'var(--y-brand)' }} />
-                      {d.ot_id ? 'Incluir las fotos de la visita en el PDF' : 'Incluir las fotos del levantamiento en el PDF'}
+                      {d.ot_id || d.agendamiento_id ? 'Incluir las fotos de la visita en el PDF' : 'Incluir las fotos del levantamiento en el PDF'}
                     </label>
                   )}
                 </div>
@@ -901,6 +936,12 @@ export default function EditorCotizacion({ id, clonarDe, clienteInicial, solicit
                   ))}
                 </div>
               </div>
+              {ajustes && 'plan_cobro' in ajustes && (
+                <div style={{ gridColumn: '1 / -1' }}>
+                  <span style={etiqueta}>Forma de pago (cobros por hitos: cada uno cae en «Por facturar» cuando corresponde)</span>
+                  <PlanCobro plan={planDe(d)} editable={editable} onCambiar={p => set({ plan_cobro: p })} />
+                </div>
+              )}
             </fieldset>
           </BloquePlegable>
 

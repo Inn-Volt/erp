@@ -20,7 +20,7 @@ import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import {
-  Home, HardHat, TrendingUp, Wrench, Building2, LogOut, ChevronDown,
+  ClipboardCheck, Home, TrendingUp, Building2, LogOut, ChevronDown,
   PanelLeftClose, PanelLeftOpen, Menu, X, Lock, Loader2, AlertTriangle, Wallet,
 } from 'lucide-react';
 import ThemeToggle from '@/components/ThemeToggle';
@@ -42,29 +42,29 @@ const MENU: { grupo: string; icono: React.ElementType; items: Item[] }[] = [
     { href: '/inicio', label: 'Mi día' },
     { href: '/dashboard', label: 'Dashboard', permisos: ['dashboard.ver'] },
   ] },
-  // Lo de cada técnico (como «Mi trabajo» de TecApp): sus OT ordenadas por lo que le toca hacer.
-  { grupo: 'Mi trabajo', icono: HardHat, items: [
-    { href: '/mis-ot', label: 'Mis OT', permisos: ['ot.ejecutar'] },
-  ] },
-  { grupo: 'Operaciones', icono: Wrench, items: [
-    { href: '/ordenes', label: 'Órdenes de trabajo', permisos: ['ot.ver', 'ot.ejecutar'] },
-    { href: '/agenda', label: 'Agenda', permisos: ['agenda.ver'] },
-    { href: '/tareas', label: 'Tareas' },
-    { href: '/proyectos', label: 'Proyectos', permisos: ['proyectos.ver', 'proyectos.gestionar'] },
-    { href: '/bodega', label: 'Bodega', permisos: ['bodega.ver', 'bodega.mover'], modulo: 'bodega' },
-  ] },
+  // El flujo, en orden: llega la solicitud → se coordina la visita → se cotiza → se sigue el trabajo.
   { grupo: 'Comercial', icono: TrendingUp, items: [
     { href: '/solicitudes', label: 'Solicitudes', permisos: ['solicitudes.ver'] },
+    { href: '/agenda', label: 'Agenda y visitas', permisos: ['agenda.ver'] },
     { href: '/cotizador/historial', label: 'Cotizaciones', permisos: ['cotizaciones.ver'] },
     { href: '/cotizador', label: 'Nueva cotización', exacto: true, permisos: ['cotizaciones.crear'], sub: true },
     { href: '/cotizador/plantillas', label: 'Plantillas', permisos: ['cotizaciones.aprobar'], sub: true },
     { href: '/cotizador/ajustes', label: 'Ajustes', permisos: ['cotizaciones.aprobar'], sub: true },
-    { href: '/traslados', label: 'Traslados', permisos: ['traslados.ver', 'traslados.gestionar'] },
     { href: '/clientes', label: 'Clientes', permisos: ['clientes.ver'] },
+    { href: '/traslados', label: 'Traslados', permisos: ['traslados.ver', 'traslados.gestionar'] },
+  ] },
+  { grupo: 'Seguimiento', icono: ClipboardCheck, items: [
+    { href: '/trabajos', label: 'Trabajos', permisos: ['cotizaciones.ver'] },
+    { href: '/proyectos', label: 'Proyectos', permisos: ['proyectos.ver', 'proyectos.gestionar'] },
+    { href: '/tareas', label: 'Tareas' },
+    // Apagados (lib/modulos.ts): siguen aquí para encenderlos sin tocar el menú.
+    { href: '/mis-ot', label: 'Mis OT', permisos: ['ot.ejecutar'], modulo: 'ot' },
+    { href: '/ordenes', label: 'Órdenes de trabajo', permisos: ['ot.ver', 'ot.ejecutar'], modulo: 'ot' },
+    { href: '/bodega', label: 'Bodega', permisos: ['bodega.ver', 'bodega.mover'], modulo: 'bodega' },
   ] },
   { grupo: 'Finanzas', icono: Wallet, items: [
-    { href: '/facturacion', label: 'Por facturar y cobranza', permisos: ['facturacion.ver', 'facturacion.gestionar'] },
-    { href: '/gastos', label: 'Rendiciones y anticipos', permisos: ['gastos.crear', 'gastos.ver_todos', 'gastos.aprobar'] },
+    { href: '/facturacion', label: 'Facturación y cobranza', permisos: ['facturacion.ver', 'facturacion.gestionar'] },
+    { href: '/gastos', label: 'Gastos y anticipos', permisos: ['gastos.crear', 'gastos.ver_todos', 'gastos.aprobar'] },
   ] },
   { grupo: 'Mi empresa', icono: Building2, items: [
     { href: '/biblioteca', label: 'Biblioteca de precios', permisos: ['biblioteca.ver'] },

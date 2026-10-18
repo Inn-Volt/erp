@@ -44,6 +44,26 @@ export const UNIDADES_PARTIDA = ['global', 'un', 'local', 'm²', 'depto', 'piso'
 export const TITULO_VALORIZACION = 'VALORIZACIÓN';
 export const IVA = 19;
 
+/** Un cobro del plan: «Anticipo 50 % al aprobar», «Saldo 50 % al terminar». */
+export interface HitoCobro { nombre: string; porcentaje: number; cuando: 'aprobar' | 'terminar' }
+export const PLAN_COBRO_BASE: HitoCobro[] = [
+  { nombre: 'Anticipo', porcentaje: 50, cuando: 'aprobar' },
+  { nombre: 'Saldo', porcentaje: 50, cuando: 'terminar' },
+];
+export const CUANDO_COBRO: Record<HitoCobro['cuando'], string> = { aprobar: 'al aprobar', terminar: 'al terminar el trabajo' };
+/** «50 % al aprobar y 50 % al terminar el trabajo». */
+export const planEnPalabras = (plan: HitoCobro[]) =>
+  plan.filter(h => h.porcentaje > 0).map(h => `${String(h.porcentaje).replace('.', ',')} % ${CUANDO_COBRO[h.cuando]}`)
+    .join(', ').replace(/, ([^,]*)$/, ' y $1');
+
+export type EstadoTrabajo = 'por_iniciar' | 'en_ejecucion' | 'terminado';
+export const ESTADOS_TRABAJO: { clave: EstadoTrabajo; nombre: string; color: string }[] = [
+  { clave: 'por_iniciar', nombre: 'Por iniciar', color: '#d97706' },
+  { clave: 'en_ejecucion', nombre: 'En ejecución', color: '#2563eb' },
+  { clave: 'terminado', nombre: 'Terminado', color: '#16a34a' },
+];
+export const estadoTrabajo = (e?: string | null) => ESTADOS_TRABAJO.find(x => x.clave === e) || ESTADOS_TRABAJO[0];
+
 /** Una línea de la cotización (lo que se guarda en items[]). */
 export interface Linea extends CotizacionItem {
   /** Artículo del catálogo (precio congelado al agregarla). */
@@ -96,6 +116,14 @@ export interface CotizacionDoc {
   levantamiento_id?: string | null;
   /** La OT de donde se cotizó (fase 6): al aprobarse, el trabajo sigue en ella. */
   ot_id?: string | null;
+  /** Fase 7: la visita de la agenda de donde se cotizó (notas y fotos). */
+  agendamiento_id?: string | null;
+  /** Fase 7: cómo se cobra (hitos). Vacío: el de los ajustes. */
+  plan_cobro?: HitoCobro[] | null;
+  /** Fase 7: seguimiento del trabajo aprobado. */
+  trabajo_estado?: EstadoTrabajo | null;
+  trabajo_inicio?: string | null;
+  trabajo_termino?: string | null;
   incluir_fotos?: boolean;
   proyecto_id?: string | null;
   plantilla_id?: string | null;
@@ -185,6 +213,8 @@ export interface AjustesCot {
   asunto_correo: string | null;
   mensaje_correo: string | null;
   mensaje_whatsapp: string | null;
+  /** Fase 7: el plan de cobro por omisión de las cotizaciones nuevas. */
+  plan_cobro?: HitoCobro[] | null;
 }
 
 export interface Plantilla {

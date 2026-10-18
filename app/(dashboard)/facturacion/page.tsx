@@ -75,7 +75,8 @@ function Ficha({ p, puedeEditar, onClose, onGuardado }: { p: PorFacturar; puedeE
             <button type="button" className="btn btn-ghost" style={{ alignSelf: 'flex-start' }} onClick={() => set({ monto_pagado: d.monto, fecha_pago: d.fecha_pago || fechaLocal() })}>Marcar pagada completa</button>
           )}
           <div><label className="label-muted" style={lbl}>Notas</label><textarea className="input" rows={2} value={d.notas || ''} onChange={e => set({ notas: e.target.value })} /></div>
-          {d.ot_id && <Link href={`/ordenes/${d.ot_id}`} style={{ fontSize: '0.85rem' }}>Ver {folioOT(d.ordenes_trabajo?.folio)}</Link>}
+          {d.cotizacion_id && <Link href={`/cotizador?edit=${d.cotizacion_id}`} style={{ fontSize: '0.85rem' }}>Ver el trabajo {d.cotizaciones ? `IV-${String(d.cotizaciones.folio).padStart(4, '0')}` : ''}</Link>}
+          {d.ot_id && !d.cotizacion_id && <Link href={`/ordenes/${d.ot_id}`} style={{ fontSize: '0.85rem' }}>Ver {folioOT(d.ordenes_trabajo?.folio)}</Link>}
         </fieldset>
         {puedeEditar && (
           <div style={{ padding: '0.9rem 1.25rem', borderTop: '1px solid var(--border2)', display: 'flex', justifyContent: 'flex-end', gap: 8 }}>

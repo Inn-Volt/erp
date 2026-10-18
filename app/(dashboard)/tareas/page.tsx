@@ -5,6 +5,7 @@
  * Cualquiera se anota las suyas; con «Crear y asignar» se le asignan a otros (le llega aviso).
  */
 
+import { encendido } from '@/lib/modulos';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { CheckCircle2, Circle, ListTodo, Loader2, Plus, X } from 'lucide-react';
@@ -56,9 +57,9 @@ function NuevaTarea({ equipo, ots, yo, asignaOtros, onClose, onListo }: {
             <div><label className="label-muted" style={lbl}>Para cuándo</label><input className="input" type="date" value={f.fecha_limite} onChange={e => setF({ ...f, fecha_limite: e.target.value })} /></div>
             <div><label className="label-muted" style={lbl}>Prioridad</label>
               <select className="input" value={f.prioridad} onChange={e => setF({ ...f, prioridad: e.target.value })}>{['Baja', 'Media', 'Alta', 'Urgente'].map(p => <option key={p}>{p}</option>)}</select></div>
-            <div><label className="label-muted" style={lbl}>OT</label>
+            {ots.length > 0 && <div><label className="label-muted" style={lbl}>OT</label>
               <select className="input" value={f.ot_id} onChange={e => setF({ ...f, ot_id: e.target.value })}>
-                <option value="">—</option>{ots.map(o => <option key={o.id} value={o.id}>{folioOT(o.folio)} · {o.titulo}</option>)}</select></div>
+                <option value="">—</option>{ots.map(o => <option key={o.id} value={o.id}>{folioOT(o.folio)} · {o.titulo}</option>)}</select></div>}
           </div>
           <div><label className="label-muted" style={lbl}>Detalle</label><textarea className="input" rows={3} value={f.descripcion} onChange={e => setF({ ...f, descripcion: e.target.value })} /></div>
         </div>
@@ -88,7 +89,7 @@ export default function TareasPage() {
     try {
       const [t, e] = await Promise.all([tareasService.listar(), vendedoresService.mapa()]);
       setTareas(t); setEquipo(e);
-      otService.listar().then(o => setOts(o.filter(x => !['cerrada', 'anulada'].includes(x.estado)))).catch(() => {});
+      if (encendido('ot')) otService.listar().then(o => setOts(o.filter(x => !['cerrada', 'anulada'].includes(x.estado)))).catch(() => {});
     } catch (err) { if (faltaFase2(err)) setFalta(true); else toastError('No se pudieron cargar las tareas: ' + (err instanceof Error ? err.message : '')); }
     finally { setCargando(false); }
   }, [toastError]);

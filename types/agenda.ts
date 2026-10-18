@@ -28,6 +28,9 @@ export interface Agendamiento {
   tipos_servicio: TipoServicio[];
   estado: EstadoAgenda;
   notas: string | null;
+  /** Fase 7: lo que se vio en la visita y sus fotos (pasan a la cotización). */
+  notas_visita?: string | null;
+  fotos?: { path: string; caption: string }[];
   created_by: string | null;
   created_at: string;
   updated_at: string;

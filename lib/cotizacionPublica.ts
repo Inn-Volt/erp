@@ -6,6 +6,7 @@
 // márgenes, imprevistos ni supuestos internos.
 // ══════════════════════════════════════════════════════════════════════════════
 
+import type { HitoCobro } from '@/lib/cotizador/tipos';
 import { getSupabaseAdmin } from '@/lib/supabaseAdmin';
 import { diasValidez, sumarDias } from '@/utils';
 import type { CotizacionItem, Partida, Moneda } from '@/types';
@@ -49,6 +50,8 @@ export interface FilaCotizacion {
   solicitud_id: string | null;
   levantamiento_id: string | null;
   ot_id?: string | null;
+  agendamiento_id?: string | null;
+  plan_cobro?: HitoCobro[] | null;
   incluir_fotos: boolean | null;
   vista_at: string | null;
   respondida_at: string | null;
@@ -111,10 +114,11 @@ function partidaPublica(p: Partida & { tipo?: string }): Partida & { tipo?: stri
 /** Ajustes de cotización que ve el cliente (sin la fase 4: valores de siempre). */
 async function ajustesPublicos() {
   try {
-    const { data } = await getSupabaseAdmin().from('ajustes_cotizacion').select('responde_en_linea, importante, correo_aceptar').eq('id', 1).maybeSingle();
-    return { responde_en_linea: data ? !!data.responde_en_linea : true, importante: data?.importante ?? null, correo_aceptar: data?.correo_aceptar ?? null };
+    const { data } = await getSupabaseAdmin().from('ajustes_cotizacion').select('*').eq('id', 1).maybeSingle();
+    return { responde_en_linea: data ? !!data.responde_en_linea : true, importante: data?.importante ?? null, correo_aceptar: data?.correo_aceptar ?? null,
+             plan_base: (data?.plan_cobro ?? null) as HitoCobro[] | null };
   } catch {
-    return { responde_en_linea: true, importante: null, correo_aceptar: null };
+    return { responde_en_linea: true, importante: null, correo_aceptar: null, plan_base: null as HitoCobro[] | null };
   }
 }
 
@@ -142,9 +146,17 @@ async function empresaDe(empresaId: string | null): Promise<EmpresaInfo> {
 
 /** Links firmados (1 h) de las fotos de la visita (informes de la OT) o, en las de antes, del
  *  levantamiento, si la cotización las incluye. */
-export async function fotosDe(levantamientoId: string | null, incluir: boolean | null, otId?: string | null): Promise<FotoPublica[]> {
+export async function fotosDe(levantamientoId: string | null, incluir: boolean | null, otId?: string | null, agendamientoId?: string | null): Promise<FotoPublica[]> {
   if (!incluir) return [];
   const admin = getSupabaseAdmin();
+  if (agendamientoId) {
+    // Fase 7: las fotos de la visita de la agenda.
+    const { data: v } = await admin.from('agendamientos').select('fotos').eq('id', agendamientoId).maybeSingle();
+    const fv = (((v as { fotos?: { path: string; caption?: string }[] } | null)?.fotos) || []).slice(0, 24);
+    if (!fv.length) return [];
+    const { data: fir } = await admin.storage.from(BUCKET_FOTOS).createSignedUrls(fv.map(f => f.path), 3600);
+    return (fir || []).map((f, i) => ({ url: f.signedUrl || '', caption: fv[i]?.caption || '' })).filter(f => f.url);
+  }
   if (otId) {
     const { data: infs } = await admin.from('informes_ot').select('fotos').eq('ot_id', otId).order('folio');
     const fotosOT = ((infs || []) as { fotos: { path: string; caption?: string }[] | null }[]).flatMap(x => x.fotos || []).slice(0, 24);
@@ -177,7 +189,7 @@ async function vendedorDe(id: string | null | undefined): Promise<CotizacionPubl
 export async function aPublica(cot: FilaCotizacion): Promise<CotizacionPublica> {
   const { vence, vigente } = vigencia(cot);
   const [empresa, fotos, vendedor, ajustes, lugar] = await Promise.all([
-    empresaDe(cot.empresa_id), fotosDe(cot.levantamiento_id, cot.incluir_fotos, cot.ot_id), vendedorDe(cot.vendedor_id),
+    empresaDe(cot.empresa_id), fotosDe(cot.levantamiento_id, cot.incluir_fotos, cot.ot_id, cot.agendamiento_id), vendedorDe(cot.vendedor_id),
     ajustesPublicos(), lugarDe(cot.sucursal_id, cot.contacto_id),
   ]);
   const estado = normalizarEstado(cot.estado, !!cot.enviada_at || !!cot.vista_at);
@@ -194,7 +206,8 @@ export async function aPublica(cot: FilaCotizacion): Promise<CotizacionPublica> 
     titulo_valorizacion: cot.titulo_valorizacion || null,
     aclaraciones: cot.aclaraciones ?? [cot.condiciones_servicio, cot.condiciones_comerciales].filter(Boolean).join('\n\n'),
     secciones: cot.secciones || [],
-    ...ajustes,
+    plan_cobro: (cot.plan_cobro && cot.plan_cobro.length ? cot.plan_cobro : ajustes.plan_base) || null,
+    responde_en_linea: ajustes.responde_en_linea, importante: ajustes.importante, correo_aceptar: ajustes.correo_aceptar,
     ...lugar,
     moneda: (cot.moneda as Moneda) || 'CLP',
     valor_uf: cot.valor_uf,

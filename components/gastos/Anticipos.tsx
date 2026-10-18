@@ -10,18 +10,18 @@ import { useState } from 'react';
 import { HandCoins, Loader2, Plus, X } from 'lucide-react';
 import NumeroInput from '@/components/NumeroInput';
 import { anticiposService, type Anticipo } from '@/services/fase5';
-import { folioOT, type OrdenTrabajo } from '@/services/operacion';
+import type { DestinoGasto } from '@/components/gastos/NuevoGasto';
 import { useToast } from '@/hooks/useToast';
 import { fechaLocal, formatCLP, formatDate } from '@/utils';
 import type { Vendedor } from '@/types';
 
 const COLOR: Record<Anticipo['estado'], string> = { entregado: '#2563eb', rendido: '#16a34a', anulado: '#78716c' };
 
-export default function Anticipos({ anticipos, equipo, ots, aprueba, yo, onCambio }: {
-  anticipos: Anticipo[]; equipo: Record<string, Vendedor>; ots: OrdenTrabajo[]; aprueba: boolean; yo?: string; onCambio: () => void;
+export default function Anticipos({ anticipos, equipo, destinos, aprueba, yo, onCambio }: {
+  anticipos: Anticipo[]; equipo: Record<string, Vendedor>; destinos: DestinoGasto[]; aprueba: boolean; yo?: string; onCambio: () => void;
 }) {
   const { success, error: toastError } = useToast();
-  const [nuevo, setNuevo] = useState<{ usuario_id: string; monto: number; motivo: string; ot_id: string; fecha: string } | null>(null);
+  const [nuevo, setNuevo] = useState<{ usuario_id: string; monto: number; motivo: string; destino: string; fecha: string } | null>(null);
   const [ocupado, setOcupado] = useState(false);
   const [verRendidos, setVerRendidos] = useState(false);
   const lista = anticipos.filter(a => verRendidos || a.estado === 'entregado');
@@ -31,7 +31,9 @@ export default function Anticipos({ anticipos, equipo, ots, aprueba, yo, onCambi
     if (!nuevo?.usuario_id || !(nuevo.monto > 0)) { toastError('Elige a quién y el monto'); return; }
     setOcupado(true);
     try {
-      await anticiposService.entregar({ usuario_id: nuevo.usuario_id, monto: nuevo.monto, motivo: nuevo.motivo || null, ot_id: nuevo.ot_id || null, fecha: nuevo.fecha });
+      const [tipo, id] = nuevo.destino.split(':');
+      await anticiposService.entregar({ usuario_id: nuevo.usuario_id, monto: nuevo.monto, motivo: nuevo.motivo || null, fecha: nuevo.fecha,
+        ...(tipo === 'cot' ? { cotizacion_id: id } : tipo === 'proy' ? { proyecto_id: id } : tipo === 'ot' ? { ot_id: id } : {}) } as Partial<Anticipo>);
       success('Anticipo entregado; le llega el aviso');
       setNuevo(null); onCambio();
     } catch (e) { toastError(e instanceof Error ? e.message : 'No se pudo'); }
@@ -45,7 +47,7 @@ export default function Anticipos({ anticipos, equipo, ots, aprueba, yo, onCambi
         <p className="section-label" style={{ margin: 0, flex: 1 }}><HandCoins size={15} /> Anticipos a rendir · {formatCLP(porRendir)} por rendir</p>
         <label style={{ display: 'flex', gap: 6, alignItems: 'center', fontSize: '0.78rem', color: 'var(--muted)' }}>
           <input type="checkbox" checked={verRendidos} onChange={e => setVerRendidos(e.target.checked)} style={{ accentColor: 'var(--y-brand)' }} /> Ver rendidos y anulados</label>
-        {aprueba && !nuevo && <button className="btn btn-ghost btn-sm" onClick={() => setNuevo({ usuario_id: '', monto: 0, motivo: '', ot_id: '', fecha: fechaLocal() })}><Plus size={13} /> Entregar anticipo</button>}
+        {aprueba && !nuevo && <button className="btn btn-ghost btn-sm" onClick={() => setNuevo({ usuario_id: '', monto: 0, motivo: '', destino: '', fecha: fechaLocal() })}><Plus size={13} /> Entregar anticipo</button>}
       </div>
       {nuevo && (
         <div style={{ padding: '0.8rem 1rem', display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: 8, borderBottom: '1px solid var(--border2)', alignItems: 'end' }}>
@@ -54,9 +56,9 @@ export default function Anticipos({ anticipos, equipo, ots, aprueba, yo, onCambi
               <option value="">Elegir…</option>{Object.values(equipo).map(p => <option key={p.id} value={p.id}>{p.nombre}</option>)}</select></label>
           <label><span className="label-muted">Monto</span><NumeroInput className="input" prefijo="$" value={nuevo.monto} onChange={v => setNuevo({ ...nuevo, monto: v })} /></label>
           <label><span className="label-muted">Fecha</span><input className="input" type="date" value={nuevo.fecha} onChange={e => setNuevo({ ...nuevo, fecha: e.target.value })} /></label>
-          <label><span className="label-muted">OT (opcional)</span>
-            <select className="input" value={nuevo.ot_id} onChange={e => setNuevo({ ...nuevo, ot_id: e.target.value })}>
-              <option value="">—</option>{ots.map(o => <option key={o.id} value={o.id}>{folioOT(o.folio)} · {o.titulo}</option>)}</select></label>
+          <label><span className="label-muted">Trabajo o proyecto (opcional)</span>
+            <select className="input" value={nuevo.destino} onChange={e => setNuevo({ ...nuevo, destino: e.target.value })}>
+              <option value="">—</option>{destinos.map(d => <option key={d.valor} value={d.valor}>{d.etiqueta}</option>)}</select></label>
           <label style={{ gridColumn: '1 / -1' }}><span className="label-muted">Para qué</span><input className="input" value={nuevo.motivo} onChange={e => setNuevo({ ...nuevo, motivo: e.target.value })} placeholder="Bencina y peajes de la semana" /></label>
           <div style={{ gridColumn: '1 / -1', display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
             <button className="btn btn-ghost" onClick={() => setNuevo(null)}><X size={13} /> Cancelar</button>
@@ -80,7 +82,7 @@ export default function Anticipos({ anticipos, equipo, ots, aprueba, yo, onCambi
         </div>
       ))}
       <p style={{ padding: '0.5rem 1rem', margin: 0, fontSize: '0.74rem', color: 'var(--muted)', borderTop: '1px solid var(--border2)' }}>
-        Saldo negativo = gastaste más que el anticipo: la diferencia se te reembolsa al aprobar los gastos.</p>
+        Saldo negativo = se gastó más que el anticipo: la diferencia se reembolsa con «Pagado».</p>
     </div>
   );
 }

@@ -71,6 +71,9 @@ export interface PorFacturar {
   monto: number; etapa: EtapaCobro; sin_cobro_motivo: 'garantia' | 'cortesia' | null; numero_oc: string | null;
   numero_hes: string | null; numero_factura: string | null; fecha_factura: string | null; vencimiento: string | null;
   monto_pagado: number; fecha_pago: string | null; notas: string | null; created_at: string;
+  /** Fase 7: el hito del plan de cobro («Anticipo», «Saldo») y su porcentaje. */
+  hito?: string | null; porcentaje?: number | null;
+  cotizaciones?: { folio: number; titulo: string | null } | null;
   clientes?: { nombre_cliente: string } | null;
   ordenes_trabajo?: { folio: number } | null;
 }
@@ -101,7 +104,11 @@ export interface Gasto {
   estado: 'rendido' | 'reembolsado' | 'rechazado' | 'pendiente' | 'aprobado';
   revisado_por: string | null; revisado_at: string | null; motivo_rechazo: string | null; created_at: string;
   anticipo_id?: string | null;
+  /** Fase 7: el trabajo (cotización aprobada) o el proyecto al que va el gasto. */
+  cotizacion_id?: string | null; proyecto_id?: string | null;
   ordenes_trabajo?: { folio: number } | null;
+  cotizaciones?: { folio: number; titulo: string | null } | null;
+  proyectos?: { folio: number; nombre: string } | null;
 }
 
 export interface Tarea {
@@ -228,7 +235,7 @@ export const informesService = {
 export const facturacionService = {
   async listar(): Promise<PorFacturar[]> {
     const { data, error } = await supabase.from('por_facturar')
-      .select('*, clientes(nombre_cliente), ordenes_trabajo(folio)').order('created_at', { ascending: false });
+      .select('*, clientes(nombre_cliente), ordenes_trabajo(folio), cotizaciones(folio, titulo)').order('created_at', { ascending: false });
     lanzar(error); return (data || []) as PorFacturar[];
   },
   async actualizar(id: string, patch: Partial<PorFacturar>) {
@@ -265,9 +272,15 @@ export const bodegaService = {
 // ── Gastos ────────────────────────────────────────────────────────────────────
 export const gastosService = {
   async listar(soloMios: string | null): Promise<Gasto[]> {
-    let q = supabase.from('gastos').select('*, ordenes_trabajo(folio)').order('fecha', { ascending: false }).limit(500);
-    if (soloMios) q = q.eq('usuario_id', soloMios);
-    const { data, error } = await q; lanzar(error); return (data || []) as Gasto[];
+    // Con la fase 7, cada gasto trae su trabajo (cotización) o su proyecto; sin ella, la consulta de antes.
+    const consulta = (sel: string) => {
+      let q = supabase.from('gastos').select(sel).order('fecha', { ascending: false }).limit(500);
+      if (soloMios) q = q.eq('usuario_id', soloMios);
+      return q;
+    };
+    let r = await consulta('*, ordenes_trabajo(folio), cotizaciones(folio, titulo), proyectos(folio, nombre)');
+    if (r.error) r = await consulta('*, ordenes_trabajo(folio)');
+    lanzar(r.error); return (r.data || []) as unknown as Gasto[];
   },
   async deOT(otId: string): Promise<Gasto[]> {
     const { data, error } = await supabase.from('gastos').select('*').eq('ot_id', otId).order('fecha');
