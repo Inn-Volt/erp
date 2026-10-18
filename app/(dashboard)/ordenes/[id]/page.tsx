@@ -6,6 +6,7 @@
  * bodega, rendiciones, resultado (venta, costo cotizado y costo real) y bitácora.
  */
 
+import { encendido } from '@/lib/modulos';
 import NumeroInput from '@/components/NumeroInput';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
@@ -391,7 +392,7 @@ export default function DetalleOTPage() {
       </Seccion>
 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: 12 }}>
-        <Seccion icono={<Package size={15} />} titulo="Materiales de bodega"
+        {encendido('bodega') && <Seccion icono={<Package size={15} />} titulo="Materiales de bodega"
           accion={puede('bodega.mover') && abierta && !sacando ? <button className="btn btn-ghost btn-sm" onClick={() => setSacando(true)}><Plus size={13} /> Sacar de bodega</button> : null}>
           {sacando && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 8, padding: '0.6rem', background: 'var(--bg3)', borderRadius: 8 }}>
@@ -424,11 +425,11 @@ export default function DetalleOTPage() {
                 <span style={{ color: 'var(--muted)', fontSize: '0.78rem' }}>{m.bodegas?.nombre}</span>
               </div>
             ))}
-        </Seccion>
+        </Seccion>}
 
-        <Seccion icono={<Send size={15} />} titulo="Pedidos de material">
+        {encendido('bodega') && <Seccion icono={<Send size={15} />} titulo="Pedidos de material">
           <PedidosMaterial otId={ot.id} equipo={equipo} />
-        </Seccion>
+        </Seccion>}
 
         <Seccion icono={<Receipt size={15} />} titulo={`Rendiciones de la OT · ${formatCLP(gastos.filter(g => g.estado !== 'rechazado').reduce((x, g) => x + Number(g.monto), 0))}`}
           accion={puede('gastos.crear') && ot.estado !== 'anulada' ? <button className="btn btn-ghost btn-sm" onClick={() => {
@@ -452,7 +453,7 @@ export default function DetalleOTPage() {
             {[
               ['Venta neta', renta.venta, 'var(--text)'],
               ...(renta.cotizado !== null ? [['Costo cotizado', -renta.cotizado, 'var(--muted)']] : []),
-              ['Materiales bodega', -renta.materiales, 'var(--muted)'],
+              ...(encendido('bodega') || renta.materiales ? [['Materiales bodega', -renta.materiales, 'var(--muted)']] : []),
               ['Gastos', -renta.gastos, 'var(--muted)'],
               ['Margen real', renta.margen, renta.margen >= 0 ? 'var(--success)' : 'var(--danger)'],
             ].map(([t, v, c]) => (

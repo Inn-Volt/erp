@@ -5,6 +5,7 @@
  * este equipo, mis roles y mis competencias. El correo y los roles los cambia quien administra usuarios.
  */
 
+import { encendido } from '@/lib/modulos';
 import { useEffect, useState } from 'react';
 import { Award, Eye, EyeOff, KeyRound, Loader2, Save, UserRound } from 'lucide-react';
 import PageHeader from '@/components/PageHeader';
@@ -28,7 +29,7 @@ export default function MiCuentaPage() {
   useEffect(() => {
     if (!perfil) return;
     setDatos({ nombre: perfil.nombre || '', telefono: (perfil as { telefono?: string | null }).telefono || '', cargo: (perfil as { cargo?: string | null }).cargo || '' });
-    Promise.all([personasService.competencias(), personasService.deUsuarios()])
+    if (encendido('personas')) Promise.all([personasService.competencias(), personasService.deUsuarios()])
       .then(([c, a]) => setMias(a.filter(x => x.usuario_id === perfil.id).map(x => ({ ...x, c: c.find(y => y.id === x.competencia_id) }))))
       .catch(() => {});
   }, [perfil]);
@@ -80,7 +81,7 @@ export default function MiCuentaPage() {
           <button className="btn btn-primary" style={{ alignSelf: 'flex-end' }} onClick={cambiarClave} disabled={cambiando || !clave.nueva}>{cambiando ? <Loader2 size={14} className="iv-spin" /> : <KeyRound size={14} />} Cambiar</button>
         </div>
         <AvisosCelular />
-        <div className="panel-y" style={{ padding: '1rem', display: 'flex', flexDirection: 'column', gap: 8 }}>
+        {encendido('personas') && <div className="panel-y" style={{ padding: '1rem', display: 'flex', flexDirection: 'column', gap: 8 }}>
           <p className="section-label" style={{ margin: 0 }}><Award size={15} /> Mis competencias</p>
           {mias.length === 0 ? <p style={{ margin: 0, fontSize: '0.84rem', color: 'var(--muted)' }}>Sin competencias anotadas.</p> : mias.map(m => (
             <div key={m.id} style={{ display: 'flex', gap: 8, fontSize: '0.86rem', color: 'var(--text)' }}>
@@ -88,7 +89,7 @@ export default function MiCuentaPage() {
               {m.vence && <span style={{ fontSize: '0.76rem', color: 'var(--muted)' }}>vence {formatDate(m.vence)}</span>}
             </div>
           ))}
-        </div>
+        </div>}
       </div>
     </div>
   );

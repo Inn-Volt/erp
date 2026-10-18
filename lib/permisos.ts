@@ -1,3 +1,5 @@
+import { encendido } from '@/lib/modulos';
+
 /**
  * Catálogo de permisos (modelo de TecApp adaptado a InnVolt).
  * ─────────────────────────────────────────────────────────────────────────────
@@ -14,7 +16,7 @@ export interface PermisoDef { clave: string; nombre: string; ayuda?: string }
 export interface ModuloDef { modulo: string; nombre: string; permisos: PermisoDef[] }
 export interface AreaDef { area: string; modulos: ModuloDef[] }
 
-export const CATALOGO: AreaDef[] = [
+const TODO: AreaDef[] = [
   { area: 'Comercial', modulos: [
     { modulo: 'solicitudes', nombre: 'Solicitudes', permisos: [
       { clave: 'solicitudes.ver', nombre: 'Ver' },
@@ -107,6 +109,11 @@ export const CATALOGO: AreaDef[] = [
     ] },
   ] },
 ];
+
+/** Lo que se muestra en Roles: sin los módulos apagados (lib/modulos.ts). */
+export const CATALOGO: AreaDef[] = TODO
+  .map(a => ({ ...a, modulos: a.modulos.filter(m => encendido(m.modulo)) }))
+  .filter(a => a.modulos.length > 0);
 
 export const TODAS_LAS_CLAVES = CATALOGO.flatMap(a => a.modulos.flatMap(m => m.permisos.map(p => p.clave)));
 

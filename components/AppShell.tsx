@@ -15,6 +15,7 @@
  *  · Salir de una sección pregunta si hay cambios sin guardar (cotizador).
  */
 
+import { encendido, rutaApagada } from '@/lib/modulos';
 import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
@@ -35,7 +36,7 @@ import { permisosDeRuta } from '@/lib/permisos';
  * `sub`: vive dentro de la opción de arriba (Cotizaciones → Nueva, Plantillas, Ajustes):
  * va con sangría bajo ella y solo se ve estando en esa sección, o al abrirla con la flecha.
  */
-type Item = { href: string; label: string; exacto?: boolean; permisos?: string[]; sub?: boolean };
+type Item = { href: string; label: string; exacto?: boolean; permisos?: string[]; sub?: boolean; modulo?: string };
 const MENU: { grupo: string; icono: React.ElementType; items: Item[] }[] = [
   { grupo: 'Inicio', icono: Home, items: [
     { href: '/inicio', label: 'Mi día' },
@@ -50,7 +51,7 @@ const MENU: { grupo: string; icono: React.ElementType; items: Item[] }[] = [
     { href: '/agenda', label: 'Agenda', permisos: ['agenda.ver'] },
     { href: '/tareas', label: 'Tareas' },
     { href: '/proyectos', label: 'Proyectos', permisos: ['proyectos.ver', 'proyectos.gestionar'] },
-    { href: '/bodega', label: 'Bodega', permisos: ['bodega.ver', 'bodega.mover'] },
+    { href: '/bodega', label: 'Bodega', permisos: ['bodega.ver', 'bodega.mover'], modulo: 'bodega' },
   ] },
   { grupo: 'Comercial', icono: TrendingUp, items: [
     { href: '/solicitudes', label: 'Solicitudes', permisos: ['solicitudes.ver'] },
@@ -69,7 +70,7 @@ const MENU: { grupo: string; icono: React.ElementType; items: Item[] }[] = [
     { href: '/biblioteca', label: 'Biblioteca de precios', permisos: ['biblioteca.ver'] },
     { href: '/usuarios', label: 'Usuarios', permisos: ['usuarios.ver', 'usuarios.gestionar'] },
     { href: '/roles', label: 'Roles y permisos', permisos: ['roles.gestionar'] },
-    { href: '/personas', label: 'Personas y competencias', permisos: ['personas.ver', 'personas.gestionar'] },
+    { href: '/personas', label: 'Personas y competencias', permisos: ['personas.ver', 'personas.gestionar'], modulo: 'personas' },
     { href: '/auditoria', label: 'Auditoría', permisos: ['auditoria.ver'] },
     { href: '/configuracion', label: 'Configuración', permisos: ['configuracion.gestionar'] },
   ] },
@@ -107,7 +108,7 @@ export default function AppShell({ userName, userId, onLogout, children }: {
 
   // Menú filtrado por permisos: un grupo sin ítems visibles no se muestra.
   const menu = useMemo(() => MENU
-    .map(g => ({ ...g, items: g.items.filter(it => !it.permisos || puedeAlguno(it.permisos)) }))
+    .map(g => ({ ...g, items: g.items.filter(it => (!it.modulo || encendido(it.modulo)) && (!it.permisos || puedeAlguno(it.permisos))) }))
     .filter(g => g.items.length > 0), [puedeAlguno]);
   const primeraPermitida = menu[0]?.items[0]?.href || null;
   const requeridos = permisosDeRuta(pathname);
@@ -261,6 +262,9 @@ export default function AppShell({ userName, userId, onLogout, children }: {
   } else if (!sinMigracion && permisos.length === 0) {
     contenido = aviso('Aún no tienes permisos', 'Tu usuario está creado, pero falta que el administrador te asigne un rol (Mi empresa → Usuarios).',
       <><button className="btn btn-ghost" onClick={() => recargar()}>Revisar de nuevo</button><button className="btn btn-ghost" onClick={onLogout}>Cerrar sesión</button></>);
+  } else if (rutaApagada(pathname)) {
+    contenido = aviso('Este módulo está apagado', 'No se usa por ahora en InnVolt. Si lo necesitas, pídele al administrador que lo encienda.',
+      primeraPermitida ? <Link href={primeraPermitida} className="btn btn-primary">Ir a mi inicio</Link> : undefined);
   } else if (sinAccesoARuta) {
     contenido = aviso('Sin acceso a esta sección', 'Tu rol no incluye este permiso. Si lo necesitas, pídeselo al administrador.',
       primeraPermitida ? <Link href={primeraPermitida} className="btn btn-primary">Ir a mi inicio</Link> : undefined);

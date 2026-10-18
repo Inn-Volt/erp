@@ -5,6 +5,7 @@
  * Visitas, OT asignadas, tareas, pedidos de material, mi bodega y anticipos por rendir.
  */
 
+import { encendido } from '@/lib/modulos';
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { CalendarDays, ClipboardList, HandCoins, ListTodo, Package, Send } from 'lucide-react';
@@ -103,7 +104,7 @@ export default function MiDiaPage() {
             </div>
           ))}
         </Caja>
-        {(pedidos.length > 0 || puede('ot.ejecutar')) && (
+        {encendido('bodega') && (pedidos.length > 0 || puede('ot.ejecutar')) && (
           <Caja titulo="Mis pedidos de material" icono={<Send size={15} />} href="/bodega?tab=pedidos" vacio={!pedidos.length}>
             {pedidos.map(p => (
               <div key={p.id} style={fila}>
@@ -114,7 +115,7 @@ export default function MiDiaPage() {
             ))}
           </Caja>
         )}
-        {stock !== null && (
+        {encendido('bodega') && stock !== null && (
           <Caja titulo="Mi bodega" icono={<Package size={15} />} href="/bodega" vacio={!stock.length}>
             {stock.slice(0, 12).map((s, i) => (
               <div key={i} style={fila}><span style={{ flex: 1 }}>{s.descripcion}</span><b style={{ fontVariantNumeric: 'tabular-nums' }}>{s.cantidad} {s.unidad}</b></div>
