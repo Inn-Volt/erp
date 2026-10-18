@@ -42,7 +42,7 @@ export default function EnviarCotizacionModal({ cot, empresaNombre, vendedor, on
   const total = formatMoneda(cot.total, (cot.moneda as Moneda) || 'CLP');
   const link = cot.token_publico ? linkPublico(cot.token_publico) : '';
   const nombre = cot.clientes?.contacto_nombre || cot.clientes?.nombre_cliente || '';
-  const esSeguimiento = !!cot.enviada_at && cot.estado === 'Pendiente';
+  const esSeguimiento = !!cot.enviada_at && (cot.estado === 'Enviada' || cot.estado === 'Pendiente');
   const dias = diasSinMovimiento(cot);
 
   const firma = vendedor?.nombre ? `\n— ${firmaVendedor(vendedor, empresaNombre)}${vendedor.telefono ? ` · ${vendedor.telefono}` : ''}` : '';
@@ -101,7 +101,7 @@ export default function EnviarCotizacionModal({ cot, empresaNombre, vendedor, on
             <div style={{ display: 'flex', flexDirection: 'column', gap: 3, marginTop: 6 }}>
               <span style={fila}><Send size={12} /> {cot.enviada_at ? `Enviada el ${formatDate(cot.enviada_at)}` : 'Aún no enviada'}</span>
               <span style={fila}><Eye size={12} /> {cot.vista_at ? `El cliente la abrió el ${formatDate(cot.vista_at)}` : 'El cliente aún no la abre'}</span>
-              {cot.estado === 'Pendiente' && (
+              {(cot.estado === 'Enviada' || cot.estado === 'Pendiente') && (
                 <span style={fila}><Clock size={12} /> {dias} día{dias !== 1 ? 's' : ''} sin movimiento · {cot.seguimientos || 0} seguimiento{(cot.seguimientos || 0) !== 1 ? 's' : ''}</span>
               )}
             </div>
@@ -121,7 +121,7 @@ export default function EnviarCotizacionModal({ cot, empresaNombre, vendedor, on
           </a>
           <a href={mailUrl} onClick={registrarEnvio} style={btn}><Mail size={15} /> {esSeguimiento ? 'Seguimiento por correo' : 'Enviar por correo'}</a>
 
-          {cot.estado === 'Pendiente' && (
+          {(cot.estado === 'Enviada' || cot.estado === 'Pendiente') && (
             <>
               <div className="iv-divider" />
               <button onClick={marcarSeguimiento} disabled={guardando} className="btn btn-primary" style={{ width: '100%', justifyContent: 'center' }}>

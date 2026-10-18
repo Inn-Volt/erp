@@ -325,7 +325,6 @@ export default function EditorCotizacion({ id, clonarDe, clienteInicial, solicit
   const agregarArticulo = (p: PartidaCot, a: ArticuloCatalogo) => {
     if (d.moneda === 'UF' && !(Number(d.valor_uf) > 0)) { warning('Está en UF: escribe el valor de la UF antes de agregar.'); return; }
     agregarLineas(p.id, lineasDeArticulo(a, 1, p, catMap, d.moneda, d.valor_uf));
-    if (!p.nombre.trim() && !d.items.some(l => l.partidaId === p.id)) setPartidas(ps => ps.map(x => (x.id === p.id ? { ...x, nombre: a.descripcion.slice(0, 120) } : x)));
   };
 
   // ── IA → partidas (lo del catálogo con su precio; lo demás fuera del catálogo con su costo estimado) ──

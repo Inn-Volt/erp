@@ -49,6 +49,8 @@ export default function TarjetaPartida(props: {
   const instalacion = (p.tipo || 'instalacion') === 'instalacion';
   const [modo, setModo] = useState<null | 'receta' | 'producto'>(lineas.length ? 'producto' : null);
   const [buscaReceta, setBuscaReceta] = useState('');
+  // Al elegir «producto», el cursor va directo al buscador.
+  const [modoElegido, setModoElegido] = useState(false);
   const [conDescripcion, setConDescripcion] = useState(!!p.descripcion);
   const [descPartida, setDescPartida] = useState('');
   const [desplegadas, setDesplegadas] = useState<Set<string>>(new Set());
@@ -125,20 +127,20 @@ export default function TarjetaPartida(props: {
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'center' }}>
                 <span style={{ fontSize: '0.84rem', color: 'var(--text)', fontWeight: 600 }}>¿Qué quieres agregar?</span>
                 <button type="button" className="btn btn-ghost btn-sm" onClick={() => setModo('receta')}><Layers size={13} /> Una receta</button>
-                <button type="button" className="btn btn-ghost btn-sm" onClick={() => setModo('producto')}><Package size={13} /> Un producto o servicio</button>
+                <button type="button" className="btn btn-ghost btn-sm" onClick={() => { setModo('producto'); setModoElegido(true); }}><Package size={13} /> Un producto o servicio</button>
               </div>
             ) : (
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'flex-start' }}>
                 <div style={{ display: 'inline-flex', border: '1px solid var(--border2)', borderRadius: 8, padding: 2 }}>
                   {(['producto', 'receta'] as const).map(m => (
-                    <button key={m} type="button" onClick={() => setModo(m)} className="btn btn-xs"
+                    <button key={m} type="button" onClick={() => { setModo(m); setModoElegido(true); }} className="btn btn-xs"
                       style={{ background: modo === m ? 'var(--y-brand)' : 'transparent', color: modo === m ? '#111' : 'var(--muted)' }}>
                       {m === 'producto' ? 'Producto' : 'Receta'}</button>
                   ))}
                 </div>
                 <div style={{ flex: 1, minWidth: 240 }}>
                   {modo === 'producto' ? (
-                    <BuscadorCatalogo catalogo={props.catalogo} moneda={moneda} valorUf={valorUf} autoFocus={lineas.length === 0 && !!props.recienCreada}
+                    <BuscadorCatalogo catalogo={props.catalogo} moneda={moneda} valorUf={valorUf} autoFocus={modoElegido}
                       onElegir={acciones.onArticulo} onFuera={acciones.onFuera} onBuscarReceta={t => { setBuscaReceta(t); setModo('receta'); }} />
                   ) : (
                     <div style={{ position: 'relative' }}>

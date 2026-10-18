@@ -85,6 +85,10 @@ function TextoFormato({ texto, estilo = s.texto }: { texto?: string | null; esti
     <View>
       {lineas.map((l, i) => {
         if (!l.trim()) return <View key={i} style={{ height: 5 }} />;
+        // «1) Cobertura»: un título de las aclaraciones, en negrita.
+        if (/^\s*\d+[.)]\s+\S/.test(l) && l.trim().length <= 70 && !l.includes('**')) {
+          return <Text key={i} style={[estilo, { fontFamily: 'Helvetica-Bold', marginTop: i ? 5 : 0 }]}>{l.trim()}</Text>;
+        }
         const vin = /^\s*([-•*]|\d+[.)])\s+/.exec(l);
         if (vin) {
           return (
