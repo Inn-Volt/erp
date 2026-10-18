@@ -102,6 +102,7 @@ export default function CotizacionClientePage() {
           ocultarSuministros={cot.ocultar_suministros} empresa={cot.empresa}
           moneda={cot.moneda} valorUF={cot.valor_uf || 0} partidas={cot.partidas}
           mostrarDetalle={cot.mostrar_detalle} fechaEmision={cot.created_at} fotos={cot.fotos} vendedor={cot.vendedor}
+          portada={!!cot.incluir_portada} revision={cot.revision || 0}
           aceptacion={['Aceptado', 'Realizado', 'Entregado'].includes(cot.estado) && cot.respondida_por && cot.respondida_at
             ? { nombre: cot.respondida_por, rut: cot.respondida_rut, fecha: cot.respondida_at, firma: cot.respuesta_firma }
             : null}

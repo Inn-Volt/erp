@@ -280,19 +280,25 @@ function PreviewAclaraciones({ garantia, condiciones }: { garantia: string; cond
 
 // ══════════════════════════════════════════════════════════════════════════════
 export function OpcionesModal({
-  ocultarSuministros, ocultarCostos, mostrarDetalle, incluirFotos = null, onToggle, onClose,
+  ocultarSuministros, ocultarCostos, mostrarDetalle, incluirFotos = null, incluirPortada = false, onToggle, onClose,
 }: {
   ocultarSuministros: boolean; ocultarCostos: boolean; mostrarDetalle: boolean;
   /** null = la cotización no viene de un levantamiento (la opción no aplica). */
   incluirFotos?: boolean | null;
-  onToggle: (campo: 'ocultarSuministros' | 'ocultarCostos' | 'mostrarDetalle' | 'incluirFotos') => void;
+  incluirPortada?: boolean;
+  onToggle: (campo: 'ocultarSuministros' | 'ocultarCostos' | 'mostrarDetalle' | 'incluirFotos' | 'incluirPortada') => void;
   onClose: () => void;
 }) {
-  const filas: { campo: 'ocultarSuministros' | 'ocultarCostos' | 'mostrarDetalle' | 'incluirFotos'; val: boolean; label: string; hint: string }[] = [
+  const filas: { campo: 'ocultarSuministros' | 'ocultarCostos' | 'mostrarDetalle' | 'incluirFotos' | 'incluirPortada'; val: boolean; label: string; hint: string }[] = [
     {
       campo: 'mostrarDetalle' as const, val: mostrarDetalle,
       label: 'Mostrar detalle técnico de materiales',
       hint: 'En el PDF, dentro de cada partida se listan sus materiales. Desactivado, el cliente ve solo las partidas comerciales.',
+    },
+    {
+      campo: 'incluirPortada' as const, val: incluirPortada,
+      label: 'Portada de presentación',
+      hint: 'El PDF parte con una portada: título del proyecto, cliente, quién cotiza y la inversión total.',
     },
     {
       campo: 'ocultarSuministros' as const, val: ocultarSuministros,

@@ -280,6 +280,12 @@ export const recetasService = {
     let creados = 0, actualizados = 0, componentes = 0, omitidos = 0;
     for (const sr of sheetRecetas) {
       let receta = porNombre.get(sr.nombre.trim().toLowerCase());
+      // Las preguntas se configuran en la app (la hoja no las trae): se conservan por descripción.
+      const preguntas = new Map<string, string>();
+      if (receta) {
+        const prev = await this.getConComponentes(receta.id).catch(() => null);
+        for (const c of prev?.componentes || []) if (c.pregunta) preguntas.set(c.descripcion.trim().toLowerCase(), c.pregunta);
+      }
       if (receta) {
         await this.update(receta.id, { descripcion: sr.descripcion, unidad: sr.unidad });
         actualizados++;
@@ -308,6 +314,7 @@ export const recetasService = {
           omitidos++;
         }
       }
+      for (const c of comps) { const q = preguntas.get(c.descripcion.trim().toLowerCase()); if (q) c.pregunta = q; }
       await this.setComponentes(receta.id, comps);
       componentes += comps.length;
     }
@@ -328,6 +335,7 @@ export const recetasService = {
 
     if (componentes.length === 0) return;
 
+    const conPreguntas = componentes.some(c => c.pregunta?.trim());
     const filas = componentes.map((c, i) => ({
       receta_id:   recetaId,
       item_id:     c.item_id ?? null,
@@ -337,6 +345,9 @@ export const recetasService = {
       costo:       c.costo,
       cantidad:    c.cantidad,
       orden:       c.orden ?? i,
+      // La columna `pregunta` es de supabase_fase3_cotizador.sql: solo se envía si alguna
+      // receta la usa (así el editor sigue funcionando antes de correr ese SQL).
+      ...(conPreguntas ? { pregunta: c.pregunta?.trim() || null } : {}),
     }));
     const { error: insErr } = await supabase.from('receta_componentes').insert(filas);
     if (insErr) throw insErr;

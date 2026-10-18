@@ -147,7 +147,7 @@ function RecetaModal({ receta, catalogo, onClose, onSaved }: {
   const [comps, setComps] = useState<CompEdit[]>(
     (receta?.componentes || []).map(c => ({
       item_id: c.item_id, descripcion: c.descripcion, categoria: c.categoria,
-      unidad: c.unidad, costo: c.costo, cantidad: c.cantidad, orden: c.orden,
+      unidad: c.unidad, costo: c.costo, cantidad: c.cantidad, orden: c.orden, pregunta: c.pregunta ?? null,
     })),
   );
   const [busca, setBusca] = useState('');
@@ -206,6 +206,7 @@ function RecetaModal({ receta, catalogo, onClose, onSaved }: {
   };
   const quitar = (i: number) => setComps(prev => prev.filter((_, idx) => idx !== i));
   const setCant = (i: number, v: string) => setComps(prev => prev.map((c, idx) => idx === i ? { ...c, cantidad: cleanNumber(v) } : c));
+  const setPregunta = (i: number, v: string | null) => setComps(prev => prev.map((c, idx) => idx === i ? { ...c, pregunta: v } : c));
 
   const costoTotal = comps.reduce((s, c) => s + c.costo * c.cantidad, 0);
 
@@ -313,12 +314,23 @@ function RecetaModal({ receta, catalogo, onClose, onSaved }: {
                 Sin componentes — busca arriba para agregar
               </div>
             ) : comps.map((c, i) => (
-              <div key={i} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', padding: '0.5rem 0.7rem', borderBottom: '1px solid var(--border-soft)', borderLeft: `3px solid ${CATEGORIA_COLORS[c.categoria]}` }}>
+              <div key={i} style={{ borderBottom: '1px solid var(--border-soft)', borderLeft: `3px solid ${CATEGORIA_COLORS[c.categoria]}` }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', padding: '0.5rem 0.7rem' }}>
                 <span style={{ flex: 1, minWidth: 0, fontSize: '0.82rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{c.descripcion}</span>
+                <button type="button" onClick={() => setPregunta(i, c.pregunta == null ? `¿Incluye ${c.descripcion.toLowerCase().slice(0, 40)}?` : null)}
+                  title={c.pregunta == null ? 'Hacerlo opcional: se pregunta al insertar la receta' : 'Quitar la pregunta (vuelve a ser fijo)'}
+                  style={{ background: c.pregunta != null ? 'var(--y-soft)' : 'none', border: '1px solid var(--border2)', borderRadius: 6, cursor: 'pointer', color: c.pregunta != null ? 'var(--y)' : 'var(--muted)', fontSize: '0.7rem', padding: '0.15rem 0.4rem', fontWeight: 700 }}>?</button>
                 <input type="number" min="0" step="0.01" value={c.cantidad} onChange={e => setCant(i, e.target.value)} style={{ ...field, width: 70, textAlign: 'center', padding: '0.3rem' }} />
                 <span style={{ fontSize: '0.7rem', color: 'var(--muted)', width: 34 }}>{c.unidad}</span>
                 <span style={{ fontSize: '0.78rem', color: 'var(--text)', width: 90, textAlign: 'right', fontFamily: 'var(--font-display)', fontWeight: 700 }}>{formatCLP(c.costo * c.cantidad)}</span>
                 <button onClick={() => quitar(i)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--danger)' }}><Trash2 size={13} /></button>
+              </div>
+              {c.pregunta != null && (
+                <div style={{ padding: '0 0.7rem 0.5rem', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                  <span style={{ fontSize: '0.68rem', color: 'var(--muted)', whiteSpace: 'nowrap' }}>Pregunta:</span>
+                  <input style={{ ...field, padding: '0.3rem 0.5rem', fontSize: '0.78rem' }} value={c.pregunta} onChange={e => setPregunta(i, e.target.value)} placeholder="¿Incluye canalización?" />
+                </div>
+              )}
               </div>
             ))}
           </div>

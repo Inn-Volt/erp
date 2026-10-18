@@ -9,7 +9,7 @@ import {
   Loader2, RefreshCcw, Check, FileUp,
   Copy, Package, Settings2, X, ArrowUp, ArrowDown,
   Building2, ChevronDown, Pencil, Handshake, HardHat, BrickWall,
-  Calculator, Truck, Library, Sparkles, Inbox, ExternalLink, Send,
+  Calculator, Car, Truck, Library, Sparkles, Inbox, ExternalLink, Send,
 } from 'lucide-react';
 import { pdf } from '@react-pdf/renderer';
 import { saveAs } from 'file-saver';
@@ -43,6 +43,7 @@ import type { EmpresaInfo } from '@/components/pdf/PresupuestoPDF';
 import ListadoInternoPDF from '@/components/pdf/ListadoInternoPDF';
 import EmpresaModal from '@/components/EmpresaModal';
 import CalculadoraHH from '@/components/CalculadoraHH';
+import CalculadoraTraslado from '@/components/CalculadoraTraslado';
 import BuscadorBiblioteca from '@/components/BuscadorBiblioteca';
 import CotizarIAModal from '@/components/CotizarIAModal';
 import NumeroInput from '@/components/NumeroInput';
@@ -259,7 +260,7 @@ function PDFModal({
   folio, cliente, items, totals, descuentoPorcentajeMO,
   descripcionGeneral, garantia, condicionesComerciales,
   ocultarSuministros, empresa, moneda, valorUF, partidas, mostrarDetalle, onClose,
-  fechaEmision, hayCambios, onGuardar, levantamientoId, incluirFotos, onEnviar, vendedor,
+  fechaEmision, hayCambios, onGuardar, levantamientoId, incluirFotos, onEnviar, vendedor, portada, revision,
 }: {
   folio: number; cliente: Cliente; items: CotizacionItem[];
   totals: ReturnType<typeof calcularTotals>; descuentoPorcentajeMO: number;
@@ -272,6 +273,8 @@ function PDFModal({
   onEnviar?: () => void;
   /** Quién cotiza: su contacto va en el PDF. */
   vendedor?: Vendedor | null;
+  portada?: boolean;
+  revision?: number;
 }) {
   const [gen, setGen] = useState(false);
   const { error: toastError } = useToast();
@@ -310,6 +313,7 @@ function PDFModal({
             empresa={empresa} moneda={moneda} valorUF={valorUF}
             partidas={partidas} mostrarDetalle={mostrarDetalle}
             fechaEmision={fechaEmision} fotos={fotos} vendedor={vendedor}
+            portada={portada} revision={revision}
           />
         ).toBlob();
         saveAs(blob, `Cotizacion_${folioStr}_${nombreArchivo(cliente.nombre_cliente)}.pdf`);
@@ -776,6 +780,10 @@ function CotizadorContent() {
   const [showPDFModal,           setShowPDFModal]           = useState(false);
   const [supuestos,              setSupuestos]              = useState<Supuestos>({ ...SUPUESTOS_DEFAULT });
   const [showHHModal,            setShowHHModal]            = useState(false);
+  const [showTraslado,           setShowTraslado]           = useState(false);
+  const [incluirPortada,         setIncluirPortada]         = useState(false);
+  /** La base ya tiene la columna incluir_portada (fase 3): se guarda siempre. */
+  const [portadaEnBase,          setPortadaEnBase]          = useState(false);
   const [showBiblioteca,         setShowBiblioteca]         = useState(false);
   const [showIA,                 setShowIA]                 = useState(false);
   // Solicitud de origen (flujo Solicitud → IA → Cotización). Vacío en cotización directa.
@@ -950,6 +958,8 @@ const [empresaEditing, setEmpresaEditing] = useState<EmpresaInfo | null>(null);
       }
       setLevantamientoId(cot.levantamiento_id || null);
       setIncluirFotos(!!cot.incluir_fotos);
+      setIncluirPortada(!!cot.incluir_portada);
+      setPortadaEnBase(cot.incluir_portada !== undefined);
       setCotGuardada(isCloning ? null : cot);
       if (!isCloning && cot.vendedor_id) {
         const { data: v } = await supabaseCliente.from('profiles').select('id, nombre, email, cargo, telefono').eq('id', cot.vendedor_id).maybeSingle();
@@ -971,9 +981,9 @@ const [empresaEditing, setEmpresaEditing] = useState<EmpresaInfo | null>(null);
     c: clienteSeleccionado?.id || null, items, partidas,
     d: descripcionGeneral, g: garantia, cc: condicionesComerciales,
     m: moneda, uf: valorUF, dmo: descuentoPorcentajeMO,
-    os: ocultarSuministros, md: mostrarDetalle, s: supuestos,
+    os: ocultarSuministros, md: mostrarDetalle, s: supuestos, pt: incluirPortada,
   }), [clienteSeleccionado, items, partidas, descripcionGeneral, garantia, condicionesComerciales,
-       moneda, valorUF, descuentoPorcentajeMO, ocultarSuministros, mostrarDetalle, supuestos]);
+       moneda, valorUF, descuentoPorcentajeMO, ocultarSuministros, mostrarDetalle, supuestos, incluirPortada]);
 
   // Tras cargar una cotización existente, su contenido cuenta como "guardado".
   useEffect(() => {
@@ -1237,6 +1247,15 @@ const [empresaEditing, setEmpresaEditing] = useState<EmpresaInfo | null>(null);
     setHhDestino(null);
     success(`Mano de obra agregada — ${horas} h por persona`);
   }, [supuestos, success, hhDestino]);
+
+  const agregarTraslado = useCallback((costoCLP: number, viajes: number, descripcion: string) => {
+    const nuevos = aMonedaCotizacion([newItem({ categoria: 'operacion', descripcion, costo: costoCLP, cantidad: viajes, unidad: 'viaje', ...(hhDestino ? { partidaId: hhDestino } : {}) }, supuestos)]);
+    if (!nuevos) return;
+    setItems(prev => [...prev, ...nuevos]);
+    setShowTraslado(false);
+    setHhDestino(null);
+    success('Traslado agregado');
+  }, [supuestos, success, hhDestino, aMonedaCotizacion]);
 
   /** Abre la calculadora HH para agregar dentro de una partida. */
   const calcHHParaPartida = useCallback((pid: string) => {
@@ -1503,7 +1522,11 @@ const [empresaEditing, setEmpresaEditing] = useState<EmpresaInfo | null>(null);
     };
     // Campos nuevos (requieren supabase_mejoras_comerciales.sql). Si la base aún no
     // los tiene, se guarda igual sin ellos y se avisa.
-    const extras = levantamientoId ? { levantamiento_id: levantamientoId, incluir_fotos: incluirFotos } : {};
+    const extras = {
+      ...(levantamientoId ? { levantamiento_id: levantamientoId, incluir_fotos: incluirFotos } : {}),
+      // Requiere supabase_fase3_cotizador.sql; si aun no esta, se guarda sin la portada.
+      ...(incluirPortada || portadaEnBase ? { incluir_portada: incluirPortada } : {}),
+    };
     const esEdicion = !!(editId && !cloneId);
     const persistir = (p: typeof payload & Partial<typeof extras>) =>
       esEdicion ? cotizacionesService.update(editId as string, p) : cotizacionesService.create({ ...p, estado: 'Pendiente' });
@@ -1515,7 +1538,7 @@ const [empresaEditing, setEmpresaEditing] = useState<EmpresaInfo | null>(null);
         const msg = err instanceof Error ? err.message : String((err as { message?: string })?.message || '');
         if (!Object.keys(extras).length || !/column|schema cache/i.test(msg)) throw err;
         result = await persistir(payload);
-        warning('Guardada sin el vínculo al levantamiento: ejecuta supabase_mejoras_comerciales.sql en Supabase.');
+        warning('Guardada sin algunas opciones (levantamiento/portada): ejecuta los SQL pendientes en Supabase.');
       }
       setCotGuardada(result);
       if (esEdicion) {
@@ -1560,6 +1583,7 @@ const [empresaEditing, setEmpresaEditing] = useState<EmpresaInfo | null>(null);
     setSolicitudOrigen(null);
     setLevantamientoId(null);
     setIncluirFotos(false);
+    setIncluirPortada(false);
     setCotGuardada(null);
     obtenerUltimoFolio();
     router.push('/cotizador');
@@ -1655,7 +1679,12 @@ const [empresaEditing, setEmpresaEditing] = useState<EmpresaInfo | null>(null);
           onEnviar={cotGuardada ? () => { setShowPDFModal(false); setShowEnviar(true); } : undefined}
           onClose={() => setShowPDFModal(false)}
           vendedor={vendedorEfectivo}
+          portada={incluirPortada} revision={cotGuardada?.revision || 0}
         />
+      )}
+
+      {showTraslado && (
+        <CalculadoraTraslado onConfirm={agregarTraslado} onClose={() => { setShowTraslado(false); setHhDestino(null); }} />
       )}
 
       {showHHModal && (
@@ -1724,10 +1753,12 @@ const [empresaEditing, setEmpresaEditing] = useState<EmpresaInfo | null>(null);
           ocultarCostos={ocultarCostos}
           mostrarDetalle={mostrarDetalle}
           incluirFotos={levantamientoId ? incluirFotos : null}
+          incluirPortada={incluirPortada}
           onToggle={(campo) => {
             if (campo === 'ocultarSuministros') setOcultarSuministros(v => !v);
             else if (campo === 'ocultarCostos') setOcultarCostos(v => !v);
             else if (campo === 'incluirFotos') setIncluirFotos(v => !v);
+            else if (campo === 'incluirPortada') setIncluirPortada(v => !v);
             else setMostrarDetalle(v => !v);
           }}
           onClose={() => setShowOpciones(false)}
@@ -1949,6 +1980,13 @@ const [empresaEditing, setEmpresaEditing] = useState<EmpresaInfo | null>(null);
                 style={{ ...btnGhost, height: 26, fontSize: '0.55rem', padding: '0 0.45rem', color: 'var(--success)', borderColor: 'var(--border2)' }}
               >
                 <Calculator size={9} /> HH
+              </button>
+              <button
+                onClick={() => { setHhDestino(null); setShowTraslado(true); }}
+                title="Calcular el traslado a obra (km, peajes, horas de viaje)"
+                style={{ ...btnGhost, height: 26, fontSize: '0.55rem', padding: '0 0.45rem', color: 'var(--info)', borderColor: 'var(--border2)' }}
+              >
+                <Car size={9} /> Traslado
               </button>
             </div>
             <div style={{ marginLeft: 'auto', display: 'flex', gap: '4px' }}>

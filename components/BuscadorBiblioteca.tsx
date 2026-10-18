@@ -115,9 +115,18 @@ export default function BuscadorBiblioteca({ supuestos, onInsertar, onInsertarRe
     return recetas.filter(r => !q || r.nombre.toLowerCase().includes(q));
   }, [recetas, busca]);
 
-  const insertarReceta = (r: RecetaConComponentes) => {
+  // Recetas con preguntas: antes de insertar se responde qué componentes opcionales van.
+  const [preguntando, setPreguntando] = useState<{ receta: RecetaConComponentes; si: Record<number, boolean> } | null>(null);
+  const insertarReceta = (r: RecetaConComponentes, respuestas?: Record<number, boolean>) => {
     const n = Math.max(1, cant[r.id] || 1);
-    onInsertarReceta(r, n);
+    const conPregunta = r.componentes.map((c, i) => ({ c, i })).filter(x => x.c.pregunta?.trim());
+    if (conPregunta.length && !respuestas) {
+      setPreguntando({ receta: r, si: Object.fromEntries(conPregunta.map(x => [x.i, true])) });
+      return;
+    }
+    const componentes = respuestas ? r.componentes.filter((c, i) => !c.pregunta?.trim() || respuestas[i]) : r.componentes;
+    setPreguntando(null);
+    onInsertarReceta({ ...r, componentes }, n);
   };
 
   // ── Cesta: seleccionar varios ítems y agregarlos de una ──
@@ -261,11 +270,27 @@ export default function BuscadorBiblioteca({ supuestos, onInsertar, onInsertarRe
           ) : tab === 'recetas' ? (
             recetasF.length === 0 ? (
               <Vacio texto={recetas.length === 0 ? 'Aún no hay recetas. Créalas en Biblioteca.' : 'Sin resultados'} />
-            ) : recetasF.map(r => (
+            ) : recetasF.map(r => preguntando?.receta.id === r.id ? (
+              <div key={r.id} style={{ padding: '0.7rem', margin: '0.4rem 0', background: 'var(--bg3)', borderRadius: 'var(--r-sm)', display: 'flex', flexDirection: 'column', gap: '0.45rem' }}>
+                <p style={{ fontSize: '0.85rem', fontWeight: 700, color: 'var(--text)' }}>{r.nombre} × {Math.max(1, cant[r.id] || 1)}</p>
+                {r.componentes.map((c, i) => c.pregunta?.trim() ? (
+                  <label key={i} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.82rem', color: 'var(--text)', cursor: 'pointer' }}>
+                    <input type="checkbox" checked={!!preguntando.si[i]} style={{ accentColor: 'var(--y-brand)', width: 16, height: 16 }}
+                      onChange={e => setPreguntando(p => p && { ...p, si: { ...p.si, [i]: e.target.checked } })} />
+                    <span style={{ flex: 1 }}>{c.pregunta}</span>
+                    <span style={{ fontSize: '0.68rem', color: 'var(--muted)' }}>{formatCLP(c.costo * c.cantidad)}</span>
+                  </label>
+                ) : null)}
+                <div style={{ display: 'flex', gap: '0.4rem', justifyContent: 'flex-end' }}>
+                  <button onClick={() => setPreguntando(null)} className="btn btn-ghost btn-xs">Cancelar</button>
+                  <button onClick={() => insertarReceta(r, preguntando.si)} className="btn btn-primary btn-xs"><Plus size={11} /> Agregar</button>
+                </div>
+              </div>
+            ) : (
               <div key={r.id} style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', padding: '0.6rem 0', borderBottom: '1px solid var(--border-soft)' }}>
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <p style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.nombre}</p>
-                  <p style={{ fontSize: '0.68rem', color: 'var(--muted)' }}>{r.componentes.length} comp. · {formatCLP(costoReceta(r))} costo/{r.unidad}</p>
+                  <p style={{ fontSize: '0.68rem', color: 'var(--muted)' }}>{r.componentes.length} comp.{r.componentes.some(c => c.pregunta?.trim()) ? ' · con preguntas' : ''} · {formatCLP(costoReceta(r))} costo/{r.unidad}</p>
                 </div>
                 <input type="number" min="1" step="1" value={cant[r.id] ?? 1}
                   onChange={e => setCant(c => ({ ...c, [r.id]: parseFloat(e.target.value) || 1 }))}

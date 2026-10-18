@@ -16,7 +16,7 @@ import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import {
   Home, TrendingUp, Wrench, Users, Building2, LogOut,
-  PanelLeftClose, PanelLeftOpen, Menu, X, Lock, Loader2, AlertTriangle,
+  PanelLeftClose, PanelLeftOpen, Menu, X, Lock, Loader2, AlertTriangle, Wallet,
 } from 'lucide-react';
 import ThemeToggle from '@/components/ThemeToggle';
 import { LogoImg } from '@/components/Logo';
@@ -38,9 +38,16 @@ const MENU: { grupo: string; icono: React.ElementType; items: Item[] }[] = [
     { href: '/cotizador/historial', label: 'Historial de cotizaciones', permisos: ['cotizaciones.ver'] },
   ] },
   { grupo: 'Operación', icono: Wrench, items: [
+    { href: '/ordenes', label: 'Órdenes de trabajo', permisos: ['ot.ver', 'ot.ejecutar'] },
+    { href: '/tareas', label: 'Tareas' },
     { href: '/agenda', label: 'Agenda', permisos: ['agenda.ver'] },
     { href: '/levantamiento', label: 'Levantamiento', exacto: true, permisos: ['levantamientos.crear'] },
     { href: '/levantamiento/historial', label: 'Levantamientos', permisos: ['levantamientos.ver'] },
+    { href: '/bodega', label: 'Bodega', permisos: ['bodega.ver', 'bodega.mover'] },
+  ] },
+  { grupo: 'Finanzas', icono: Wallet, items: [
+    { href: '/facturacion', label: 'Por facturar y cobranza', permisos: ['facturacion.ver', 'facturacion.gestionar'] },
+    { href: '/gastos', label: 'Gastos y rendiciones', permisos: ['gastos.crear', 'gastos.ver_todos', 'gastos.aprobar'] },
   ] },
   { grupo: 'Clientes', icono: Users, items: [
     { href: '/clientes', label: 'Clientes', permisos: ['clientes.ver'] },
@@ -65,7 +72,7 @@ export default function AppShell({ userName, userId, onLogout, children }: {
 }) {
   const pathname = usePathname();
   const router = useRouter();
-  const { perfil, roles, cargando, error, sinMigracion, puedeAlguno, recargar } = usePermisos();
+  const { perfil, roles, permisos, cargando, error, sinMigracion, puedeAlguno, recargar } = usePermisos();
   // Una sola suscripción a los avisos, aunque la campana aparezca en tres lugares.
   const avisos = useAvisos(userId && !sinMigracion && !cargando ? userId : null);
 
@@ -170,7 +177,7 @@ export default function AppShell({ userName, userId, onLogout, children }: {
   } else if (!sinMigracion && perfil && !perfil.activo) {
     contenido = aviso('Tu usuario está desactivado', 'Pídele al administrador que lo active de nuevo.',
       <button className="btn btn-ghost" onClick={onLogout}>Cerrar sesión</button>);
-  } else if (!sinMigracion && menu.length === 0) {
+  } else if (!sinMigracion && permisos.length === 0) {
     contenido = aviso('Aún no tienes permisos', 'Tu usuario está creado, pero falta que el administrador te asigne un rol (Mi empresa → Usuarios).',
       <><button className="btn btn-ghost" onClick={() => recargar()}>Revisar de nuevo</button><button className="btn btn-ghost" onClick={onLogout}>Cerrar sesión</button></>);
   } else if (sinAccesoARuta) {

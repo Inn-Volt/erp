@@ -1,11 +1,11 @@
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
-import { Sparkles, X, Loader2, Wand2, PackagePlus, AlertTriangle } from 'lucide-react';
-import { formatCLP, resolverBorradorIA } from '@/utils';
+import { useState, useEffect, useRef, useMemo } from 'react';
+import { Sparkles, X, Loader2, Wand2, PackagePlus, AlertTriangle, RotateCcw } from 'lucide-react';
+import { formatCLP, resolverBorradorIA, dividirPedidoIA, type PedidoIA } from '@/utils';
 import { catalogoService } from '@/services/catalogo';
 import { CATEGORIA_LABELS, CATEGORIA_COLORS } from '@/types';
-import type { BorradorIA, PartidaIAResuelta, CategoriaItem, Moneda } from '@/types';
+import type { BorradorIA, PartidaIAResuelta, CategoriaItem, Moneda, CatalogoItem } from '@/types';
 import { fetchConSesion } from '@/lib/fetchConSesion';
 
 const EJEMPLOS = [
@@ -27,36 +27,84 @@ export default function CotizarIAModal({
   const [cargando, setCargando] = useState(false);
   const autoRan = useRef(false);
   const [error, setError] = useState<string | null>(null);
-  const [resumen, setResumen] = useState('');
+  const [resumenes, setResumenes] = useState<string[]>([]);
   const [resueltas, setResueltas] = useState<PartidaIAResuelta[] | null>(null);
+  const [progreso, setProgreso] = useState('');
+  /** Partes que fallaron (se pueden reintentar sin perder las que sí salieron). */
+  const [pendientes, setPendientes] = useState<PedidoIA[]>([]);
+  const vivo = useRef(true);
+  useEffect(() => { vivo.current = true; return () => { vivo.current = false; }; }, []);
 
-  async function generar() {
-    if (descripcion.trim().length < 10) { setError('Describe el proyecto con un poco más de detalle.'); return; }
+  // Un proyecto grande (varios bloques "GENERA SOLO ESTAS PARTIDAS") se genera en partes
+  // chicas: cada respuesta tiene que llegar en ~10 s (límite del servidor en Netlify).
+  const partes = useMemo(() => dividirPedidoIA(descripcion), [descripcion]);
+
+  async function pedirBorrador(texto: string): Promise<BorradorIA> {
+    const res = await fetchConSesion('/api/cotizar-ia', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ descripcion: texto }),
+    });
+    const data = await res.json().catch(() => null);
+    if (!res.ok || !data?.borrador) throw new Error(data?.error || 'No se pudo generar la cotización.');
+    return data.borrador as BorradorIA;
+  }
+
+  const corto = (t: string) => (t.length > 40 ? t.slice(0, 40) + '…' : t);
+
+  /**
+   * Genera las partes UNA TRAS OTRA (en paralelo agotarían el cupo por minuto de la IA).
+   * Cada parte se reintenta una vez; lo que sale bien se muestra al tiro y se conserva.
+   */
+  async function ejecutar(pedidos: PedidoIA[], acumular: boolean) {
     setCargando(true);
     setError(null);
-    setResueltas(null);
-    try {
-      const res = await fetchConSesion('/api/cotizar-ia', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ descripcion: descripcion.trim() }),
-      });
-      const data = await res.json();
-      if (!res.ok) { setError(data?.error || 'No se pudo generar la cotización.'); return; }
+    setPendientes([]);
+    if (!acumular) { setResueltas(null); setResumenes([]); }
 
-      const borrador = data.borrador as BorradorIA;
+    // Precios reales desde la biblioteca sincronizada (best-effort).
+    let catalogo: CatalogoItem[] = [];
+    try { catalogo = await catalogoService.getAll(false); } catch { /* sin catálogo: usa estimados */ }
 
-      // Precios reales desde la biblioteca sincronizada (best-effort).
-      let catalogo: Awaited<ReturnType<typeof catalogoService.getAll>> = [];
-      try { catalogo = await catalogoService.getAll(false); } catch { /* sin catálogo: usa estimados */ }
-
-      setResumen(borrador.resumen || '');
-      setResueltas(resolverBorradorIA(borrador, catalogo));
-    } catch {
-      setError('Error de conexión al generar la cotización.');
-    } finally {
-      setCargando(false);
+    const fallidos: PedidoIA[] = [];
+    let ultimoError = '';
+    for (let i = 0; i < pedidos.length; i++) {
+      if (!vivo.current) return;
+      const p = pedidos[i];
+      setProgreso(pedidos.length > 1
+        ? `Parte ${i + 1} de ${pedidos.length}${p.partidas.length ? ': ' + p.partidas.map(corto).join(' · ') : ''}`
+        : '');
+      let listo = false;
+      for (let intento = 0; intento < 2 && !listo; intento++) {
+        try {
+          if (intento > 0) await new Promise(r => setTimeout(r, 1500));
+          const b = await pedirBorrador(p.texto);
+          if (!vivo.current) return;
+          const nuevas = resolverBorradorIA(b, catalogo);
+          setResueltas(prev => [...(prev || []), ...nuevas]);
+          if (b.resumen) setResumenes(prev => [...prev, b.resumen]);
+          listo = true;
+        } catch (e) {
+          ultimoError = e instanceof Error ? e.message : 'Error de conexión al generar la cotización.';
+        }
+      }
+      if (!listo) fallidos.push(p);
     }
+    if (!vivo.current) return;
+    setProgreso('');
+    setCargando(false);
+    if (fallidos.length) {
+      setPendientes(fallidos);
+      const nombres = fallidos.flatMap(f => f.partidas);
+      setError(pedidos.length === 1
+        ? ultimoError
+        : `Faltaron ${nombres.length ? `${nombres.length} partida(s): ${nombres.map(corto).join(' · ')}` : `${fallidos.length} parte(s)`}. Las demás ya están listas. (${ultimoError})`);
+    }
+  }
+
+  function generar() {
+    if (descripcion.trim().length < 10) { setError('Describe el proyecto con un poco más de detalle.'); return; }
+    ejecutar(partes, false);
   }
 
   // Al venir desde una Solicitud (descripcionInicial precargada), genera el
@@ -119,19 +167,38 @@ export default function CotizarIAModal({
                 </button>
               ))}
             </div>
+            {partes.length > 1 && (
+              <p style={{ fontSize: '0.78rem', color: 'var(--muted)', marginTop: '0.5rem' }}>
+                Proyecto grande: se generará en <b style={{ color: 'var(--text)' }}>{partes.length} partes</b> de hasta 2 partidas, una tras otra (≈ {partes.length * 6} s).
+              </p>
+            )}
           </div>
+
+          {cargando && progreso && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.8rem', color: 'var(--text)', background: 'var(--bg3)', borderRadius: 'var(--r-sm)', padding: '0.55rem 0.75rem' }}>
+              <Loader2 size={14} className="iv-spin" style={{ flexShrink: 0 }} /> <span>{progreso}</span>
+            </div>
+          )}
 
           {error && (
             <div style={{ display: 'flex', alignItems: 'flex-start', gap: '0.5rem', background: 'rgba(248,113,113,0.08)', border: '1px solid rgba(248,113,113,0.25)', color: 'var(--danger)', padding: '0.6rem 0.75rem', borderRadius: 'var(--r-sm)', fontSize: '0.78rem' }}>
-              <AlertTriangle size={14} style={{ flexShrink: 0, marginTop: 1 }} /> <span>{error}</span>
+              <AlertTriangle size={14} style={{ flexShrink: 0, marginTop: 1 }} />
+              <span style={{ flex: 1 }}>{error}</span>
+              {pendientes.length > 0 && !cargando && (
+                <button onClick={() => ejecutar(pendientes, true)} className="btn btn-ghost btn-xs" style={{ flexShrink: 0 }}>
+                  <RotateCcw size={12} /> Reintentar lo que faltó
+                </button>
+              )}
             </div>
           )}
 
           {/* Vista previa del borrador */}
           {resueltas && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '0.6rem' }}>
-              {resumen && (
-                <p style={{ fontSize: '0.78rem', color: 'var(--muted)', fontStyle: 'italic', borderLeft: '2px solid var(--y-brand)', paddingLeft: '0.6rem' }}>{resumen}</p>
+              {resumenes.length > 0 && (
+                <div style={{ fontSize: '0.78rem', color: 'var(--muted)', fontStyle: 'italic', borderLeft: '2px solid var(--y-brand)', paddingLeft: '0.6rem', display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
+                  {resumenes.map((r, i) => <p key={i}>{r}</p>)}
+                </div>
               )}
               <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', fontSize: '0.62rem', color: 'var(--muted)' }}>
                 <span>{resueltas.length} partidas</span>·
@@ -195,10 +262,12 @@ export default function CotizarIAModal({
               {cargando ? <Loader2 size={13} className="iv-spin" /> : <Wand2 size={13} />}
               {cargando ? 'Generando…' : (resueltas ? 'Regenerar' : 'Generar')}
             </button>
-            {resueltas && (
+            {resueltas && resueltas.length > 0 && (
               <button
                 onClick={() => { onInsertar(resueltas); }}
-                style={{ background: 'var(--success)', color: '#04210f', border: 'none', cursor: 'pointer', height: 40, borderRadius: 'var(--r)', padding: '0 1rem', fontFamily: 'var(--font-display)', fontWeight: 700, fontSize: '0.66rem', display: 'inline-flex', alignItems: 'center', gap: '0.4rem' }}
+                disabled={cargando}
+                title={cargando ? 'Espera a que terminen todas las partes' : undefined}
+                style={{ background: 'var(--success)', color: '#04210f', border: 'none', cursor: cargando ? 'not-allowed' : 'pointer', opacity: cargando ? 0.5 : 1, height: 40, borderRadius: 'var(--r)', padding: '0 1rem', fontFamily: 'var(--font-display)', fontWeight: 700, fontSize: '0.66rem', display: 'inline-flex', alignItems: 'center', gap: '0.4rem' }}
               >
                 <PackagePlus size={14} /> Insertar en la cotización
               </button>

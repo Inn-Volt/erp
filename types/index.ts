@@ -224,6 +224,10 @@ export interface Cotizacion {
   levantamiento_id?: string | null;
   /** Si el PDF incluye el registro fotográfico del levantamiento. */
   incluir_fotos?: boolean;
+  /** Portada de presentación en el PDF (fase 3). */
+  incluir_portada?: boolean;
+  /** N° de revisión: sube cada vez que cambia una cotización ya enviada (fase 3). */
+  revision?: number;
 
   // ── Seguimiento comercial ──
   enviada_at?: string | null;       // cuándo se envió al cliente
@@ -304,6 +308,8 @@ export interface RecetaComponente {
   costo: number;             // snapshot del costo
   cantidad: number;          // por 1 unidad de receta
   orden?: number;
+  /** Si tiene texto, el componente es opcional y se pregunta al insertar («¿Incluye canalización?»). */
+  pregunta?: string | null;
 }
 
 /** Receta con sus componentes cargados. */

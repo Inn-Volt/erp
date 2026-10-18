@@ -92,7 +92,7 @@ async function fetchConPresupuesto(url: string, init: RequestInit, deadline: num
 }
 
 // ── Groq (API compatible con OpenAI) ──────────────────────────────────────────
-async function generarGroq<T>(system: string, user: string, schema: GeminiSchema, deadline: number): Promise<T> {
+async function generarGroq<T>(system: string, user: string, schema: GeminiSchema, deadline: number, rescatar = false): Promise<T> {
   const model = process.env.GROQ_MODEL || 'openai/gpt-oss-120b';
   const res = await fetchConPresupuesto('https://api.groq.com/openai/v1/chat/completions', {
     method: 'POST',
@@ -115,6 +115,17 @@ async function generarGroq<T>(system: string, user: string, schema: GeminiSchema
     const detalle = await res.text().catch(() => '');
     if (res.status === 401) throw new IAError('GROQ_API_KEY inválida');
     if (res.status === 429) throw new IAError('cupo de Groq agotado');
+    // Groq rechaza la respuesta si no calza EXACTO con el esquema, pero la adjunta en
+    // `failed_generation`. Casi siempre es JSON válido con un detalle menor (un número
+    // como texto, un campo de más). Solo se rescata si quien llama la normaliza.
+    if (res.status === 400 && rescatar) {
+      let generado = '';
+      try { generado = JSON.parse(detalle)?.error?.failed_generation || ''; } catch { /* sin detalle */ }
+      if (generado) {
+        try { return JSON.parse(generado) as T; } catch { /* JSON cortado: no se puede rescatar */ }
+      }
+      throw new IAError(generado ? 'respuesta incompleta' : `HTTP 400 ${detalle.slice(0, 120)}`);
+    }
     throw new IAError(`HTTP ${res.status} ${detalle.slice(0, 120)}`);
   }
   const data = await res.json();
@@ -220,14 +231,18 @@ async function generarAnthropic<T>(system: string, user: string, schema: GeminiS
   }
 }
 
-const GENERADORES: Record<ProveedorIA, <T>(s: string, u: string, sc: GeminiSchema, d: number) => Promise<T>> = {
+const GENERADORES: Record<ProveedorIA, <T>(s: string, u: string, sc: GeminiSchema, d: number, rescatar?: boolean) => Promise<T>> = {
   groq: generarGroq,
   gemini: generarGemini,
   anthropic: generarAnthropic,
 };
 
-/** Genera un objeto JSON estructurado probando los proveedores en cadena. */
-export async function generarJSON<T>(opts: { system: string; user: string; schema: GeminiSchema }): Promise<T> {
+/**
+ * Genera un objeto JSON estructurado probando los proveedores en cadena.
+ * `rescatar`: acepta una respuesta que no calzó exacto con el esquema (Groq la
+ * adjunta al error). Úsalo SOLO si el resultado se normaliza después.
+ */
+export async function generarJSON<T>(opts: { system: string; user: string; schema: GeminiSchema; rescatar?: boolean }): Promise<T> {
   const proveedores = cadenaProveedores();
   if (!proveedores.length) {
     throw new Error('No hay IA configurada. Agrega GROQ_API_KEY (gratis, recomendada — console.groq.com), GEMINI_API_KEY (gratis) o ANTHROPIC_API_KEY en el entorno del servidor.');
@@ -237,7 +252,7 @@ export async function generarJSON<T>(opts: { system: string; user: string; schem
   for (const p of proveedores) {
     if (deadline - Date.now() < 1500) { errores.push(`${p}: sin tiempo`); break; }
     try {
-      return await GENERADORES[p]<T>(opts.system, opts.user, opts.schema, deadline);
+      return await GENERADORES[p]<T>(opts.system, opts.user, opts.schema, deadline, opts.rescatar);
     } catch (e) {
       errores.push(`${p}: ${e instanceof Error ? e.message : 'error'}`);
     }
