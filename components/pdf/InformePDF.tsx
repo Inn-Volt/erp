@@ -50,9 +50,12 @@ export interface InformePDFProps {
   tecnico: string;
   resultado: string;
   trabajos: string;
+  fallaObservada?: string | null;
+  pendiente?: string | null;
+  /** Internas: no van en el PDF del cliente (se aceptan para no romper llamadas de antes). */
   observaciones?: string | null;
   checklist: { texto: string; ok: boolean }[];
-  materiales: { descripcion: string; cantidad: number; unidad: string }[];
+  materiales: { descripcion: string; cantidad: number; unidad: string; serie?: string | null }[];
   fotos: { url: string; caption: string }[];
   recibidoPor?: string | null;
   recibidoRut?: string | null;
@@ -90,9 +93,10 @@ export default function InformePDF(p: InformePDFProps) {
         </View>
 
         <View style={{ marginBottom: 10 }}>
+          {p.fallaObservada ? <><Text style={s.rotulo}>FALLA OBSERVADA</Text><Text style={[s.texto, { marginBottom: 8 }]}>{p.fallaObservada}</Text></> : null}
           <Text style={s.rotulo}>TRABAJOS REALIZADOS</Text>
           <Text style={s.texto}>{p.trabajos || '—'}</Text>
-          {p.observaciones ? <><Text style={[s.rotulo, { marginTop: 8 }]}>OBSERVACIONES</Text><Text style={s.texto}>{p.observaciones}</Text></> : null}
+          {p.pendiente ? <><Text style={[s.rotulo, { marginTop: 8 }]}>PENDIENTE</Text><Text style={s.texto}>{p.pendiente}</Text></> : null}
         </View>
 
         {p.checklist.length > 0 && (
@@ -109,7 +113,7 @@ export default function InformePDF(p: InformePDFProps) {
             <Text style={s.rotulo}>MATERIALES UTILIZADOS</Text>
             <View style={s.tablaCab}><Text style={[s.th, { flex: 1 }]}>DESCRIPCIÓN</Text><Text style={[s.th, { width: 70, textAlign: 'right' }]}>CANTIDAD</Text></View>
             {p.materiales.map((m, i) => (
-              <View key={i} style={s.tr}><Text style={{ flex: 1 }}>{m.descripcion}</Text><Text style={{ width: 70, textAlign: 'right' }}>{m.cantidad} {m.unidad}</Text></View>
+              <View key={i} style={s.tr}><Text style={{ flex: 1 }}>{m.descripcion}{m.serie ? `  ·  S/N ${m.serie}` : ''}</Text><Text style={{ width: 70, textAlign: 'right' }}>{m.cantidad} {m.unidad}</Text></View>
             ))}
           </View>
         )}

@@ -7,6 +7,7 @@
  * condición o un rango. Cada regla se lee como frase, con un ejemplo, y los avisos no bloquean.
  */
 
+import NumeroInput from '@/components/NumeroInput';
 import { useMemo, useState } from 'react';
 import { Layers, Loader2, Plus, Save, Search, Sparkles, Trash2, Wand2 } from 'lucide-react';
 import { Modal } from './ui';
@@ -20,7 +21,6 @@ import { mejorMatchCatalogo } from '@/utils';
 import { CATEGORIA_LABELS, UNIDADES, type CatalogoItem, type RecetaIA } from '@/types';
 
 const TOPES = { preguntas: 20, opciones: 30, componentes: 60 };
-const num = (v: string) => (v.trim() === '' ? null : Number(v.replace(',', '.')));
 
 function BuscarArticulo({ catalogo, onElegir, placeholder }: { catalogo: ArticuloCatalogo[]; onElegir: (a: ArticuloCatalogo) => void; placeholder?: string }) {
   const [t, setT] = useState('');
@@ -162,9 +162,9 @@ export default function EditorReceta({ receta, catalogo, onCerrar, onGuardada, o
             </div>
             {p.tipo === 'numero' && (
               <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center', fontSize: '0.8rem', color: 'var(--muted)' }}>
-                Mín. <input className="input" style={{ width: 80 }} type="number" value={p.minimo ?? ''} onChange={e => setP(i, { minimo: num(e.target.value) })} />
-                Máx. <input className="input" style={{ width: 80 }} type="number" value={p.maximo ?? ''} onChange={e => setP(i, { maximo: num(e.target.value) })} />
-                Por omisión <input className="input" style={{ width: 80 }} type="number" value={typeof p.defecto === 'number' ? p.defecto : ''} onChange={e => setP(i, { defecto: num(e.target.value) })} />
+                Mín. <NumeroInput className="input" envoltura={{ width: 80 }} mostrarCero value={p.minimo} onChange={v => setP(i, { minimo: v })} onVacio={() => setP(i, { minimo: null })} />
+                Máx. <NumeroInput className="input" envoltura={{ width: 80 }} mostrarCero value={p.maximo} onChange={v => setP(i, { maximo: v })} onVacio={() => setP(i, { maximo: null })} />
+                Por omisión <NumeroInput className="input" envoltura={{ width: 80 }} mostrarCero value={typeof p.defecto === 'number' ? p.defecto : null} onChange={v => setP(i, { defecto: v })} onVacio={() => setP(i, { defecto: null })} />
                 Unidad <input className="input" style={{ width: 90 }} value={p.unidad || ''} onChange={e => setP(i, { unidad: e.target.value })} placeholder="puertas" />
                 <label style={{ display: 'flex', gap: 4, alignItems: 'center' }}><input type="checkbox" checked={p.entero !== false} onChange={e => setP(i, { entero: e.target.checked })} style={{ accentColor: 'var(--y-brand)' }} /> Solo enteros</label>
               </div>
@@ -217,7 +217,7 @@ export default function EditorReceta({ receta, catalogo, onCerrar, onGuardada, o
                     </select>
                     <input className="input" style={{ width: 70 }} value={c.unidad} aria-label="Unidad" placeholder="un" onChange={e => setC(i, { unidad: e.target.value })} />
                     <label style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: '0.76rem', color: 'var(--muted)' }}>Costo
-                      <input className="input" style={{ width: 100 }} type="number" min={0} step="any" value={c.costo || ''} onChange={e => setC(i, { costo: Number(e.target.value) || 0 })} /></label>
+                      <NumeroInput className="input" envoltura={{ width: 110 }} prefijo="$" min={0} value={c.costo} onChange={v => setC(i, { costo: v })} /></label>
                     <span style={{ fontSize: '0.7rem', color: '#d97706' }}>fuera de la biblioteca</span>
                   </span>
                 ) : (
@@ -236,14 +236,14 @@ export default function EditorReceta({ receta, catalogo, onCerrar, onGuardada, o
                 <button type="button" className="btn btn-ghost btn-xs" onClick={() => setR(x => ({ ...x, componentes: x.componentes.filter((_, j) => j !== i) }))} aria-label="Quitar"><Trash2 size={13} /></button>
               </div>
               <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center', fontSize: '0.8rem', color: 'var(--muted)' }}>
-                Fija <input className="input" style={{ width: 80 }} type="number" step="any" min={0} value={c.cantidad} onChange={e => setC(i, { cantidad: Number(e.target.value) || 0 })} />
+                Fija <NumeroInput className="input" envoltura={{ width: 80 }} min={0} decimales={3} mostrarCero value={c.cantidad} onChange={v => setC(i, { cantidad: v })} />
                 {numericas.length > 0 && <>
-                  + <input className="input" style={{ width: 70 }} type="number" step="any" min={0} value={g.por_pregunta ? (g.por_cada ?? 1) : ''} disabled={!g.por_pregunta}
-                    onChange={e => setRegla(i, { por_cada: num(e.target.value) })} />
+                  + <NumeroInput className="input" envoltura={{ width: 70 }} min={0} decimales={3} mostrarCero value={g.por_pregunta ? (g.por_cada ?? 1) : null} disabled={!g.por_pregunta}
+                    onChange={v => setRegla(i, { por_cada: v })} onVacio={() => setRegla(i, { por_cada: null })} />
                   <select className="input" style={{ width: 90 }} value={g.cada ? 'cada' : 'por'} disabled={!g.por_pregunta} onChange={e => setRegla(i, { cada: e.target.value === 'cada' ? (g.cada || 4) : null })}>
                     <option value="por">por cada</option><option value="cada">cada</option>
                   </select>
-                  {g.cada ? <input className="input" style={{ width: 60 }} type="number" min={1} value={g.cada} onChange={e => setRegla(i, { cada: num(e.target.value) })} /> : null}
+                  {g.cada ? <NumeroInput className="input" envoltura={{ width: 60 }} min={1} value={g.cada} onChange={v => setRegla(i, { cada: v })} /> : null}
                   <select className="input" style={{ width: 200 }} value={g.por_pregunta || ''} onChange={e => setRegla(i, { por_pregunta: e.target.value || null, por_cada: g.por_cada ?? 1 })}>
                     <option value="">(ninguna pregunta)</option>
                     {numericas.map(p => <option key={p.clave} value={p.clave}>{p.texto || '…'}</option>)}
@@ -275,8 +275,8 @@ export default function EditorReceta({ receta, catalogo, onCerrar, onGuardada, o
                       {numericas.map(p => <option key={p.clave} value={p.clave}>{p.texto || '…'}</option>)}
                     </select>
                     {g.rango_pregunta && <>
-                      desde <input className="input" style={{ width: 64 }} type="number" value={g.desde ?? ''} onChange={e => setRegla(i, { desde: num(e.target.value) })} />
-                      hasta <input className="input" style={{ width: 64 }} type="number" value={g.hasta ?? ''} onChange={e => setRegla(i, { hasta: num(e.target.value) })} />
+                      desde <NumeroInput className="input" envoltura={{ width: 64 }} mostrarCero value={g.desde} onChange={v => setRegla(i, { desde: v })} onVacio={() => setRegla(i, { desde: null })} />
+                      hasta <NumeroInput className="input" envoltura={{ width: 64 }} mostrarCero value={g.hasta} onChange={v => setRegla(i, { hasta: v })} onVacio={() => setRegla(i, { hasta: null })} />
                     </>}
                   </>}
                 </div>

@@ -10,7 +10,8 @@
  * Solo un Borrador se edita; el estado cambia solo con sus botones (lo exige la base).
  */
 
-import { textoPlano } from '@/lib/textoFormato';
+import NumeroInput from '@/components/NumeroInput';
+import { textoPlano, tituloCorto } from '@/lib/textoFormato';
 import EditorFormato from '@/components/EditorFormato';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
@@ -46,7 +47,7 @@ import {
   ajustesService, catalogoCotService, cotizadorService, faltaFase4, plantillasCotService, recetasCotService,
 } from '@/services/cotizador';
 import { clientesService } from '@/services/clientes';
-import { sucursalesService, type Contacto, type Sucursal } from '@/services/operacion';
+import { archivosOT, folioOT, informesService, otService, sucursalesService, type Contacto, type InformeOT, type Sucursal } from '@/services/operacion';
 import { solicitudesService } from '@/services/solicitudes';
 import { levantamientosService } from '@/services/levantamientos';
 import { fotosService } from '@/services/fotos';
@@ -55,7 +56,7 @@ import { usePermisos } from '@/hooks/usePermisos';
 import { useToast } from '@/hooks/useToast';
 import { marcarSinGuardar } from '@/hooks/useSinGuardar';
 import { linkPublico } from '@/services/cotizaciones';
-import { CATEGORIA_LABELS, type CatalogoItem, type Cliente, type PartidaIAResuelta, type Vendedor } from '@/types';
+import { CATEGORIA_COLORS, CATEGORIA_LABELS, type CatalogoItem, type Cliente, type PartidaIAResuelta, type Vendedor } from '@/types';
 import { fechaLocal, formatDate, sumarDias, borradorDesdeAnalisis, mejorMatchCatalogo } from '@/utils';
 
 const VER_COSTOS = 'innvolt-cotizacion-ver-costos';
@@ -79,8 +80,8 @@ const huella = (d: CotizacionDoc) => JSON.stringify([
   d.valida_hasta_a_mano, d.incluir_fotos, d.proyecto_id,
 ]);
 
-export default function EditorCotizacion({ id, clonarDe, clienteInicial, solicitudInicial, levantamientoInicial, proyectoInicial }: {
-  id: string | null; clonarDe?: string | null; clienteInicial?: string | null; solicitudInicial?: string | null; levantamientoInicial?: string | null; proyectoInicial?: string | null;
+export default function EditorCotizacion({ id, clonarDe, clienteInicial, solicitudInicial, otInicial, proyectoInicial }: {
+  id: string | null; clonarDe?: string | null; clienteInicial?: string | null; solicitudInicial?: string | null; otInicial?: string | null; proyectoInicial?: string | null;
 }) {
   const router = useRouter();
   const { perfil, puede } = usePermisos();
@@ -200,17 +201,18 @@ export default function EditorCotizacion({ id, clonarDe, clienteInicial, solicit
           cliente_id: clienteInicial || null,
           proyecto_id: proyectoInicial || null,
         };
-        if (levantamientoInicial) {
-          const lev = await levantamientosService.getById(levantamientoInicial).catch(() => null);
-          if (lev) {
-            const dd = lev.data;
-            const lv = `LV-${String(lev.folio || 0).padStart(4, '0')}`;
-            const partes = [`Según levantamiento técnico ${lv}${dd.fecha ? ` del ${formatDate(dd.fecha)}` : ''}${dd.direccion ? `, ${dd.direccion}` : ''}.`];
-            if (dd.alcance_trabajos?.trim()) partes.push(`**Trabajos a ejecutar:**\n${dd.alcance_trabajos.trim()}`);
-            if (dd.alcance_mejoras?.trim()) partes.push(`**Mejoras recomendadas:**\n${dd.alcance_mejoras.trim()}`);
+        if (otInicial) {
+          // Cotizar desde una OT (la visita técnica): el cliente, el lugar, lo que vio el técnico y sus fotos.
+          const [o, infs] = await Promise.all([otService.get(otInicial).catch(() => null), informesService.deOT(otInicial).catch(() => [] as InformeOT[])]);
+          if (o) {
+            const ultimo = [...infs].reverse().find(x => x.falla_observada || x.trabajos || x.pendiente);
+            const partes = [`Según la visita técnica ${folioOT(o.folio)}${ultimo?.fecha ? ` del ${formatDate(ultimo.fecha)}` : ''}${o.direccion ? `, en ${o.direccion}` : ''}.`];
+            if (ultimo?.falla_observada?.trim()) partes.push(`**Lo que encontramos:**\n${ultimo.falla_observada.trim()}`);
+            if (ultimo?.pendiente?.trim()) partes.push(`**Lo que proponemos:**\n${ultimo.pendiente.trim()}`);
             Object.assign(nuevo, {
-              levantamiento_id: lev.id, incluir_fotos: (dd.fotos || []).length > 0, cliente_id: lev.cliente_id || nuevo.cliente_id,
-              descripcion_general: partes.join('\n\n'), titulo: dd.direccion ? `Trabajos en ${dd.direccion}` : nuevo.titulo,
+              ot_id: o.id, cliente_id: o.cliente_id || nuevo.cliente_id, sucursal_id: o.sucursal_id || null, solicitud_id: o.solicitud_id || null,
+              proyecto_id: o.proyecto_id || nuevo.proyecto_id, incluir_fotos: infs.some(x => x.fotos.length > 0),
+              descripcion_general: partes.join('\n\n'), titulo: tituloCorto(o.titulo),
             });
           }
         }
@@ -219,7 +221,7 @@ export default function EditorCotizacion({ id, clonarDe, clienteInicial, solicit
           if (sol) {
             nuevo.solicitud_id = sol.id;
             nuevo.cliente_id = sol.cliente_id || nuevo.cliente_id;
-            nuevo.titulo = (sol.descripcion || '').split('\n')[0].slice(0, 120);
+            nuevo.titulo = tituloCorto(sol.analisis_ia?.necesidades?.[0]?.titulo || sol.descripcion);
             const an = sol.analisis_ia;
             if (an?.items_sugeridos?.length) {
               const borr = borradorDesdeAnalisis(an, cat.map(a => ({ ...a, codigo: a.codigo || undefined, familia: a.familia || undefined, proveedor: a.proveedor || undefined }) as unknown as CatalogoItem), an.necesidades?.[0]?.titulo || 'Propuesta técnica');
@@ -421,6 +423,7 @@ export default function EditorCotizacion({ id, clonarDe, clienteInicial, solicit
       subtotal: r.totales.neto, iva: r.totales.iva, total: r.totales.total, total_clp: r.totales.totalClp, descuento_global: 0,
       costo_directo: r.internos.costoConImprevistos, utilidad: r.internos.utilidad,
       solicitud_id: x.solicitud_id || null, levantamiento_id: x.levantamiento_id || null, incluir_fotos: !!x.incluir_fotos,
+      ...(x.ot_id ? { ot_id: x.ot_id } : {}),
       ...(proyectos.length || x.proyecto_id ? { proyecto_id: x.proyecto_id || null } : {}),
     };
   };
@@ -455,7 +458,14 @@ export default function EditorCotizacion({ id, clonarDe, clienteInicial, solicit
   const armarPDF = async (doc: CotizacionDoc, marca: 'BORRADOR' | 'ANULADA' | null) => {
     if (!empresa) throw new Error('Falta la empresa emisora.');
     let fotos: { url: string; caption: string }[] = [];
-    if (doc.incluir_fotos && doc.levantamiento_id) {
+    if (doc.incluir_fotos && doc.ot_id) {
+      // Las fotos de los informes de visita de la OT, con su descripción.
+      const infs = await informesService.deOT(doc.ot_id).catch(() => [] as InformeOT[]);
+      const lista = infs.flatMap(x => x.fotos).slice(0, 24);
+      const urls = await archivosOT.urls(lista.map(f => f.path)).catch(() => ({} as Record<string, string>));
+      fotos = lista.map(f => ({ url: urls[f.path] || '', caption: f.caption || '' })).filter(f => f.url);
+    } else if (doc.incluir_fotos && doc.levantamiento_id) {
+      // Cotizaciones de antes, hechas desde un levantamiento.
       const lev = await levantamientosService.getById(doc.levantamiento_id).catch(() => null);
       fotos = await fotosService.paraPDF(lev?.data.fotos).catch(() => []);
     }
@@ -638,7 +648,8 @@ export default function EditorCotizacion({ id, clonarDe, clienteInicial, solicit
           <p className="section-label" style={{ marginTop: 0 }}>Interno (no sale en el PDF)</p>
           {calc.internos.porCategoria.map(c => (
             <div key={c.categoria} style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.8rem', padding: '0.15rem 0', color: 'var(--text)' }}>
-              <span style={{ color: 'var(--muted)' }}>{CATEGORIA_LABELS[c.categoria]}</span>
+              <span style={{ color: 'var(--muted)', display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                <span style={{ width: 8, height: 8, borderRadius: 2, background: CATEGORIA_COLORS[c.categoria] }} />{CATEGORIA_LABELS[c.categoria]}</span>
               <span>{formatMonto(c.costoConImprevistos, d.moneda)} → {formatMonto(c.utilidad, d.moneda)}</span>
             </div>
           ))}
@@ -827,14 +838,15 @@ export default function EditorCotizacion({ id, clonarDe, clienteInicial, solicit
                     {proyectos.filter(p => !d.cliente_id || !p.cliente_id || p.cliente_id === d.cliente_id || p.id === d.proyecto_id).map(p => <option key={p.id} value={p.id}>{folioProyecto(p.folio)} · {p.nombre}</option>)}
                   </select></label>
               )}
-              {(d.solicitud_id || d.levantamiento_id) && (
+              {(d.solicitud_id || d.levantamiento_id || d.ot_id) && (
                 <div style={{ fontSize: '0.82rem', color: 'var(--muted)', display: 'flex', flexDirection: 'column', gap: 4 }}>
                   <span style={etiqueta}>Origen</span>
+                  {d.ot_id && <Link href={`/ordenes/${d.ot_id}`}>Viene de una OT: al aprobarse, el trabajo sigue en ella</Link>}
                   {d.solicitud_id && <Link href="/solicitudes">Viene de una solicitud</Link>}
-                  {d.levantamiento_id && (
+                  {(d.levantamiento_id || d.ot_id) && (
                     <label style={{ display: 'flex', gap: 6, alignItems: 'center', color: 'var(--text)' }}>
                       <input type="checkbox" checked={!!d.incluir_fotos} onChange={e => set({ incluir_fotos: e.target.checked })} style={{ accentColor: 'var(--y-brand)' }} />
-                      Incluir las fotos del levantamiento en el PDF
+                      {d.ot_id ? 'Incluir las fotos de la visita en el PDF' : 'Incluir las fotos del levantamiento en el PDF'}
                     </label>
                   )}
                 </div>
@@ -867,7 +879,7 @@ export default function EditorCotizacion({ id, clonarDe, clienteInicial, solicit
               {(d.moneda === 'UF' || cambioMoneda) && (
                 <div style={{ gridColumn: '1 / -1', display: 'flex', flexWrap: 'wrap', gap: 10, alignItems: 'flex-end', background: 'var(--bg3)', borderRadius: 10, padding: '0.7rem' }}>
                   <label><span style={etiqueta}>Valor de la UF</span>
-                    <input className="input" type="number" min={0} step="any" value={d.valor_uf || ''} onChange={e => set({ valor_uf: Number(e.target.value) || null })} style={{ width: 150 }} /></label>
+                    <NumeroInput className="input" min={0} prefijo="$" value={d.valor_uf} onChange={v => set({ valor_uf: v || null })} onVacio={() => set({ valor_uf: null })} envoltura={{ width: 150 }} /></label>
                   <label><span style={etiqueta}>Al día</span>
                     <input className="input" type="date" value={d.fecha_valor_uf || ''} onChange={e => set({ fecha_valor_uf: e.target.value })} /></label>
                   <button type="button" className="btn btn-ghost" onClick={traerUF} disabled={trayendoUF}>{trayendoUF ? <Loader2 size={14} className="iv-spin" /> : <RotateCcw size={14} />} UF de hoy</button>

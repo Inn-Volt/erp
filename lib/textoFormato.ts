@@ -208,3 +208,23 @@ export function textoPlano(texto: string | null | undefined): string {
 export const esTituloDeAntes = (b: Bloque): b is Parrafo & { content: NodoTexto[] } =>
   b.type === 'paragraph' && (b.content || []).length === 1 && !(b.content![0].marks || []).length
   && /^\s*\d+\)\s+\S/.test(b.content![0].text) && b.content![0].text.trim().length <= 70;
+
+/**
+ * Un título corto a partir de un texto largo (la descripción de una solicitud): la primera
+ * oración, sin marcas y, si es larga, cortada en una palabra entera (nunca «El siste…»).
+ */
+export function tituloCorto(texto: string | null | undefined, max = 70): string {
+  const plano = textoPlano(texto);
+  const oracion = (plano.split(/(?<=[.!?])\s|\n/)[0] || plano).replace(/[.!?:;,\s]+$/, '').trim();
+  if (oracion.length <= max) return oracion;
+  const corte = oracion.slice(0, max + 1);
+  const espacio = corte.lastIndexOf(' ');
+  return (espacio > max * 0.5 ? corte.slice(0, espacio) : corte.slice(0, max)).replace(/[,;:\s]+$/, '');
+}
+
+/** ¿El título solo repite el comienzo de la introducción? (entonces el PDF no lo pone encima). */
+export function tituloRepiteIntro(titulo: string | null | undefined, intro: string | null | undefined): boolean {
+  const n = (s: string) => s.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9]+/g, ' ').trim();
+  const t = n(titulo || ''), i = n(textoPlano(intro));
+  return t.length >= 25 && i.startsWith(t);
+}

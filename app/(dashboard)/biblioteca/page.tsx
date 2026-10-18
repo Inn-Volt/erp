@@ -146,8 +146,8 @@ function ItemModal({ item, familias, manosDeObra, conFase4, onClose, onSaved }: 
               </div>
               <div>
                 <span style={fieldLabel}>Ganancia propia % (opcional)</span>
-                <input style={field} type="number" min={0} step="any" value={form.ganancia_propia ?? ''} placeholder={familia ? `La de la familia: ${familia.ganancia} %` : ''}
-                  onChange={e => set('ganancia_propia', e.target.value.trim() === '' ? null : Number(e.target.value))} />
+                <NumeroInput style={field} min={0} mostrarCero sufijo="%" value={form.ganancia_propia} placeholder={familia ? `La de la familia: ${familia.ganancia} %` : ''}
+                  onChange={v => set('ganancia_propia', v)} onVacio={() => set('ganancia_propia', null)} />
               </div>
             </div>
             <div style={{ background: 'var(--bg3)', borderRadius: 8, padding: '0.55rem 0.75rem', fontSize: '0.84rem', color: 'var(--text)' }}>
@@ -170,8 +170,8 @@ function ItemModal({ item, familias, manosDeObra, conFase4, onClose, onSaved }: 
                 </div>
                 <div>
                   <span style={fieldLabel}>Por cada unidad</span>
-                  <input style={field} type="number" min={0} step="any" value={form.mano_obra_por_unidad ?? 1} disabled={!form.mano_obra_id}
-                    onChange={e => set('mano_obra_por_unidad', Number(e.target.value) || 1)} />
+                  <NumeroInput style={field} min={0} decimales={3} value={form.mano_obra_por_unidad ?? 1} disabled={!form.mano_obra_id}
+                    onChange={v => set('mano_obra_por_unidad', v || 1)} />
                 </div>
               </div>
             )}
@@ -247,7 +247,8 @@ function FamiliasPrecio({ familias, items, editable, onCambio }: { familias: Fam
           <select className="input" style={{ width: 170 }} value={nueva.catalogo} onChange={e => setNueva({ ...nueva, catalogo: e.target.value as 'bodega' | 'servicios' })}>
             <option value="bodega">Materiales y equipos</option><option value="servicios">Servicios</option></select>
           <input className="input" style={{ flex: 1, minWidth: 160 }} value={nueva.nombre} onChange={e => setNueva({ ...nueva, nombre: e.target.value })} placeholder="Nombre: Equipos 25 %" />
-          <input className="input" style={{ width: 90 }} type="number" min={0} value={nueva.ganancia} onChange={e => setNueva({ ...nueva, ganancia: e.target.value })} /> %
+          <NumeroInput className="input" envoltura={{ width: 90 }} min={0} mostrarCero value={nueva.ganancia === '' ? null : Number(String(nueva.ganancia).replace(',', '.'))}
+            onChange={v => setNueva({ ...nueva, ganancia: String(v) })} onVacio={() => setNueva({ ...nueva, ganancia: '' })} /> %
           <select className="input" style={{ width: 130 }} value={nueva.redondeo} onChange={e => setNueva({ ...nueva, redondeo: Number(e.target.value) })}>
             {REDONDEOS.map(([v, t]) => <option key={v} value={v}>{t}</option>)}</select>
           <button className="btn btn-primary btn-sm" disabled={!nueva.nombre.trim()} onClick={() => { guardar({ catalogo: nueva.catalogo, nombre: nueva.nombre.trim(), ganancia: Number(nueva.ganancia) || 0, redondeo: nueva.redondeo }, 'Familia creada'); setNueva({ ...nueva, nombre: '' }); }}>

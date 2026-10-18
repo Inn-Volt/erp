@@ -6,6 +6,7 @@
  * entra nada de servicios; lo que no tiene precio o está desactivado va a «No se agregará».
  */
 
+import NumeroInput from '@/components/NumeroInput';
 import { useMemo, useState } from 'react';
 import { Layers, Plus } from 'lucide-react';
 import { Modal } from './ui';
@@ -77,8 +78,8 @@ export default function AsistenteReceta({ receta, partida, catalogo, moneda, val
           {fija && (
             <label style={{ display: 'block' }}>
               <span className="label-muted" style={{ display: 'block', marginBottom: 6 }}>¿Cuántas? ({receta.unidad})</span>
-              <input className="input" type="number" min={1} max={1000} step={1} value={veces} autoFocus
-                onChange={e => setVeces(Math.min(Math.max(parseInt(e.target.value) || 1, 1), 1000))} />
+              <NumeroInput className="input" min={1} max={1000} value={veces} autoFocus
+                onChange={v => setVeces(Math.min(Math.max(Math.round(v) || 1, 1), 1000))} />
             </label>
           )}
           {receta.preguntas.map((p, i) => (
@@ -86,14 +87,14 @@ export default function AsistenteReceta({ receta, partida, catalogo, moneda, val
               <span className="label-muted" style={{ display: 'block', marginBottom: 6 }}>{p.texto}</span>
               {p.tipo === 'numero' && (
                 <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                  <input className="input" type="number" autoFocus={i === 0} min={p.minimo ?? 0} max={p.maximo ?? 10000} step={p.entero === false ? 'any' : 1}
-                    value={Number(resp[p.clave]) || 0}
-                    onChange={e => {
-                      let v = Number(e.target.value) || 0;
+                  <NumeroInput className="input" autoFocus={i === 0} mostrarCero decimales={p.entero === false ? 3 : 0}
+                    value={Number(resp[p.clave]) || 0} envoltura={{ maxWidth: 140 }}
+                    onChange={n => {
+                      let v = n;
                       if (p.entero !== false) v = Math.round(v);
                       v = Math.min(Math.max(v, p.minimo ?? 0), p.maximo ?? 10000);
                       set(p.clave, v);
-                    }} style={{ maxWidth: 140 }} />
+                    }} />
                   {p.unidad && <span style={{ fontSize: '0.84rem', color: 'var(--muted)' }}>{p.unidad}</span>}
                 </div>
               )}

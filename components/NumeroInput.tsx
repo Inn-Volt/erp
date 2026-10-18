@@ -19,8 +19,20 @@ import { useState } from 'react';
 import { cleanNumber, formatMiles } from '@/utils';
 
 interface Props {
-  value: number;
+  /** Vacío (null/undefined) se muestra en blanco. */
+  value: number | null | undefined;
   onChange: (v: number) => void;
+  /** Si se pasa, borrar el campo llama a esto (el valor queda vacío) en vez de onChange(0). */
+  onVacio?: () => void;
+  /** Muestra el 0 (por omisión un 0 se ve en blanco). */
+  mostrarCero?: boolean;
+  /** Decimales al mostrarlo sin foco (por omisión 2; en UF los costos llevan hasta 6). */
+  decimales?: number;
+  disabled?: boolean;
+  autoFocus?: boolean;
+  onKeyDown?: React.KeyboardEventHandler<HTMLInputElement>;
+  /** Estilo del contenedor (p. ej. un ancho fijo dentro de una fila). */
+  envoltura?: React.CSSProperties;
   prefijo?: string;
   sufijo?: string;
   placeholder?: string;
@@ -35,17 +47,21 @@ interface Props {
 }
 
 /** Número → texto editable en formato chileno (1.25 → "1,25"; 45000 → "45000"). */
-const aTextoEditable = (n: number) => (n ? String(n).replace('.', ',') : '');
+const aTextoEditable = (n: number | null | undefined, cero = false) =>
+  (n || (cero && n === 0) ? String(Math.round(Number(n) * 1e6) / 1e6).replace('.', ',') : '');
 
 export default function NumeroInput({
   value, onChange, prefijo, sufijo, placeholder, style, className, title, min, max, ariaLabel, formatear,
+  onVacio, mostrarCero, decimales = 2, disabled, autoFocus, onKeyDown, envoltura,
 }: Props) {
   const [foco, setFoco] = useState(false);
   const [raw, setRaw] = useState('');
 
+  const hay = typeof value === 'number' && Number.isFinite(value) && (value !== 0 || !!mostrarCero);
   const display = foco
     ? raw
-    : (value ? (formatear ? formatear(value) : formatMiles(value)) : '');
+    : (hay ? (formatear ? formatear(value as number) : decimales === 2 ? formatMiles(value as number)
+      : new Intl.NumberFormat('es-CL', { maximumFractionDigits: decimales }).format(value as number)) : '');
 
   const adorno: React.CSSProperties = {
     position: 'absolute', top: '50%', transform: 'translateY(-50%)',
@@ -53,7 +69,7 @@ export default function NumeroInput({
   };
 
   return (
-    <div style={{ position: 'relative', width: '100%' }}>
+    <div style={{ position: 'relative', width: '100%', ...envoltura }}>
       {prefijo && <span style={{ ...adorno, left: 10 }}>{prefijo}</span>}
       <input
         type="text"
@@ -63,8 +79,11 @@ export default function NumeroInput({
         placeholder={placeholder}
         title={title}
         aria-label={ariaLabel}
+        disabled={disabled}
+        autoFocus={autoFocus}
+        onKeyDown={onKeyDown}
         onFocus={e => {
-          setRaw(aTextoEditable(value));
+          setRaw(aTextoEditable(value, mostrarCero));
           setFoco(true);
           const el = e.currentTarget;
           requestAnimationFrame(() => { try { el.select(); } catch { /* sin selección */ } });
@@ -73,6 +92,7 @@ export default function NumeroInput({
         onChange={e => {
           const texto = e.target.value;
           setRaw(texto);
+          if (onVacio && texto.trim() === '') { onVacio(); return; }
           let n = cleanNumber(texto);
           if (typeof min === 'number') n = Math.max(min, n);
           if (typeof max === 'number') n = Math.min(max, n);

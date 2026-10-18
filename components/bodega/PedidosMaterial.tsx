@@ -5,6 +5,7 @@
  * despacha a su bodega (camioneta) o directo a la OT. Despachar mueve el stock solo.
  */
 
+import NumeroInput from '@/components/NumeroInput';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { Loader2, PackageCheck, Plus, Search, Send, Trash2, X } from 'lucide-react';
@@ -84,8 +85,8 @@ export function PedirMaterial({ otId, onCerrar, onListo }: { otId?: string | nul
           {lineas.map((l, i) => (
             <div key={l.articulo.id} style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
               <span style={{ flex: 1, fontSize: '0.86rem', color: 'var(--text)' }}>{l.articulo.descripcion}</span>
-              <input className="input" type="number" min={0} step="any" value={l.cantidad} style={{ width: 90 }}
-                onChange={e => setLineas(ls => ls.map((x, j) => (j === i ? { ...x, cantidad: Number(e.target.value) || 0 } : x)))} />
+              <NumeroInput className="input" min={0} decimales={3} value={l.cantidad} envoltura={{ width: 90 }}
+                onChange={v => setLineas(ls => ls.map((x, j) => (j === i ? { ...x, cantidad: v } : x)))} />
               <span style={{ fontSize: '0.74rem', color: 'var(--muted)', width: 30 }}>{l.articulo.unidad}</span>
               <button type="button" className="btn btn-ghost btn-xs" onClick={() => setLineas(ls => ls.filter((_, j) => j !== i))}><Trash2 size={12} /></button>
             </div>
@@ -136,7 +137,7 @@ function Despachar({ pedido, bodegas, stock, onCerrar, onListo }: { pedido: Pedi
           <div key={l.id} style={{ display: 'flex', gap: 8, alignItems: 'center', fontSize: '0.85rem' }}>
             <span style={{ flex: 1, color: 'var(--text)' }}>{l.catalogo_items?.descripcion}<span style={{ display: 'block', fontSize: '0.72rem', color: 'var(--muted)' }}>
               pidió {Number(l.cantidad)} · despachado {Number(l.despachada)} · hay {hay(l.articulo_id)}</span></span>
-            <input className="input" type="number" min={0} step="any" style={{ width: 90 }} value={cant[l.id] ?? 0} onChange={e => setCant({ ...cant, [l.id]: Number(e.target.value) || 0 })} />
+            <NumeroInput className="input" min={0} decimales={3} envoltura={{ width: 90 }} value={cant[l.id] ?? 0} onChange={v => setCant({ ...cant, [l.id]: v })} />
           </div>
         ))}
         <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>

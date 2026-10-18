@@ -19,7 +19,7 @@ import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import {
-  Home, TrendingUp, Wrench, Building2, LogOut, ChevronDown,
+  Home, HardHat, TrendingUp, Wrench, Building2, LogOut, ChevronDown,
   PanelLeftClose, PanelLeftOpen, Menu, X, Lock, Loader2, AlertTriangle, Wallet,
 } from 'lucide-react';
 import ThemeToggle from '@/components/ThemeToggle';
@@ -41,13 +41,15 @@ const MENU: { grupo: string; icono: React.ElementType; items: Item[] }[] = [
     { href: '/inicio', label: 'Mi día' },
     { href: '/dashboard', label: 'Dashboard', permisos: ['dashboard.ver'] },
   ] },
+  // Lo de cada técnico (como «Mi trabajo» de TecApp): sus OT ordenadas por lo que le toca hacer.
+  { grupo: 'Mi trabajo', icono: HardHat, items: [
+    { href: '/mis-ot', label: 'Mis OT', permisos: ['ot.ejecutar'] },
+  ] },
   { grupo: 'Operaciones', icono: Wrench, items: [
     { href: '/ordenes', label: 'Órdenes de trabajo', permisos: ['ot.ver', 'ot.ejecutar'] },
     { href: '/agenda', label: 'Agenda', permisos: ['agenda.ver'] },
     { href: '/tareas', label: 'Tareas' },
     { href: '/proyectos', label: 'Proyectos', permisos: ['proyectos.ver', 'proyectos.gestionar'] },
-    { href: '/levantamiento/historial', label: 'Levantamientos', permisos: ['levantamientos.ver'] },
-    { href: '/levantamiento', label: 'Nuevo levantamiento', exacto: true, permisos: ['levantamientos.crear'], sub: true },
     { href: '/bodega', label: 'Bodega', permisos: ['bodega.ver', 'bodega.mover'] },
   ] },
   { grupo: 'Comercial', icono: TrendingUp, items: [
@@ -61,7 +63,7 @@ const MENU: { grupo: string; icono: React.ElementType; items: Item[] }[] = [
   ] },
   { grupo: 'Finanzas', icono: Wallet, items: [
     { href: '/facturacion', label: 'Por facturar y cobranza', permisos: ['facturacion.ver', 'facturacion.gestionar'] },
-    { href: '/gastos', label: 'Gastos y rendiciones', permisos: ['gastos.crear', 'gastos.ver_todos', 'gastos.aprobar'] },
+    { href: '/gastos', label: 'Rendiciones y anticipos', permisos: ['gastos.crear', 'gastos.ver_todos', 'gastos.aprobar'] },
   ] },
   { grupo: 'Mi empresa', icono: Building2, items: [
     { href: '/biblioteca', label: 'Biblioteca de precios', permisos: ['biblioteca.ver'] },

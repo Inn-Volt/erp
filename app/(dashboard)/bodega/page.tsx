@@ -121,7 +121,7 @@ function Registrar({ bodegas, catalogo, ots, tipoInicial, puedeAjustar, onClose,
             {tipo === 'traslado' && <div><label className="label-muted" style={lbl}>Hacia</label>
               <select className="input" value={f.destino_id} onChange={e => setF({ ...f, destino_id: e.target.value })}>{bodegas.map(b => <option key={b.id} value={b.id}>{b.nombre}</option>)}</select></div>}
             <div><label className="label-muted" style={lbl}>Cantidad {art ? `(${art.unidad})` : ''}{tipo === 'ajuste' ? ' — negativa para restar' : ''}</label>
-              <input className="input" type="number" step="any" value={f.cantidad} onChange={e => setF({ ...f, cantidad: Number(e.target.value) })} /></div>
+              <NumeroInput className="input" decimales={3} value={f.cantidad} onChange={v => setF({ ...f, cantidad: v })} /></div>
             {tipo === 'entrada' && <div><label className="label-muted" style={lbl}>Costo unitario</label><NumeroInput className="input" prefijo="$" value={f.costo} onChange={v => setF({ ...f, costo: v })} /></div>}
           </div>
           <div><label className="label-muted" style={lbl}>N° de serie (si aplica)</label><input className="input" value={f.serie} onChange={e => setF({ ...f, serie: e.target.value })} /></div>
