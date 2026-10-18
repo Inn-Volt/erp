@@ -246,7 +246,10 @@ export default function EditorCotizacion({ id, clonarDe, clienteInicial, solicit
         }
         if (visita && ('notas_visita' in visita || 'fotos' in visita)) {
           const partes = [`Según la visita técnica del ${formatDate(visita.fecha)}${visita.direccion ? `, en ${visita.direccion}` : ''}.`];
-          const respuestas = resumenInforme(visita.informe);
+          // Fase 9: todos los informes de la visita (si aún no está, el único de la fase 8).
+          const { data: infs, error: eInf } = await supabase.from('informes_visita').select('*').eq('agendamiento_id', visita.id).order('folio');
+          const informes = ((eInf ? [visita.informe] : infs) || []).filter(Boolean) as InformeLleno[];
+          const respuestas = informes.map(i => resumenInforme(i)).filter(Boolean).join('\n');
           if (respuestas || visita.notas_visita?.trim()) partes.push(['**Lo que vimos:**', respuestas, visita.notas_visita?.trim()].filter(Boolean).join('\n'));
           Object.assign(nuevo, {
             agendamiento_id: visita.id, cliente_id: nuevo.cliente_id || visita.cliente_id, incluir_fotos: (visita.fotos || []).length > 0,

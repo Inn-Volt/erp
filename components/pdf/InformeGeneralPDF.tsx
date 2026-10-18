@@ -8,7 +8,7 @@
 import React from 'react';
 import { Document, Image, Page, StyleSheet, Text, View } from '@react-pdf/renderer';
 import type { EmpresaInfo } from '@/components/pdf/PresupuestoPDF';
-import { valorLegible, type InformeLleno } from '@/services/informes';
+import { seccionesDe, tipoDe, valorLegible, vacio, type FilaLista, type FotoInforme, type InformeLleno } from '@/services/informes';
 import { aDoc, esLista, type NodoTexto } from '@/lib/textoFormato';
 import { formatDate } from '@/utils';
 
@@ -73,13 +73,21 @@ export interface InformeGeneralPDFProps {
   firmaUrl?: string | null;
   firmadoAt?: string | null;
   color?: string;
+  /** Links de las fotos y firmas que van dentro de las preguntas. */
+  urls?: Record<string, string>;
 }
 
 export default function InformeGeneralPDF(p: InformeGeneralPDFProps) {
   const color = p.color || '#ffc600';
   const titulo = p.tipo === 'visita' ? 'INFORME DE VISITA' : 'ACTA DE ENTREGA';
   const logo = p.empresa.logo_url || (/innvolt/i.test(p.empresa.nombre) ? '/InnVolt-transparente-claro.png' : '');
-  const respondidas = p.informe.campos.filter(c => p.informe.respuestas?.[c.clave] !== undefined);
+  const urls = p.urls || {};
+  const secciones = seccionesDe(p.informe).map(sec => ({ ...sec, campos: sec.campos.filter(c => !vacio(p.informe.respuestas?.[c.clave])) })).filter(sec => sec.campos.length);
+  // Las fotos de las preguntas van al registro fotográfico, con el nombre de la pregunta.
+  const fotosCampos = seccionesDe(p.informe).flatMap(sec => sec.campos).filter(c => tipoDe(c) === 'foto')
+    .flatMap(c => ((p.informe.respuestas?.[c.clave] as FotoInforme[]) || []).map(f => ({ url: urls[f.path], caption: f.caption ? `${c.etiqueta} · ${f.caption}` : c.etiqueta })))
+    .filter(f => f.url);
+  const todasFotos = [...fotosCampos, ...p.fotos];
   const pie = `${p.empresa.nombre} · ${p.folio}`;
   return (
     <Document title={`${titulo} ${p.folio}`}>
@@ -111,16 +119,48 @@ export default function InformeGeneralPDF(p: InformeGeneralPDFProps) {
 
         {p.informe.intro?.trim() ? <View style={{ marginBottom: 10 }}><Formato texto={p.informe.intro} /></View> : null}
 
-        {respondidas.length > 0 && (
-          <View style={{ marginBottom: 10 }}>
-            <Text style={s.rotulo}>{p.tipo === 'visita' ? 'LO QUE SE VIO' : 'DATOS'}</Text>
-            {respondidas.map(c => (
-              <View key={c.clave} style={s.tr} wrap={false}>
-                <Text style={{ width: 200, color: MUTED }}>{c.etiqueta}</Text><Text style={{ flex: 1 }}>{valorLegible(c, p.informe.respuestas[c.clave])}</Text>
-              </View>
-            ))}
+        {secciones.map(sec => (
+          <View key={sec.clave} style={{ marginBottom: 10 }}>
+            <Text style={[s.rotulo, { color: INK }]} minPresenceAhead={40}>{(sec.clave === '_general' ? (p.tipo === 'visita' ? 'Lo que se vio' : 'Datos') : sec.titulo).toUpperCase()}</Text>
+            {sec.campos.map(c => {
+              const v = p.informe.respuestas[c.clave];
+              const t = tipoDe(c);
+              if (t === 'lista') {
+                const sub = c.subcampos || [];
+                const filas = (v as FilaLista[]) || [];
+                return (
+                  <View key={c.clave} style={{ marginBottom: 6 }}>
+                    <Text style={{ color: MUTED, marginBottom: 3 }}>{c.etiqueta}</Text>
+                    <View style={{ flexDirection: 'row', backgroundColor: TINT, padding: '4 6' }} wrap={false}>
+                      <Text style={{ width: 16, fontFamily: 'Helvetica-Bold', fontSize: 7.5 }}>#</Text>
+                      {sub.map(x => <Text key={x.clave} style={{ flex: 1, fontFamily: 'Helvetica-Bold', fontSize: 7.5 }}>{x.etiqueta}</Text>)}
+                    </View>
+                    {filas.map((f, i) => (
+                      <View key={i} style={{ flexDirection: 'row', padding: '4 6', borderBottomWidth: 1, borderBottomColor: LINE }} wrap={false}>
+                        <Text style={{ width: 16, fontSize: 8 }}>{i + 1}</Text>
+                        {sub.map(x => <Text key={x.clave} style={{ flex: 1, fontSize: 8 }}>{vacio(f[x.clave]) ? '' : valorLegible(x, f[x.clave])}</Text>)}
+                      </View>
+                    ))}
+                  </View>
+                );
+              }
+              if (t === 'firma') {
+                const u = urls[v as string];
+                return (
+                  <View key={c.clave} style={s.tr} wrap={false}>
+                    <Text style={{ width: 200, color: MUTED }}>{c.etiqueta}</Text>
+                    {u ? <Image src={u} style={{ height: 40, width: 140, objectFit: 'contain' }} /> : <Text style={{ flex: 1 }}>Firmado</Text>}
+                  </View>
+                );
+              }
+              return (
+                <View key={c.clave} style={s.tr} wrap={false}>
+                  <Text style={{ width: 200, color: MUTED }}>{c.etiqueta}</Text><Text style={{ flex: 1 }}>{valorLegible(c, v)}</Text>
+                </View>
+              );
+            })}
           </View>
-        )}
+        ))}
 
         {p.trabajos?.trim() ? <View style={{ marginBottom: 10 }}><Text style={s.rotulo}>TRABAJOS REALIZADOS</Text><Text style={s.texto}>{p.trabajos}</Text></View> : null}
 
@@ -155,11 +195,11 @@ export default function InformeGeneralPDF(p: InformeGeneralPDFProps) {
         <Text style={s.pie} fixed render={({ pageNumber, totalPages }) => `${pie} · página ${pageNumber} de ${totalPages}`} />
       </Page>
 
-      {p.fotos.length > 0 && (
+      {todasFotos.length > 0 && (
         <Page size="A4" style={s.page}>
           <Text style={[s.rotulo, { marginBottom: 10 }]}>REGISTRO FOTOGRÁFICO</Text>
           <View style={s.fotos}>
-            {p.fotos.map((f, i) => (
+            {todasFotos.map((f, i) => (
               <View key={i} style={s.fotoBox} wrap={false}>
                 <Image src={f.url} style={s.foto} />
                 {f.caption ? <Text style={{ fontSize: 7.5, color: MUTED, marginTop: 3 }}>{f.caption}</Text> : null}
