@@ -47,6 +47,32 @@ export const CATALOGO: AreaDef[] = [
       { clave: 'levantamientos.crear', nombre: 'Crear, editar y subir fotos' },
       { clave: 'levantamientos.anular', nombre: 'Eliminar' },
     ] },
+    { modulo: 'ot', nombre: 'Órdenes de trabajo', permisos: [
+      { clave: 'ot.ver', nombre: 'Ver todas' },
+      { clave: 'ot.crear', nombre: 'Crear, asignar y coordinar' },
+      { clave: 'ot.ejecutar', nombre: 'Ejecutar las asignadas', ayuda: 'Ver sus OT, avanzar estados, hacer informes con firma' },
+      { clave: 'ot.cerrar', nombre: 'Cerrar y anular' },
+    ] },
+    { modulo: 'tareas', nombre: 'Tareas', permisos: [
+      { clave: 'tareas.ver', nombre: 'Ver todas', ayuda: 'Sin esto, cada uno ve las suyas' },
+      { clave: 'tareas.gestionar', nombre: 'Crear y asignar a otros' },
+    ] },
+    { modulo: 'bodega', nombre: 'Bodega', permisos: [
+      { clave: 'bodega.ver', nombre: 'Ver stock y movimientos' },
+      { clave: 'bodega.mover', nombre: 'Registrar entradas y salidas' },
+      { clave: 'bodega.ajustar', nombre: 'Ajustar stock y crear bodegas' },
+    ] },
+  ] },
+  { area: 'Finanzas', modulos: [
+    { modulo: 'facturacion', nombre: 'Por facturar y cobranza', permisos: [
+      { clave: 'facturacion.ver', nombre: 'Ver' },
+      { clave: 'facturacion.gestionar', nombre: 'Registrar OC, HES, facturas y pagos' },
+    ] },
+    { modulo: 'gastos', nombre: 'Gastos y rendiciones', permisos: [
+      { clave: 'gastos.crear', nombre: 'Registrar mis gastos' },
+      { clave: 'gastos.ver_todos', nombre: 'Ver los de todos' },
+      { clave: 'gastos.aprobar', nombre: 'Aprobar, rechazar y reembolsar' },
+    ] },
   ] },
   { area: 'Mi empresa', modulos: [
     { modulo: 'dashboard', nombre: 'Panel comercial', permisos: [
@@ -82,14 +108,17 @@ export const PLANTILLAS_BASE: Record<string, string[]> = {
   admin: ['*'],
   comercial: ['solicitudes.ver', 'solicitudes.crear', 'cotizaciones.ver', 'cotizaciones.crear', 'cotizaciones.aprobar',
     'cotizaciones.ver_costos', 'clientes.ver', 'clientes.crear', 'plantillas.gestionar', 'agenda.ver',
-    'agenda.gestionar', 'levantamientos.ver', 'dashboard.ver', 'biblioteca.ver', 'ia.usar'],
+    'agenda.gestionar', 'levantamientos.ver', 'dashboard.ver', 'biblioteca.ver', 'ia.usar',
+    'ot.ver', 'ot.crear', 'facturacion.ver', 'tareas.ver', 'tareas.gestionar'],
   administrativo: ['solicitudes.ver', 'solicitudes.crear', 'cotizaciones.ver', 'cotizaciones.crear', 'cotizaciones.aprobar',
     'cotizaciones.ver_costos', 'clientes.ver', 'clientes.crear', 'agenda.ver', 'dashboard.ver',
-    'biblioteca.ver', 'biblioteca.editar', 'plantillas.gestionar', 'ia.usar'],
+    'biblioteca.ver', 'biblioteca.editar', 'plantillas.gestionar', 'ia.usar',
+    'ot.ver', 'ot.crear', 'ot.cerrar', 'facturacion.ver', 'facturacion.gestionar', 'bodega.ver', 'bodega.mover',
+    'bodega.ajustar', 'gastos.crear', 'gastos.ver_todos', 'gastos.aprobar', 'tareas.ver', 'tareas.gestionar'],
   tecnico: ['solicitudes.ver', 'cotizaciones.ver', 'clientes.ver', 'agenda.ver', 'agenda.gestionar',
-    'levantamientos.ver', 'levantamientos.crear', 'biblioteca.ver'],
+    'levantamientos.ver', 'levantamientos.crear', 'biblioteca.ver', 'ot.ejecutar', 'bodega.ver', 'bodega.mover', 'gastos.crear'],
   solo_lectura: ['solicitudes.ver', 'cotizaciones.ver', 'clientes.ver', 'agenda.ver', 'levantamientos.ver',
-    'biblioteca.ver', 'dashboard.ver'],
+    'biblioteca.ver', 'dashboard.ver', 'ot.ver', 'facturacion.ver', 'bodega.ver', 'tareas.ver'],
 };
 
 /** ¿La lista de permisos incluye la clave? ('*' = todos). */
@@ -115,6 +144,10 @@ export const PERMISO_DE_RUTA: { prefijo: string; permisos: string[] }[] = [
   { prefijo: '/clientes', permisos: ['clientes.ver'] },
   { prefijo: '/biblioteca', permisos: ['biblioteca.ver'] },
   { prefijo: '/configuracion', permisos: ['configuracion.gestionar'] },
+  { prefijo: '/ordenes', permisos: ['ot.ver', 'ot.ejecutar'] },
+  { prefijo: '/facturacion', permisos: ['facturacion.ver', 'facturacion.gestionar'] },
+  { prefijo: '/bodega', permisos: ['bodega.ver', 'bodega.mover'] },
+  { prefijo: '/gastos', permisos: ['gastos.crear', 'gastos.ver_todos', 'gastos.aprobar'] },
   { prefijo: '/usuarios', permisos: ['usuarios.ver', 'usuarios.gestionar'] },
   { prefijo: '/roles', permisos: ['roles.gestionar', 'usuarios.gestionar'] },
   { prefijo: '/auditoria', permisos: ['auditoria.ver'] },

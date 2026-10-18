@@ -18,6 +18,7 @@ export interface Agendamiento {
   clientes?: Cliente | null;                    // join
   solicitud_id: string | null;
   solicitudes?: { id: string; folio: number } | null; // join
+  ot_id?: string | null;                       // OT que originó la cita
   titulo: string;
   direccion: string | null;
   fecha: string;                                // YYYY-MM-DD

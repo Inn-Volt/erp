@@ -9,6 +9,7 @@ import { formatDate } from '@/utils';
 import { useRouter } from 'next/navigation';
 import PageHeader from '@/components/PageHeader';
 import LinksMapa from '@/components/LinksMapa';
+import SucursalesCliente from '@/components/SucursalesCliente';
 import { usePermisos } from '@/hooks/usePermisos';
 
 const EMPTY_CLIENTE: Omit<Cliente, 'id' | 'created_at' | 'updated_at'> = {
@@ -216,6 +217,8 @@ export default function ClientesPage() {
                   <p style={{ fontSize: '0.82rem', color: 'var(--muted)', lineHeight: 1.5 }}>{selected.notas}</p>
                 </div>
               )}
+              <div className="iv-divider" />
+              <SucursalesCliente clienteId={selected.id} editable={puede('clientes.crear')} />
               {selected.created_at && (
                 <p style={{ fontSize: '0.72rem', color: 'var(--dim)' }}>Creado: {formatDate(selected.created_at)}</p>
               )}
@@ -352,6 +355,8 @@ export default function ClientesPage() {
                   <p style={{ fontSize: '0.82rem', color: 'var(--muted)', lineHeight: 1.5 }}>{selected.notas}</p>
                 </div>
               )}
+              <div className="iv-divider" />
+              <SucursalesCliente clienteId={selected.id} editable={puede('clientes.crear')} />
               {selected.created_at && (
                 <p style={{ fontSize: '0.72rem', color: 'var(--dim)' }}>Creado: {formatDate(selected.created_at)}</p>
               )}

@@ -24,6 +24,7 @@ import PresupuestoPDF from '@/components/pdf/PresupuestoPDF';
 import { supabase } from '@/lib/supabase';
 import type { EmpresaInfo } from '@/components/pdf/PresupuestoPDF';
 import PageHeader from '@/components/PageHeader';
+import { folioOT } from '@/services/operacion';
 
 type SortKey = 'folio' | 'cliente' | 'total' | 'fecha' | 'estado';
 type SortDir = 'asc' | 'desc';
@@ -35,6 +36,7 @@ export default function HistorialPage() {
   const { success, error: toastError } = useToast();
 
   const [cotizaciones, setCotizaciones] = useState<Cotizacion[]>([]);
+  const [otDe, setOtDe] = useState<Record<string, { id: string; folio: number }>>({});
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [filterEstado, setFilterEstado] = useState<EstadoCotizacion | 'Todos'>('Todos');
@@ -59,6 +61,9 @@ export default function HistorialPage() {
     const [data, mapa] = await Promise.all([cotizacionesService.getAll(), vendedoresService.mapa()]);
     setCotizaciones(data);
     setVendedores(mapa);
+    // OT generada por cada cotización aceptada (si ya se corrió la fase 2 y se tiene acceso).
+    supabase.from('ordenes_trabajo').select('id, folio, cotizacion_id').not('cotizacion_id', 'is', null)
+      .then(({ data: o }) => setOtDe(Object.fromEntries((o || []).map(x => [x.cotizacion_id as string, { id: x.id as string, folio: x.folio as number }]))));
   } catch (e) {
     console.error('Error al cargar el historial:', e);
     toastError('No se pudo cargar el historial de cotizaciones');
@@ -440,6 +445,11 @@ const [empresas, setEmpresas] = useState<EmpresaInfo[]>([]);
                       {cot.respondida_at && cot.respondida_por && (
                         <p style={{ fontSize: '0.64rem', color: cot.estado === 'Rechazado' ? 'var(--danger)' : 'var(--success)', marginTop: 2, display: 'flex', alignItems: 'center', gap: 3 }} title={cot.respuesta_comentario || ''}>
                           <CheckCircle2 size={10} /> Online: {cot.respondida_por}
+                        </p>
+                      )}
+                      {otDe[cot.id] && (
+                        <p style={{ fontSize: '0.64rem', marginTop: 2 }}>
+                          <a href={`/ordenes/${otDe[cot.id].id}`} onClick={e => { e.stopPropagation(); e.preventDefault(); router.push(`/ordenes/${otDe[cot.id].id}`); }} style={{ color: 'var(--y)' }}>{folioOT(otDe[cot.id].folio)}</a>
                         </p>
                       )}
                       {cot.estado === 'Rechazado' && cot.motivo_perdida && (
