@@ -1,6 +1,6 @@
 import type {
   CotizacionItem, CategoriaItem, Supuestos, CatalogoItem, RecetaConComponentes, Moneda, Partida,
-  BorradorIA, PartidaIAResuelta,
+  BorradorIA, PartidaIAResuelta, PartidaIA, ComponenteIA,
 } from '@/types';
 import { SUPUESTOS_DEFAULT, CATEGORIAS_ORDEN } from '@/types';
 import type { AnalisisIA } from '@/types/solicitud';
@@ -468,6 +468,98 @@ export function mejorMatchCatalogo<T extends { descripcion: string; categoria: s
     if (shared >= 2 && score > bestScore) { bestScore = score; best = it; }
   }
   return bestScore >= 0.5 ? best : null;
+}
+
+const CATEGORIAS_IA: CategoriaItem[] = ['material', 'mano_obra', 'servicio', 'operacion'];
+
+/**
+ * Limpia la respuesta de la IA antes de usarla: números que llegan como texto
+ * ("1.200.000"), categorías fuera de la lista, campos faltantes, componentes sin
+ * descripción y partidas vacías. Así una respuesta con detalles menores se usa en
+ * vez de perderse entera.
+ */
+export function normalizarBorradorIA(crudo: unknown): BorradorIA {
+  const o = (crudo && typeof crudo === 'object' ? crudo : {}) as Record<string, unknown>;
+  const txt = (v: unknown) => (typeof v === 'string' ? v.trim() : v == null ? '' : String(v).trim());
+  const num = (v: unknown) => { const n = cleanNumber(v); return Number.isFinite(n) && n >= 0 ? n : 0; };
+  const partidas: PartidaIA[] = [];
+  for (const p of Array.isArray(o.partidas) ? o.partidas : []) {
+    if (!p || typeof p !== 'object') continue;
+    const pp = p as Record<string, unknown>;
+    const componentes: ComponenteIA[] = [];
+    for (const c of Array.isArray(pp.componentes) ? pp.componentes : []) {
+      if (!c || typeof c !== 'object') continue;
+      const cc = c as Record<string, unknown>;
+      const descripcion = txt(cc.descripcion);
+      if (!descripcion) continue;
+      const cat = txt(cc.categoria).toLowerCase() as CategoriaItem;
+      componentes.push({
+        descripcion,
+        categoria: CATEGORIAS_IA.includes(cat) ? cat : 'material',
+        unidad: txt(cc.unidad) || 'un',
+        cantidad: num(cc.cantidad) || 1,
+        costoUnitario: num(cc.costoUnitario),
+      });
+    }
+    if (!componentes.length) continue;
+    partidas.push({
+      nombre: txt(pp.nombre) || 'Partida',
+      descripcion: txt(pp.descripcion),
+      cantidad: num(pp.cantidad) || 1,
+      unidad: txt(pp.unidad) || 'global',
+      componentes,
+    });
+  }
+  return { resumen: txt(o.resumen), partidas };
+}
+
+/** Línea que abre una lista de partidas a generar ("GENERA SOLO ESTAS PARTIDAS:"). */
+const MARCA_PARTIDAS = /^\s*GENERA\s+SOLO\s+ESTAS\s+PARTIDAS\b/i;
+/** Encabezado en mayúsculas terminado en ":" (ej. "PROYECTO:"): cierra una lista de partidas. */
+const ENCABEZADO_MAYUS = /^\s*[A-ZÁÉÍÓÚÑ][A-ZÁÉÍÓÚÑ ]{2,}:\s*$/;
+
+/** Partidas por pedido: con 2 la respuesta llega en pocos segundos (límite de Netlify ~10 s). */
+export const PARTIDAS_POR_PEDIDO = 2;
+
+export interface PedidoIA {
+  texto: string;
+  /** Partidas que pide este pedido (vacío = el texto va entero, sin dividir). */
+  partidas: string[];
+}
+
+/**
+ * Divide un pedido grande a la IA en pedidos chicos. Si el texto trae listas
+ * "GENERA SOLO ESTAS PARTIDAS:", cada pedido lleva el contexto (todo lo anterior
+ * a la primera lista: instrucciones y descripción del proyecto) más `porPedido`
+ * partidas. Sin listas, o con pocas partidas, va en un solo pedido.
+ * Si el encabezado se pegó repetido entre bloques, se ignora la copia.
+ */
+export function dividirPedidoIA(texto: string, porPedido = PARTIDAS_POR_PEDIDO): PedidoIA[] {
+  const lineas = texto.split(/\r?\n/);
+  const primera = lineas.findIndex(l => MARCA_PARTIDAS.test(l));
+  if (primera < 0) return [{ texto: texto.trim(), partidas: [] }];
+
+  const contexto = lineas.slice(0, primera).join('\n').trim();
+  const partidas: string[] = [];
+  let enLista = false;
+  for (const l of lineas.slice(primera)) {
+    if (MARCA_PARTIDAS.test(l)) { enLista = true; continue; }
+    if (!enLista) continue;
+    if (ENCABEZADO_MAYUS.test(l)) { enLista = false; continue; }
+    const limpia = l.replace(/^\s*(?:[-•*]|\d+[.)])\s+/, '').trim();
+    if (limpia) partidas.push(limpia);
+  }
+  if (partidas.length <= porPedido) return [{ texto: texto.trim(), partidas }];
+
+  const pedidos: PedidoIA[] = [];
+  for (let i = 0; i < partidas.length; i += porPedido) {
+    const grupo = partidas.slice(i, i + porPedido);
+    pedidos.push({
+      texto: `${contexto}\n\nGENERA SOLO ESTAS PARTIDAS (ninguna otra):\n${grupo.join('\n')}`.trim(),
+      partidas: grupo,
+    });
+  }
+  return pedidos;
 }
 
 /**
