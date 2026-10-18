@@ -165,7 +165,7 @@ export default function AppShell({ userName, userId, onLogout, children }: {
   const nombreVisible = perfil?.nombre || userName;
   const iniciales = nombreVisible.split(/[\s._@-]+/).filter(Boolean).slice(0, 2).map(s => s[0]).join('').toUpperCase() || 'IV';
   const rolVisible = sinMigracion ? 'Administrador' : (roles.length ? roles.join(' · ') : 'Sin rol asignado');
-  const inicio = primeraPermitida || '/dashboard';
+  const inicio = '/inicio';   // Mi día: el inicio de todos
 
   const marca = (
     <Link href={inicio} onClick={e => guardia(e, inicio)} className="flex items-center px-5 py-4" aria-label="InnVolt — inicio">

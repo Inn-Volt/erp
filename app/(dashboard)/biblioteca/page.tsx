@@ -680,7 +680,7 @@ export default function BibliotecaPage() {
         </div>
       ) : (
         /* ── RECETAS ── */
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: '0.6rem' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(min(100%, 280px), 1fr))', gap: '0.6rem' }}>
           {recetasFiltradas.length === 0 ? (
             <div className="panel-y" style={{ gridColumn: '1/-1', textAlign: 'center', padding: '3rem', color: 'var(--muted)' }}>
               <Layers size={36} style={{ margin: '0 auto 1rem', opacity: 0.3 }} />

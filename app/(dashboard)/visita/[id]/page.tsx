@@ -92,7 +92,7 @@ export default function VisitaPage() {
         subtitle={cli?.nombre_cliente || 'Sin cliente'}
         actions={gestiona ? <Link href={`/agenda?cita=${v.id}`} className="btn btn-ghost btn-sm"><Pencil size={13} /> Editar en la agenda</Link> : null} />
 
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: 12 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 300px), 1fr))', gap: 12 }}>
         <div className="panel-y" style={{ padding: '1rem', display: 'flex', flexDirection: 'column', gap: 12 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
             <span style={{ fontSize: '0.74rem', fontWeight: 700, padding: '0.2rem 0.6rem', borderRadius: 99, color: meta.color, background: meta.bg }}>{v.estado}</span>
@@ -140,7 +140,8 @@ export default function VisitaPage() {
         <p className="section-label" style={{ margin: 0 }}>Informes de la visita</p>
         <p style={{ margin: 0, fontSize: '0.8rem', color: 'var(--muted)' }}>Elige la planilla (levantamiento, checklist…), llénala por pasos y agrega las fotos dentro del informe.</p>
         <InformesDeVisita agendaId={v.id} editable={puedeTrabajar} tiposServicio={v.tipos_servicio}
-          datos={() => ({ fecha: v.fecha, titulo: v.titulo, responsable: v.tecnico?.nombre || RESPONSABLE_LABEL[v.responsable],
+          datos={() => ({ fecha: v.fecha, titulo: v.titulo, responsable: v.tecnico?.nombre || v.tecnico?.email || RESPONSABLE_LABEL[v.responsable],
+            hora: v.hora_inicio?.slice(0, 5) || null, contacto: cli?.contacto_nombre || cli?.nombre_cliente, telefono: cli?.telefono,
             cliente: { nombre: cli?.nombre_cliente || 'Sin cliente', rut: cli?.rut, direccion } })} />
       </div>
 

@@ -98,7 +98,7 @@ export default function TrabajoPanel({ cot, plan, onCambio, cliente, responsable
         {ocupado && <Loader2 size={14} className="iv-spin" />}
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: 14 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 280px), 1fr))', gap: 14 }}>
         {/* Cobros */}
         <div>
           <p className="label-muted" style={{ marginBottom: 6 }}>Cobros · {formatCLP(cobrado)} cobrado de {formatCLP(cot.total)}</p>
@@ -162,7 +162,7 @@ export default function TrabajoPanel({ cot, plan, onCambio, cliente, responsable
 
       {/* Resultado */}
       {verCostos && res && (
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: 8 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 150px), 1fr))', gap: 8 }}>
           {([
             ['Venta neta', venta, 'var(--text)'],
             ['Costo cotizado', cotizado, 'var(--muted)'],

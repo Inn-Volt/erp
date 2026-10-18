@@ -167,7 +167,7 @@ export default function AuditoriaPage() {
     <div className="anim-in">
       <PageHeader eyebrow="Mi empresa" title="Auditoría" subtitle="Quién creó, cambió o eliminó qué, y cuándo. La anota la base de datos sola y nadie la puede editar." />
       <div className="panel-y">
-        <div style={{ padding: '1rem', borderBottom: '1px solid var(--border2)', display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(170px, 1fr))', gap: 8 }}>
+        <div style={{ padding: '1rem', borderBottom: '1px solid var(--border2)', display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 170px), 1fr))', gap: 8 }}>
           <select className="input" value={tabla} onChange={e => setTabla(e.target.value)} aria-label="Sección">
             <option value="">Todas las secciones</option>
             {Object.entries(TABLAS).map(([k, v]) => <option key={k} value={k}>{v.nombre}</option>)}

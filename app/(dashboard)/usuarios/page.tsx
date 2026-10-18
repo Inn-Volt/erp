@@ -144,7 +144,7 @@ function FichaUsuario({ u, roles, asignaciones, empresas, esYo, puedeGestionar, 
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16, padding: '0.25rem 0 0.5rem' }}>
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 10 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 180px), 1fr))', gap: 10 }}>
         {(['nombre', 'cargo', 'telefono'] as const).map(k => (
           <div key={k}>
             <label className="label-muted" style={{ display: 'block', marginBottom: 6 }}>{k === 'nombre' ? 'Nombre' : k === 'cargo' ? 'Cargo' : 'Teléfono'}</label>

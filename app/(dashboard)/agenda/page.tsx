@@ -104,7 +104,10 @@ function AgendaModal({ cita, clientes, createdBy, prefill, onClose, onSaved, onD
   const [generando, setGenerando] = useState(false);
   const datosPDF = () => {
     const cli = clientes.find(c => c.id === clienteId);
-    return { fecha, titulo, responsable: RESPONSABLE_LABEL[responsable], cliente: { nombre: cli?.nombre_cliente || 'Sin cliente', rut: cli?.rut, direccion: direccion || cli?.direccion } };
+    const tecnico = usuarios.find(u => u.id === tecnicoId);
+    return { fecha, titulo, hora: horaIni || null, responsable: tecnico?.nombre || tecnico?.email || RESPONSABLE_LABEL[responsable],
+      contacto: cli?.contacto_nombre || cli?.nombre_cliente, telefono: cli?.telefono,
+      cliente: { nombre: cli?.nombre_cliente || 'Sin cliente', rut: cli?.rut, direccion: direccion || cli?.direccion } };
   };
   const pdfVisita = async () => {
     if (!cita) return;
@@ -330,7 +333,7 @@ function AgendaModal({ cita, clientes, createdBy, prefill, onClose, onSaved, onD
                 <textarea className="input" rows={3} value={notasVisita} onChange={e => setNotasVisita(e.target.value)}
                   placeholder="Estado del tablero, distancias, qué hay que cambiar, qué pidió el cliente…" style={{ resize: 'vertical' }} />
                 {fotos.length > 0 && (
-                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(120px, 1fr))', gap: 8 }}>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(min(100%, 120px), 1fr))', gap: 8 }}>
                     {fotos.map((f, i) => (
                       <div key={f.path} style={{ position: 'relative' }}>
                         {urlsFotos[f.path] ? <img src={urlsFotos[f.path]} alt={f.caption || 'Foto de la visita'} style={{ width: '100%', aspectRatio: '4/3', objectFit: 'cover', borderRadius: 6 }} />

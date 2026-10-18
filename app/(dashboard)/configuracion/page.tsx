@@ -120,7 +120,7 @@ export default function ConfiguracionPage() {
         </>}
       />
 
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '2px' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 300px), 1fr))', gap: '2px' }}>
 
         {/* Datos empresa */}
         <div style={{ background: 'var(--bg2)', border: '1px solid var(--border2)', borderTop: '2px solid var(--y-brand)', padding: '1.5rem' }}>
@@ -184,7 +184,7 @@ export default function ConfiguracionPage() {
         {/* Textos por defecto */}
         <div style={{ background: 'var(--bg2)', border: '1px solid var(--border2)', padding: '1.5rem', gridColumn: '1 / -1' }}>
           <p style={sectionLabel}><Settings size={13} /> Textos por defecto</p>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '1rem' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 280px), 1fr))', gap: '1rem' }}>
             <div>
               <label className="label-muted" style={{ display: 'block', marginBottom: '0.5rem', fontSize: '0.55rem' }}>Condiciones comerciales por defecto</label>
               <textarea className="input" value={config.condiciones_default} onChange={set('condiciones_default')} rows={5} style={{ resize: 'vertical', fontSize: '0.82rem', lineHeight: 1.6 }} />

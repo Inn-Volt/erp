@@ -115,7 +115,7 @@ function Registrar({ bodegas, catalogo, ots, tipoInicial, puedeAjustar, onClose,
               )}
             </div>
           </div>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: 10 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 150px), 1fr))', gap: 10 }}>
             <div><label className="label-muted" style={lbl}>{tipo === 'traslado' ? 'Desde' : 'Bodega'}</label>
               <select className="input" value={f.bodega_id} onChange={e => setF({ ...f, bodega_id: e.target.value })}>{bodegas.map(b => <option key={b.id} value={b.id}>{b.nombre}</option>)}</select></div>
             {tipo === 'traslado' && <div><label className="label-muted" style={lbl}>Hacia</label>
@@ -218,7 +218,7 @@ export default function BodegaPage() {
           {puede('bodega.mover') && <button className="btn btn-primary" onClick={() => setRegistrar('entrada')}><Plus size={14} /> Entrada</button>}
         </div>} />
 
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: 8, marginBottom: 12 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 160px), 1fr))', gap: 8, marginBottom: 12 }}>
         <div className="kpi-card"><p className="label-muted">Artículos con stock</p><p className="kpi-value">{filasStock.length}</p></div>
         {puede('cotizaciones.ver_costos') && <div className="kpi-card"><p className="label-muted">Valorizado (costo)</p><p className="kpi-value">{formatCLP(valorizado)}</p></div>}
         <div className="kpi-card"><p className="label-muted">Bodegas</p><p className="kpi-value">{bodegas.filter(b => b.activo).length}</p></div>

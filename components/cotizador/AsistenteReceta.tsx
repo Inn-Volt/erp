@@ -73,7 +73,7 @@ export default function AsistenteReceta({ receta, partida, catalogo, moneda, val
       <button className="btn btn-primary" disabled={!lineas.length} onClick={() => onAgregar(lineas, resp)}><Plus size={14} /> Agregar a la partida</button>
     </>}>
       {receta.descripcion && <p style={{ margin: 0, fontSize: '0.85rem', color: 'var(--muted)' }}>{receta.descripcion}</p>}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: 16 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 260px), 1fr))', gap: 16 }}>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
           {fija && (
             <label style={{ display: 'block' }}>

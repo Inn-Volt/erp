@@ -61,7 +61,7 @@ function Ficha({ p, puedeEditar, onClose, onGuardado }: { p: PorFacturar; puedeE
               <select className="input" value={d.sin_cobro_motivo || ''} onChange={e => set({ sin_cobro_motivo: (e.target.value || null) as PorFacturar['sin_cobro_motivo'] })}>
                 <option value="">Elegir…</option><option value="garantia">Garantía</option><option value="cortesia">Cortesía</option></select></div>
           )}
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: 10 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 160px), 1fr))', gap: 10 }}>
             <div><label className="label-muted" style={lbl}>Monto a cobrar (con IVA)</label><NumeroInput className="input" value={Number(d.monto)} onChange={v => set({ monto: v })} /></div>
             <div><label className="label-muted" style={lbl}>N° OC</label><input className="input" value={d.numero_oc || ''} onChange={e => set({ numero_oc: e.target.value })} /></div>
             <div><label className="label-muted" style={lbl}>N° HES</label><input className="input" value={d.numero_hes || ''} onChange={e => set({ numero_hes: e.target.value })} /></div>
@@ -129,7 +129,7 @@ export default function FacturacionPage() {
       {abierta && <Ficha p={abierta} puedeEditar={puede('facturacion.gestionar')} onClose={() => setAbierta(null)} onGuardado={() => { setAbierta(null); cargar(); }} />}
       <PageHeader eyebrow="Finanzas" title="Por facturar y cobranza" subtitle="Cada OT cerrada llega aquí sola. Avánzala hasta que esté pagada." />
 
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(170px, 1fr))', gap: 8, marginBottom: 12 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 170px), 1fr))', gap: 8, marginBottom: 12 }}>
         {kpis.map(k => (
           <button key={k.t} className="kpi-card" style={{ cursor: 'pointer', textAlign: 'left' }} onClick={() => setFiltro(k.f)}>
             <p className="label-muted">{k.t}</p><p className="kpi-value" style={{ color: k.c }}>{formatCLP(k.v)}</p>
