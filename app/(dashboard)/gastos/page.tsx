@@ -127,7 +127,7 @@ export default function GastosPage() {
       <PageHeader eyebrow="Finanzas" title="Gastos y anticipos" subtitle="Rinde cada gasto con su boleta en el trabajo o el proyecto: suma al costo real y se compara con lo cotizado."
         actions={puede('gastos.crear') ? <button className="btn btn-primary" onClick={() => { setDestinoInicial(''); setNuevo(true); }}><Plus size={14} /> Rendir gasto</button> : null} />
 
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: 8, marginBottom: 12 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 160px), 1fr))', gap: 8, marginBottom: 12 }}>
         <div className="kpi-card"><p className="label-muted">Rendí este mes</p><p className="kpi-value">{formatCLP(suma(mios.filter(g => g.fecha.startsWith(mes))))}</p></div>
         <div className="kpi-card"><p className="label-muted">Me deben</p><p className="kpi-value" style={{ color: '#2563eb' }}>{formatCLP(suma(mios.filter(porPagar)))}</p></div>
         {paga && <div className="kpi-card"><p className="label-muted">Por pagar a todos</p><p className="kpi-value">{formatCLP(rendicion.reduce((s, [, m]) => s + m, 0))}</p></div>}

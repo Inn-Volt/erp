@@ -66,7 +66,7 @@ export default function TrabajosPage() {
       <PageHeader eyebrow="Seguimiento" title="Trabajos"
         subtitle="Cada cotización aprobada es un trabajo: síguelo hasta terminarlo y cobrarlo, con sus gastos reales." />
 
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: 8, marginBottom: 12 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 160px), 1fr))', gap: 8, marginBottom: 12 }}>
         {ESTADOS_TRABAJO.map(e => (
           <button key={e.clave} type="button" className="kpi-card" onClick={() => setFiltro(e.clave)} style={{ textAlign: 'left', cursor: 'pointer', borderColor: filtro === e.clave ? e.color : undefined }}>
             <p className="label-muted">{e.nombre}</p><p className="kpi-value" style={{ color: e.color }}>{cuenta(e.clave)}</p>

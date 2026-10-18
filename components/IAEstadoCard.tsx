@@ -60,7 +60,7 @@ export default function IAEstadoCard() {
       {error && <p style={{ color: 'var(--danger)', fontSize: '0.8rem' }}>{error}</p>}
       {!estado && !error && <Loader2 size={18} className="iv-spin" style={{ color: 'var(--y)' }} />}
       {estado && (
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '8px' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 240px), 1fr))', gap: '8px' }}>
           {(['groq', 'gemini', 'anthropic'] as P[]).map(p => {
             const on = estado.configurados[p];
             const pos = estado.orden.indexOf(p);

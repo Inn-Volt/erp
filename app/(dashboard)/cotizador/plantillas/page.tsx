@@ -91,7 +91,7 @@ export default function PlantillasPage() {
       <PageHeader eyebrow="Comercial" title="Plantillas de cotización"
         subtitle="Los textos con que parte cada cotización. No llevan partidas: para eso están las recetas."
         actions={editable ? <button className="btn btn-primary" onClick={() => setSel({ ...VACIA })}><Plus size={14} /> Nueva plantilla</button> : null} />
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: 12, alignItems: 'start' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 280px), 1fr))', gap: 12, alignItems: 'start' }}>
         <div className="panel-y">
           {cargando ? <div className="skeleton" style={{ height: 120, margin: 12 }} /> : lista.length === 0 ? <p style={{ padding: '1.5rem', color: 'var(--muted)' }}>Aún no hay plantillas.</p> : lista.map(p => (
             <button key={p.id} onClick={() => setSel({ ...p })}
@@ -107,7 +107,7 @@ export default function PlantillasPage() {
         {sel && (
           <div className="panel-y" style={{ padding: '1rem', display: 'flex', flexDirection: 'column', gap: 10, gridColumn: 'span 2' }}>
             <fieldset disabled={!editable} style={{ border: 'none', margin: 0, padding: 0, display: 'flex', flexDirection: 'column', gap: 10 }}>
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 10 }}>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 220px), 1fr))', gap: 10 }}>
                 <label><span className="label-muted">Nombre *</span><input className="input" value={sel.nombre} onChange={e => setSel({ ...sel, nombre: e.target.value })} placeholder="Instalaciones eléctricas" /></label>
                 <label><span className="label-muted">Para qué sirve (se ve al elegirla)</span><input className="input" value={sel.para_que || ''} onChange={e => setSel({ ...sel, para_que: e.target.value })} /></label>
               </div>
@@ -115,7 +115,7 @@ export default function PlantillasPage() {
                 <EditorFormato valor={sel.descripcion || ''} editable={editable} alto={110} etiqueta="Introducción base" onCambiar={t => setSel(x => x && { ...x, descripcion: t })} /></div>
               <div><span className="label-muted">Aclaraciones y garantías</span>
                 <EditorFormato valor={sel.aclaraciones || ''} editable={editable} alto={150} etiqueta="Aclaraciones y garantías" onCambiar={t => setSel(x => x && { ...x, aclaraciones: t })} /></div>
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 10 }}>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 220px), 1fr))', gap: 10 }}>
                 <label><span className="label-muted">Qué ve el cliente</span>
                   <select className="input" value={sel.que_ve_cliente} onChange={e => setSel({ ...sel, que_ve_cliente: e.target.value as Plantilla['que_ve_cliente'] })}>
                     {QUE_VE.map(q => <option key={q.valor} value={q.valor}>{q.nombre}</option>)}</select></label>

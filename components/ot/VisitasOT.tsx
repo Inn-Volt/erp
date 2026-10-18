@@ -83,7 +83,7 @@ export default function VisitasOT({ ot, equipo, puedeProgramar, puedeEjecutar, u
       })}
       {nueva ? (
         <div style={{ background: 'var(--bg3)', borderRadius: 8, padding: '0.6rem', display: 'flex', flexDirection: 'column', gap: 8 }}>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(120px, 1fr))', gap: 8 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 120px), 1fr))', gap: 8 }}>
             <label><span className="label-muted">Fecha</span><input className="input" type="date" value={nueva.fecha} onChange={e => setNueva({ ...nueva, fecha: e.target.value })} /></label>
             <label><span className="label-muted">Desde</span><input className="input" type="time" value={nueva.hora_inicio} onChange={e => setNueva({ ...nueva, hora_inicio: e.target.value })} /></label>
             <label><span className="label-muted">Hasta</span><input className="input" type="time" value={nueva.hora_fin} onChange={e => setNueva({ ...nueva, hora_fin: e.target.value })} /></label>

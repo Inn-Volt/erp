@@ -61,7 +61,7 @@ export default function AjustesCotPage() {
     catch (e) { toastError(e instanceof Error ? e.message : 'No se pudo'); }
   };
 
-  const fila = { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: 12 } as const;
+  const fila = { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 240px), 1fr))', gap: 12 } as const;
   return (
     <div className="anim-in">
       <Link href="/cotizador/historial" style={{ display: 'inline-flex', gap: 6, alignItems: 'center', fontSize: '0.85rem', color: 'var(--muted)', marginBottom: 6 }}><ArrowLeft size={14} /> Cotizaciones</Link>

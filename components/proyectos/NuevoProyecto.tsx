@@ -34,7 +34,7 @@ export default function NuevoProyecto({ inicial, onCerrar, onListo }: { inicial?
         </div>
         <div style={{ padding: '1.1rem 1.25rem', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 10 }}>
           <label><span className="label-muted">Nombre *</span><input className="input" autoFocus value={f.nombre || ''} onChange={e => setF({ ...f, nombre: e.target.value })} placeholder="Edificio Los Andes: normalización eléctrica" /></label>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 10 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 180px), 1fr))', gap: 10 }}>
             <label><span className="label-muted">Cliente</span>
               <select className="input" value={f.cliente_id || ''} onChange={e => setF({ ...f, cliente_id: e.target.value || null })}>
                 <option value="">Sin cliente</option>{clientes.map(c => <option key={c.id} value={c.id}>{c.nombre_cliente}</option>)}</select></label>

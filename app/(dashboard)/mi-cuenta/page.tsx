@@ -61,7 +61,7 @@ export default function MiCuentaPage() {
   return (
     <div className="anim-in">
       <PageHeader eyebrow="Mi cuenta" title={perfil?.nombre || 'Mi cuenta'} subtitle={(perfil as { email?: string } | null)?.email || ''} />
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: 12 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 300px), 1fr))', gap: 12 }}>
         <div className="panel-y" style={{ padding: '1rem', display: 'flex', flexDirection: 'column', gap: 10 }}>
           <p className="section-label" style={{ margin: 0 }}><UserRound size={15} /> Mis datos</p>
           <label><span className="label-muted">Nombre</span><input className="input" value={datos.nombre} onChange={e => setDatos({ ...datos, nombre: e.target.value })} /></label>

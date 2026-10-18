@@ -165,7 +165,7 @@ export default function OrdenesPage() {
           <button className="btn btn-primary" onClick={() => setNueva(true)}><Plus size={14} /> Nueva OT</button></div> : null} />
       {plantillas && <PlantillasInforme onCerrar={() => setPlantillas(false)} />}
 
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: 8, marginBottom: 12 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 140px), 1fr))', gap: 8, marginBottom: 12 }}>
         {ESTADOS_OT.filter(e => ABIERTAS.includes(e.clave)).map(e => (
           <button key={e.clave} onClick={() => setFiltro(filtro === e.clave ? 'abiertas' : e.clave)} className="kpi-card"
             style={{ cursor: 'pointer', textAlign: 'left', border: filtro === e.clave ? `1px solid ${e.color}` : undefined }}>

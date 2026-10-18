@@ -59,7 +59,7 @@ export default function RestablecerPage() {
       return;
     }
     setEstado('hecho');
-    setTimeout(() => router.replace('/dashboard'), 1200);
+    setTimeout(() => router.replace('/inicio'), 1200);
   };
 
   return (

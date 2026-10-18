@@ -10,7 +10,8 @@
  * Solo un Borrador se edita; el estado cambia solo con sus botones (lo exige la base).
  */
 
-import { resumenInforme, type InformeLleno } from '@/services/informes';
+import { fotosDeInforme, resumenInforme, type InformeLleno } from '@/services/informes';
+import DesdeLevantamiento, { type TextosLevantamiento } from '@/components/cotizador/DesdeLevantamiento';
 import TrabajoPanel from '@/components/trabajos/TrabajoPanel';
 import PlanCobro from './PlanCobro';
 import NumeroInput from '@/components/NumeroInput';
@@ -22,7 +23,7 @@ import { useRouter } from 'next/navigation';
 import { pdf } from '@react-pdf/renderer';
 import { saveAs } from 'file-saver';
 import {
-  Copy, Eye, FileDown, History, Link2, Loader2, Plus, RotateCcw, Save, Search, Send, Sparkles, XCircle, CheckCircle2,
+  Copy, Eye, FileDown, History, Link2, Loader2, Plus, RotateCcw, Save, Search, Send, Sparkles, XCircle, ClipboardList, CheckCircle2,
 } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import FaltaSQL from '@/components/FaltaSQL';
@@ -115,7 +116,7 @@ export default function EditorCotizacion({ id, clonarDe, clienteInicial, solicit
   const [verCostos, setVerCostos] = useState(false);
   const [abierto, setAbierto] = useState<Record<Bloque, boolean>>({ cliente: true, cotizacion: false, descripcion: true, presentacion: false, aclaraciones: false });
 
-  const [modal, setModal] = useState<null | 'revisar' | 'reenviar' | 'aprobar' | 'rechazar' | 'historial' | 'volver' | 'anular' | 'ia'>(null);
+  const [modal, setModal] = useState<null | 'revisar' | 'reenviar' | 'aprobar' | 'rechazar' | 'historial' | 'volver' | 'anular' | 'ia' | 'levantamiento'>(null);
   const [asistente, setAsistente] = useState<{ receta: RecetaCompleta; partidaId: string } | null>(null);
   // Receta nueva armada desde una partida (para usarla solo aquí o guardarla en la biblioteca).
   const [recetaNuevaPara, setRecetaNuevaPara] = useState<string | null>(null);
@@ -397,11 +398,11 @@ export default function EditorCotizacion({ id, clonarDe, clienteInicial, solicit
         const art = a ? mapa.get(a.id) : null;
         if (art && art.precio_venta !== null) {
           // En una de instalación la mano de obra que la IA ya trae va suelta: no se duplica.
-          items.push(...lineasDeArticulo(art, c.cantidad || 1, { id: p.id, tipo: 'venta' }, mapa, moneda, valorUf));
+          items.push(...lineasDeArticulo(art, c.cantidad ?? 1, { id: p.id, tipo: 'venta' }, mapa, moneda, valorUf));
         } else {
           items.push({
             id: nuevoId(), partidaId: p.id, descripcion: c.descripcion, categoria: c.categoria, unidad: c.unidad || 'un',
-            cantidad: c.cantidad || 1, costo: aMoneda(c.costo || 0, moneda, valorUf, true), imprevistos: 0, margen: 0, precio: 0,
+            cantidad: c.cantidad ?? 1, costo: aMoneda(c.costo || 0, moneda, valorUf, true), imprevistos: 0, margen: 0, precio: 0,
             iva: IVA, descuento: 0, fuera: true, ganancia: GANANCIA_POR_TIPO[c.categoria] ?? 33,
           });
         }
@@ -421,6 +422,16 @@ export default function EditorCotizacion({ id, clonarDe, clienteInicial, solicit
     }));
     setModal(null);
     success(`${conv.partidas.length} partida${conv.partidas.length === 1 ? '' : 's'} de la IA. Revisa precios y cantidades.`);
+  };
+
+  // Fase 11: lo aprobado en «Del levantamiento a la cotización».
+  const insertarLevantamiento = (partidasIA: PartidaIAResuelta[], textos: TextosLevantamiento | null) => {
+    if (partidasIA.length) insertarIA(partidasIA); else setModal(null);
+    if (textos) {
+      const bloques = ([['Condiciones de montaje', textos.montaje], ['Exclusiones', textos.exclusiones], ['Pendiente de confirmar', textos.pendientes]] as [string, string][])
+        .filter(([, t]) => t.trim()).map(([k, t]) => `**${k}:**\n${t.trim()}`);
+      if (bloques.length) setD(x => ({ ...x, descripcion_general: [x.descripcion_general?.trim(), ...bloques].filter(Boolean).join('\n\n') }));
+    }
   };
 
   // ── Guardar ──
@@ -492,7 +503,9 @@ export default function EditorCotizacion({ id, clonarDe, clienteInicial, solicit
     let fotos: { url: string; caption: string }[] = [];
     if (doc.incluir_fotos && doc.agendamiento_id) {
       const v = (await supabase.from('agendamientos').select('fotos').eq('id', doc.agendamiento_id).maybeSingle()).data as { fotos?: { path: string; caption: string }[] } | null;
-      fotos = await fotosService.paraPDF(v?.fotos).catch(() => []);
+      // Más las fotos de los informes de la visita (fase 11).
+      const infs = ((await supabase.from('informes_visita').select('*').eq('agendamiento_id', doc.agendamiento_id).order('folio')).data || []) as InformeLleno[];
+      fotos = await fotosService.paraPDF([...(v?.fotos || []), ...infs.flatMap(fotosDeInforme)].slice(0, 24)).catch(() => []);
     } else if (doc.incluir_fotos && doc.ot_id) {
       // Las fotos de los informes de visita de la OT, con su descripción.
       const infs = await informesService.deOT(doc.ot_id).catch(() => [] as InformeOT[]);
@@ -714,6 +727,8 @@ export default function EditorCotizacion({ id, clonarDe, clienteInicial, solicit
           <button className="btn btn-ghost" style={{ justifyContent: 'flex-start' }} onClick={() => agregarPartida('instalacion')} title="Cada producto trae su mano de obra, ligada a él"><Plus size={14} /> Partida de instalación</button>
           <button className="btn btn-ghost" style={{ justifyContent: 'flex-start' }} onClick={() => agregarPartida('venta')} title="Venta de producto: solo el producto, sin mano de obra"><Plus size={14} /> Partida de venta</button>
           <button className="btn btn-ghost" style={{ justifyContent: 'flex-start' }} onClick={() => setModal('ia')}><Sparkles size={14} /> Cotizar con IA</button>
+          {d.agendamiento_id && <button className="btn btn-ghost" style={{ justifyContent: 'flex-start', borderColor: 'var(--y-brand)' }} onClick={() => setModal('levantamiento')}
+            title="Revisa lo detectado en los informes de la visita y créalo como partidas"><ClipboardList size={14} /> Desde el levantamiento</button>}
         </>}
         {puedeCostos && (
           <label style={{ display: 'flex', gap: 8, alignItems: 'center', fontSize: '0.86rem', color: 'var(--text)', cursor: 'pointer' }}>
@@ -828,7 +843,7 @@ export default function EditorCotizacion({ id, clonarDe, clienteInicial, solicit
           {/* 1. Cliente */}
           <BloquePlegable id="cot-bloque-cliente" titulo="Cliente" resumen={resumenCliente} abierto={abierto.cliente}
             onAlternar={() => setAbierto(a => ({ ...a, cliente: !a.cliente }))} marcado={!d.cliente_id && !!cot}>
-            <fieldset disabled={!editable} style={{ border: 'none', margin: 0, padding: 0, display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(230px, 1fr))', gap: 12 }}>
+            <fieldset disabled={!editable} style={{ border: 'none', margin: 0, padding: 0, display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 230px), 1fr))', gap: 12 }}>
               <div style={{ gridColumn: '1 / -1', position: 'relative' }}>
                 <span style={etiqueta}>Cliente *</span>
                 {cliente && !buscaCliente ? (
@@ -900,7 +915,7 @@ export default function EditorCotizacion({ id, clonarDe, clienteInicial, solicit
           {/* 2. Cotización */}
           <BloquePlegable id="cot-bloque-cotizacion" titulo="Cotización" resumen={resumenCot} abierto={abierto.cotizacion}
             onAlternar={() => setAbierto(a => ({ ...a, cotizacion: !a.cotizacion }))}>
-            <fieldset disabled={!editable} style={{ border: 'none', margin: 0, padding: 0, display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(230px, 1fr))', gap: 12 }}>
+            <fieldset disabled={!editable} style={{ border: 'none', margin: 0, padding: 0, display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 230px), 1fr))', gap: 12 }}>
               <div>
                 <span style={etiqueta}>Válida hasta</span>
                 <input className="input" type="date" value={d.valida_hasta || ''} onChange={e => set({ valida_hasta: e.target.value, valida_hasta_a_mano: true })} style={{ maxWidth: 180 }} />
@@ -935,7 +950,7 @@ export default function EditorCotizacion({ id, clonarDe, clienteInicial, solicit
               )}
               <div style={{ gridColumn: '1 / -1' }}>
                 <span style={etiqueta}>Qué ve el cliente en el PDF</span>
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 8 }}>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 200px), 1fr))', gap: 8 }}>
                   {QUE_VE.map(o => (
                     <label key={o.valor} style={{ display: 'flex', gap: 8, alignItems: 'flex-start', border: `1px solid ${d.que_ve_cliente === o.valor ? 'var(--y-brand)' : 'var(--border2)'}`, background: d.que_ve_cliente === o.valor ? 'var(--y-soft)' : 'transparent', borderRadius: 10, padding: '0.6rem', cursor: 'pointer' }}>
                       <input type="radio" name="que-ve" checked={d.que_ve_cliente === o.valor} onChange={() => set({ que_ve_cliente: o.valor })} style={{ accentColor: 'var(--y-brand)', marginTop: 3 }} />
@@ -1070,6 +1085,7 @@ export default function EditorCotizacion({ id, clonarDe, clienteInicial, solicit
         {bloqueResumen}
       </div>
 
+      {modal === 'levantamiento' && d.agendamiento_id && <DesdeLevantamiento agendaId={d.agendamiento_id} catalogo={catalogo} onInsertar={insertarLevantamiento} onClose={() => setModal(null)} />}
       {modal === 'ia' && <CotizarIAModal moneda={d.moneda} onInsertar={insertarIA} onClose={() => setModal(null)} />}
       {(modal === 'revisar' || modal === 'reenviar') && cot && (
         <RevisarYEnviar avisos={modal === 'reenviar' ? [] : avisos} reenvio={modal === 'reenviar'}

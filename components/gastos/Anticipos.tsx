@@ -50,7 +50,7 @@ export default function Anticipos({ anticipos, equipo, destinos, aprueba, yo, on
         {aprueba && !nuevo && <button className="btn btn-ghost btn-sm" onClick={() => setNuevo({ usuario_id: '', monto: 0, motivo: '', destino: '', fecha: fechaLocal() })}><Plus size={13} /> Entregar anticipo</button>}
       </div>
       {nuevo && (
-        <div style={{ padding: '0.8rem 1rem', display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: 8, borderBottom: '1px solid var(--border2)', alignItems: 'end' }}>
+        <div style={{ padding: '0.8rem 1rem', display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 160px), 1fr))', gap: 8, borderBottom: '1px solid var(--border2)', alignItems: 'end' }}>
           <label><span className="label-muted">A quién</span>
             <select className="input" value={nuevo.usuario_id} onChange={e => setNuevo({ ...nuevo, usuario_id: e.target.value })}>
               <option value="">Elegir…</option>{Object.values(equipo).map(p => <option key={p.id} value={p.id}>{p.nombre}</option>)}</select></label>

@@ -119,7 +119,7 @@ export default function TareasPage() {
       <PageHeader eyebrow="Operación" title="Tareas" subtitle="Pendientes del equipo, con responsable y fecha."
         actions={<button className="btn btn-primary" onClick={() => setNueva(true)}><Plus size={14} /> Nueva tarea</button>} />
 
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: 8, marginBottom: 12 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 150px), 1fr))', gap: 8, marginBottom: 12 }}>
         <div className="kpi-card"><p className="label-muted">Mis pendientes</p><p className="kpi-value">{pendientesMias.length}</p></div>
         <div className="kpi-card"><p className="label-muted">Atrasadas</p><p className="kpi-value" style={{ color: '#dc2626' }}>{pendientesMias.filter(t => t.fecha_limite && t.fecha_limite < hoy).length}</p></div>
         <div className="kpi-card"><p className="label-muted">Para hoy</p><p className="kpi-value" style={{ color: '#d97706' }}>{pendientesMias.filter(t => t.fecha_limite === hoy).length}</p></div>

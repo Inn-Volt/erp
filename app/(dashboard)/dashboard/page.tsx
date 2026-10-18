@@ -110,7 +110,7 @@ export default function DashboardPage() {
       />
 
       {/* KPIs */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '2px', marginBottom: '2px' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 200px), 1fr))', gap: '2px', marginBottom: '2px' }}>
         {loading ? (
           Array.from({ length: 4 }).map((_, i) => <Skeleton key={i} h={110} />)
         ) : (
@@ -127,7 +127,7 @@ export default function DashboardPage() {
       {!loading && embudo && (
         <div className="panel-y" style={{ padding: '1rem 1.25rem', marginBottom: '2px' }}>
           <p className="section-label" style={{ marginBottom: '0.75rem' }}><Target size={12} /> Flujo comercial</p>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: '6px' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 140px), 1fr))', gap: '6px' }}>
             {[
               { label: 'Solicitudes abiertas',    v: embudo.solicitudes, path: '/solicitudes',         icon: Inbox,      color: 'var(--info)' },
               { label: 'Visitas agendadas',       v: embudo.citas,       path: '/agenda',              icon: Calendar,   color: 'var(--y)' },
@@ -149,7 +149,7 @@ export default function DashboardPage() {
 
       {/* Seguimiento + motivos de pérdida */}
       {!loading && (porSeguir.length > 0 || Object.keys(motivos).length > 0) && (
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '2px', marginBottom: '2px' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 300px), 1fr))', gap: '2px', marginBottom: '2px' }}>
           {porSeguir.length > 0 && (
             <div className="panel-y" style={{ padding: '1rem 1.25rem' }}>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.75rem' }}>

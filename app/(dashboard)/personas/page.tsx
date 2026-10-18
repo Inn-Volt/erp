@@ -129,7 +129,7 @@ export default function PersonasPage() {
           })}
         </div>
       ) : tab === 'organigrama' ? (
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: 12 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 300px), 1fr))', gap: 12 }}>
           <div className="panel-y" style={{ padding: '1rem' }}><Arbol perfiles={perfiles} jefe={null} nivel={0} /></div>
           {edita && (
             <div className="panel-y" style={{ padding: '1rem', display: 'flex', flexDirection: 'column', gap: 6 }}>

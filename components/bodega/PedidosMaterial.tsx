@@ -91,7 +91,7 @@ export function PedirMaterial({ otId, onCerrar, onListo }: { otId?: string | nul
               <button type="button" className="btn btn-ghost btn-xs" onClick={() => setLineas(ls => ls.filter((_, j) => j !== i))}><Trash2 size={12} /></button>
             </div>
           ))}
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 10 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 180px), 1fr))', gap: 10 }}>
             <label><span className="label-muted">Sale de</span>
               <select className="input" value={origen} onChange={e => setOrigen(e.target.value)}>
                 <option value="">Bodega decide</option>{bodegas.map(b => <option key={b.id} value={b.id}>{b.nombre}</option>)}</select></label>

@@ -296,7 +296,7 @@ export default function DetalleOTPage() {
         </div>
       )}
 
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: 12 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 300px), 1fr))', gap: 12 }}>
         <Seccion icono={<FileText size={15} />} titulo="Trabajo">
           <div style={{ fontSize: '0.9rem', color: 'var(--text)', display: 'flex', flexDirection: 'column', gap: 6 }}>
             <div><span className="label-muted">Cliente: </span>{ot.clientes?.nombre_cliente || 'Sin cliente'}{ot.clientes?.rut ? ` · ${ot.clientes.rut}` : ''}</div>
@@ -304,7 +304,7 @@ export default function DetalleOTPage() {
             {ot.direccion && <div><span className="label-muted">Dirección: </span>{ot.direccion} <div style={{ marginTop: 4 }}><LinksMapa direccion={ot.direccion} compacto /></div></div>}
             {ot.cotizaciones && <div><span className="label-muted">Cotización: </span><Link href={`/cotizador?edit=${ot.cotizaciones.id}`}>{formatFolio(ot.cotizaciones.folio)}</Link>{verCostos || puede('cotizaciones.ver') ? ` · ${formatCLP(Number(ot.cotizaciones.total_clp ?? ot.cotizaciones.total ?? 0))}` : ''}</div>}
             {ot.descripcion && <p style={{ whiteSpace: 'pre-wrap', margin: 0, color: 'var(--muted)' }}>{ot.descripcion}</p>}
-            <fieldset disabled={!puede('ot.crear')} style={{ border: 'none', padding: 0, margin: '4px 0 0', display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: 8 }}>
+            <fieldset disabled={!puede('ot.crear')} style={{ border: 'none', padding: 0, margin: '4px 0 0', display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 150px), 1fr))', gap: 8 }}>
               <label><span className="label-muted" style={lbl}>Tipo de servicio</span>
                 <select className="input" value={ot.tipo_servicio || ''} onChange={e => guardarCampo({ tipo_servicio: e.target.value || null })}>
                   <option value="">—</option>{TIPO_SERVICIO_OPCIONES.map(t => <option key={t.key} value={t.key}>{t.label}</option>)}</select></label>
@@ -391,7 +391,7 @@ export default function DetalleOTPage() {
           ))}
       </Seccion>
 
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: 12 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 300px), 1fr))', gap: 12 }}>
         {encendido('bodega') && <Seccion icono={<Package size={15} />} titulo="Materiales de bodega"
           accion={puede('bodega.mover') && abierta && !sacando ? <button className="btn btn-ghost btn-sm" onClick={() => setSacando(true)}><Plus size={13} /> Sacar de bodega</button> : null}>
           {sacando && (
@@ -449,7 +449,7 @@ export default function DetalleOTPage() {
 
       {verCostos && (ot.cotizaciones || cotizaciones.some(c => c.estado === 'Aprobada') || renta.gastos > 0 || renta.materiales > 0) && (
         <Seccion icono={<TrendingUp size={15} />} titulo="Resultado de la OT (neto)">
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: 8 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 140px), 1fr))', gap: 8 }}>
             {[
               ['Venta neta', renta.venta, 'var(--text)'],
               ...(renta.cotizado !== null ? [['Costo cotizado', -renta.cotizado, 'var(--muted)']] : []),

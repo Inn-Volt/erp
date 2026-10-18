@@ -50,7 +50,7 @@ export function RevisarYEnviar({ avisos, para, telefono, mensajeWhatsapp, asunto
       {!rojos.length && (
         <>
           <p className="label-muted" style={{ margin: 0 }}>¿Cómo la mandas?</p>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: 8 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 130px), 1fr))', gap: 8 }}>
             {CANALES.map(x => (
               <button key={x.c} type="button" onClick={() => setCanal(x.c)} title={x.ayuda}
                 style={{ textAlign: 'left', border: `1px solid ${canal === x.c ? 'var(--y-brand)' : 'var(--border2)'}`, background: canal === x.c ? 'var(--y-soft)' : 'var(--bg2)', borderRadius: 10, padding: '0.55rem 0.7rem', cursor: 'pointer', color: 'var(--text)' }}>

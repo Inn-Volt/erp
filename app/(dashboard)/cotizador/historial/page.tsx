@@ -110,7 +110,7 @@ export default function HistorialCotizacionesPage() {
           {puede('cotizaciones.crear') && <Link href="/cotizador" className="btn btn-primary"><Plus size={14} /> Nueva cotización</Link>}
         </div>} />
 
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: 8, marginBottom: 12 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 160px), 1fr))', gap: 8, marginBottom: 12 }}>
         {tarjetas.map(t => (
           <button key={t.t} className="kpi-card" onClick={() => setFiltro(filtro === t.f ? 'abiertas' : t.f)}
             style={{ cursor: 'pointer', textAlign: 'left', border: filtro === t.f ? `1px solid ${t.color}` : undefined }}>

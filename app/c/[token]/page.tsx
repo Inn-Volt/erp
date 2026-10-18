@@ -263,7 +263,7 @@ export default function CotizacionClientePage() {
 
         {cot.fotos.length > 0 && (
           <Tarjeta titulo="Registro fotográfico de la visita">
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(150px, 1fr))', gap: 8 }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(min(100%, 150px), 1fr))', gap: 8 }}>
               {cot.fotos.map((f, i) => (
                 <figure key={i} style={{ margin: 0 }}>
                   { }

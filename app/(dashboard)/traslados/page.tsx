@@ -76,7 +76,7 @@ export default function TrasladosPage() {
     <div className="anim-in">
       <PageHeader eyebrow="Comercial" title="Traslados" subtitle="Lo que se cobra por ir a cada comuna. En el cotizador: ⋯ de la partida → «Agregar traslado»." />
 
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: 12, marginBottom: 12 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 300px), 1fr))', gap: 12, marginBottom: 12 }}>
         <div className="panel-y" style={{ padding: '1rem', display: 'flex', flexDirection: 'column', gap: 10 }}>
           <p className="section-label" style={{ margin: 0 }}><Car size={15} /> Tarifa</p>
           {tarifa && <fieldset disabled={!edita} style={{ border: 'none', padding: 0, margin: 0, display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>

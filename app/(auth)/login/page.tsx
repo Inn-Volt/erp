@@ -22,7 +22,7 @@ export default function LoginPage() {
     let listo = false;
     supabase.auth.getSession().then(({ data }) => {
       listo = true;
-      if (data.session) router.replace('/dashboard');
+      if (data.session) router.replace('/inicio');
       else setChecking(false);
     }).catch(() => { listo = true; setChecking(false); });
     // Red lenta / sin respuesta (típico en móvil): no dejar el spinner infinito.
@@ -43,7 +43,7 @@ export default function LoginPage() {
           : err.message);
       setLoading(false);
     } else {
-      router.replace('/dashboard');
+      router.replace('/inicio');
     }
   };
 

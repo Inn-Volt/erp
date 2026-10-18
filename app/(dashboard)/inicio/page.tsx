@@ -113,7 +113,7 @@ export default function MiDiaPage() {
     <div className="anim-in">
       <PageHeader eyebrow="Inicio" title={`Hola${perfil?.nombre ? `, ${perfil.nombre.split(' ')[0]}` : ''}`} subtitle={`Lo que toca hoy, ${formatDate(hoy)}.`} />
       <div style={{ marginBottom: 12 }}><AvisosCelular compacto /></div>
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: 12 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 320px), 1fr))', gap: 12 }}>
         {misVisitas.length > 0 && (
           <Caja titulo={`Mis visitas (${misVisitas.length})`} icono={<MapPinned size={15} />}>
             {misVisitas.map(c => (

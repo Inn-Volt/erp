@@ -22,6 +22,7 @@ import { fechaLocal } from '@/utils';
 export interface DatosVisitaPDF {
   fecha: string; titulo: string; responsable: string;
   cliente: { nombre: string; rut?: string | null; direccion?: string | null };
+  contacto?: string | null; telefono?: string | null; hora?: string | null;
 }
 
 /** Descarga el PDF de un informe de visita. */
@@ -35,7 +36,8 @@ export async function pdfInformeVisita(inf: InformeVisita, v: DatosVisitaPDF) {
   const urls = await fotosService.urls(pathsDe(inf));
   const blob = await pdf(
     <InformeGeneralPDF empresa={empresa} tipo="visita" folio={folioInforme(inf.folio)} fecha={v.fecha || fechaLocal()}
-      cliente={v.cliente} referencia={v.titulo} responsable={v.responsable} informe={inf} fotos={[]} urls={urls} />,
+      cliente={v.cliente} referencia={v.titulo} responsable={v.responsable} informe={inf} fotos={[]} urls={urls}
+      hora={v.hora} estadoInforme={inf.estado} completadoAt={inf.completado_at} />,
   ).toBlob();
   saveAs(blob, `${(inf.plantilla_nombre || 'Informe').replace(/[^\p{L}\p{N}]+/gu, '_')}_${folioInforme(inf.folio)}.pdf`);
 }
@@ -66,7 +68,8 @@ export default function InformesDeVisita({ agendaId, editable, datos, tiposServi
     setEligiendo(false); setOcupado('nuevo');
     try {
       // Todo informe lleva sus fotos: si la planilla no pide fotos, se agrega un paso «Fotos» al final.
-      const inf = informeDesde(p);
+      const v = datos();
+      const inf = informeDesde(p, { cliente: v.cliente.nombre, direccion: v.cliente.direccion, contacto: v.contacto, telefono: v.telefono, fecha: v.fecha, tecnico: v.responsable });
       if (!inf.campos.some(c => tipoDe(c) === 'foto')) {
         inf.campos.push({ clave: '_s_fotos', etiqueta: 'Fotos', tipo: 'seccion' }, { clave: 'fotos', etiqueta: 'Fotos de la visita', tipo: 'foto' });
       }
@@ -109,10 +112,20 @@ export default function InformesDeVisita({ agendaId, editable, datos, tiposServi
         <div style={{ border: '1px dashed var(--border2)', borderRadius: 10, padding: '0.5rem', display: 'flex', flexDirection: 'column', gap: 4 }}>
           <span className="label-muted">¿Qué informe?</span>
           {ordenadas.length === 0 && <span style={{ fontSize: '0.8rem', color: 'var(--muted)' }}>No hay planillas de visita: créalas en Mi empresa → Plantillas de informe.</span>}
-          {ordenadas.map(p => (
-            <button key={p.id} type="button" className="btn btn-ghost btn-sm" style={{ justifyContent: 'flex-start' }} onClick={() => crear(p)}>
-              <ClipboardList size={13} /> {p.nombre}</button>
-          ))}
+          {ordenadas.map(p => {
+            const sugerida = !!p.tipo_servicio && !!tiposServicio?.includes(p.tipo_servicio);
+            return (
+              <button key={p.id} type="button" onClick={() => crear(p)}
+                style={{ display: 'flex', gap: 8, alignItems: 'flex-start', textAlign: 'left', width: '100%', padding: '0.5rem 0.6rem', borderRadius: 8, cursor: 'pointer',
+                  border: `1px solid ${sugerida ? 'var(--y-brand)' : 'var(--border2)'}`, background: sugerida ? 'var(--y-soft)' : 'transparent', color: 'var(--text)' }}>
+                <ClipboardList size={14} color="var(--y)" style={{ flexShrink: 0, marginTop: 2 }} />
+                <span style={{ minWidth: 0 }}>
+                  <b style={{ fontSize: '0.86rem' }}>{p.nombre}</b>{sugerida && <span style={{ fontSize: '0.7rem', color: 'var(--y)', marginLeft: 6 }}>sugerida</span>}
+                  {p.descripcion && <span style={{ display: 'block', fontSize: '0.74rem', color: 'var(--muted)' }}>{p.descripcion}</span>}
+                </span>
+              </button>
+            );
+          })}
           <button type="button" className="btn btn-ghost btn-xs" style={{ alignSelf: 'flex-end' }} onClick={() => setEligiendo(false)}>Cancelar</button>
         </div>
       ) : (

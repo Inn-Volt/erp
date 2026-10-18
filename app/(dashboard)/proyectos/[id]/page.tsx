@@ -103,7 +103,7 @@ export default function DetalleProyectoPage() {
         </div>} />
       {p.descripcion && <p style={{ color: 'var(--muted)', marginTop: -6 }}>{p.descripcion}</p>}
 
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: 8, marginBottom: 12 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 160px), 1fr))', gap: 8, marginBottom: 12 }}>
         <div className="kpi-card"><p className="label-muted">Vendido (aprobado)</p><p className="kpi-value">{formatCLP(Number(r?.venta || 0))}</p></div>
         <div className="kpi-card"><p className="label-muted">Esperando al cliente</p><p className="kpi-value" style={{ color: '#2563eb' }}>{formatCLP(Number(r?.por_aprobar || 0))}</p></div>
         {verCostos && conTrabajos && <div className="kpi-card"><p className="label-muted">Costo cotizado</p><p className="kpi-value">{formatCLP(Number(r?.costo_cotizado || 0))}</p></div>}
