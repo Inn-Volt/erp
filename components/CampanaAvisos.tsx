@@ -40,9 +40,9 @@ export default function CampanaAvisos({ datos }: { datos: DatosAvisos }) {
     const r = boton.current?.getBoundingClientRect();
     if (r) {
       const ancho = Math.min(380, window.innerWidth - 16);
-      // Escritorio: a la derecha de la campana; celular: bajo la barra, centrado.
-      const left = window.innerWidth >= 768 ? Math.min(r.right + 8, window.innerWidth - ancho - 8) : (window.innerWidth - ancho) / 2;
-      const top = window.innerWidth >= 768 ? Math.max(8, r.top) : r.bottom + 8;
+      // Bajo la campana de la barra superior, alineado a su borde derecho (en el celular, centrado).
+      const left = window.innerWidth >= 768 ? Math.max(8, Math.min(r.right - ancho, window.innerWidth - ancho - 8)) : (window.innerWidth - ancho) / 2;
+      const top = r.bottom + 8;
       setPos({ top, left });
     }
     setAbierto(a => !a);
