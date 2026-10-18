@@ -215,6 +215,8 @@ export interface AjustesCot {
   mensaje_whatsapp: string | null;
   /** Fase 7: el plan de cobro por omisión de las cotizaciones nuevas. */
   plan_cobro?: HitoCobro[] | null;
+  /** Fase 8: el diseño del PDF (color, título, pie y bloques que se muestran). */
+  pdf_diseno?: import('@/components/pdf/CotizacionPDF').DisenoPDF | null;
 }
 
 export interface Plantilla {
@@ -229,6 +231,8 @@ export interface Plantilla {
   es_la_de_siempre: boolean;
   activa: boolean;
   version: number;
+  /** Fase 8: la forma de pago de las cotizaciones hechas con esta plantilla. */
+  plan_cobro?: HitoCobro[] | null;
   updated_at?: string;
 }
 

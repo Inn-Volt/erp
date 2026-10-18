@@ -124,7 +124,14 @@ function TextoFormato({ texto, estilo = s.texto }: { texto?: string | null; esti
   );
 }
 
+/** Diseño del PDF (ajustes_cotizacion.pdf_diseno, fase 8). */
+export interface DisenoPDF {
+  color?: string; titulo?: string; pie?: string;
+  mostrar_forma_pago?: boolean; mostrar_importante?: boolean; mostrar_como_aceptar?: boolean; mostrar_banco?: boolean; mostrar_firmas?: boolean;
+}
+
 export interface CotizacionPDFProps {
+  diseno?: DisenoPDF | null;
   /** Fase 7: cómo se cobra (hitos); se imprime como «Forma de pago». */
   planCobro?: HitoCobro[] | null;
   doc: CotizacionDoc;
@@ -157,6 +164,11 @@ export default function CotizacionPDF(p: CotizacionPDFProps) {
   const hayIntro = !!doc.descripcion_general?.trim();
   const algoAntes = !!portada || hayIntro || textos.length > 0;
   const tituloVal = (doc.titulo_valorizacion || '').trim() || TITULO_VALORIZACION;
+  // Diseño del PDF (Ajustes → Diseño del PDF). Lo que no se elige queda como siempre.
+  const dz = p.diseno || {};
+  const acento = /^#[0-9a-f]{6}$/i.test(dz.color || '') ? dz.color! : SPARK;
+  const tituloDoc = (dz.titulo || '').trim().toUpperCase() || 'COTIZACIÓN';
+  const ver = (k: keyof DisenoPDF) => dz[k] !== false;
 
   const partidas = doc.partidas || [];
   const lineasDe = (pid: string) => doc.items.filter(l => l.partidaId === pid);
@@ -166,13 +178,13 @@ export default function CotizacionPDF(p: CotizacionPDFProps) {
 
   const Pie = () => (
     <View style={s.pie} fixed>
-      <Text>{empresa.nombre} · Cotización {nombreArchivo}</Text>
+      <Text>{(dz.pie || '').trim() || `${empresa.nombre} · Cotización ${nombreArchivo}`}</Text>
       <Text render={({ pageNumber, totalPages }) => `Página ${pageNumber} de ${totalPages}`} />
     </View>
   );
   const Marca = () => (p.marca ? <Text style={s.marca} fixed>{p.marca}</Text> : null);
   const Barra = () => (
-    <View style={s.barra} fixed><View style={{ flex: 1, backgroundColor: INK }} /><View style={{ width: 80, backgroundColor: SPARK }} /></View>
+    <View style={s.barra} fixed><View style={{ flex: 1, backgroundColor: INK }} /><View style={{ width: 80, backgroundColor: acento }} /></View>
   );
 
   const Encabezado = () => (
@@ -187,17 +199,17 @@ export default function CotizacionPDF(p: CotizacionPDFProps) {
         {p.vendedor?.nombre ? <Text style={[s.linea, { color: INK }]}>Contacto: {p.vendedor.nombre}{p.vendedor.cargo ? ` (${p.vendedor.cargo})` : ''}{p.vendedor.telefono ? `  ·  ${p.vendedor.telefono}` : ''}</Text> : null}
       </View>
       <View style={s.folio}>
-        <Text style={s.folioLbl}>COTIZACIÓN</Text>
+        <Text style={[s.folioLbl, { color: acento }]}>{tituloDoc}</Text>
         <Text style={s.folioNum}>{folio}</Text>
-        {doc.revision > 0 ? <Text style={[s.folioSub, { color: SPARK }]}>Revisión {doc.revision}</Text> : null}
+        {doc.revision > 0 ? <Text style={[s.folioSub, { color: acento }]}>Revisión {doc.revision}</Text> : null}
         <Text style={s.folioSub}>Emitida {formatDate(emision)}</Text>
-        {doc.valida_hasta ? <Text style={[s.folioSub, { color: SPARK }]}>Válida hasta {formatDate(doc.valida_hasta)}</Text> : null}
+        {doc.valida_hasta ? <Text style={[s.folioSub, { color: acento }]}>Válida hasta {formatDate(doc.valida_hasta)}</Text> : null}
       </View>
     </View>
   );
 
   const PreparadoPara = () => (
-    <View style={s.card}>
+    <View style={[s.card, { borderLeftColor: acento }]}>
       <Text style={s.rotulo}>PREPARADO PARA</Text>
       <Text style={{ fontSize: 9.5, fontFamily: 'Helvetica-Bold', marginBottom: 4 }}>{cliente?.empresa || cliente?.nombre_cliente || 'Cliente'}</Text>
       {(p.contacto?.nombre || (cliente?.empresa && cliente?.nombre_cliente)) ? <View style={s.fila}><Text style={s.k}>Atención</Text><Text style={s.v}>{p.contacto?.nombre || cliente?.nombre_cliente}</Text></View> : null}
@@ -227,7 +239,7 @@ export default function CotizacionPDF(p: CotizacionPDFProps) {
 
   const Valorizacion = () => (
     <View>
-      {algoAntes && <Text style={s.bloqueTitulo}>{tituloVal}</Text>}
+      {algoAntes && <Text style={[s.bloqueTitulo, { borderBottomColor: acento }]}>{tituloVal}</Text>}
       {(partidas.length > 0) && <>
         <Text style={s.rotulo}>RESUMEN POR PARTIDA</Text>
         {partidas.map((pt, i) => (
@@ -244,7 +256,7 @@ export default function CotizacionPDF(p: CotizacionPDFProps) {
       </>}
       <View style={s.inv} wrap={false}>
         <View style={s.invIzq}>
-          <Text style={s.invLbl}>INVERSIÓN TOTAL</Text>
+          <Text style={[s.invLbl, { color: acento }]}>INVERSIÓN TOTAL</Text>
           <Text style={s.invTotal}>{fmt(r.totales.total)}</Text>
           <Text style={s.invSub}>IVA incluido ({fmt(r.totales.iva)}){conDescuento ? ` · Ahorro incluido: ${fmt(r.totales.descuento)}` : ''}</Text>
           {enPesos ? <Text style={s.invSub}>Equivalente a {formatMonto(r.totales.totalClp, 'CLP')} (UF {doc.valor_uf?.toLocaleString('es-CL')}{doc.fecha_valor_uf ? ` al ${formatDate(doc.fecha_valor_uf)}` : ''})</Text> : null}
@@ -255,17 +267,17 @@ export default function CotizacionPDF(p: CotizacionPDFProps) {
           <Text style={s.invK}>Neto</Text><Text style={[s.invV, { marginBottom: 0 }]}>{fmt(r.totales.neto)}</Text>
         </View>
       </View>
-      {(p.planCobro || []).some(h => h.porcentaje > 0) ? (
+      {ver('mostrar_forma_pago') && (p.planCobro || []).some(h => h.porcentaje > 0) ? (
         <View style={[s.importante, { marginBottom: 4 }]} wrap={false}>
           <Text style={s.rotulo}>FORMA DE PAGO</Text>
           <Text style={{ ...s.texto, fontSize: 7.8 }}>{planEnPalabras(p.planCobro || [])[0].toUpperCase() + planEnPalabras(p.planCobro || []).slice(1)}.</Text>
         </View>
       ) : null}
-      <View style={s.importante} wrap={false}>
+      {ver('mostrar_importante') && <View style={s.importante} wrap={false}>
         <Text style={s.rotulo}>IMPORTANTE</Text>
         <TextoFormato estilo={{ ...s.texto, fontSize: 7.6, color: MUTED }} texto={(p.importante || empresa.texto_importante || '').trim() ||
           `Todos los gastos o valores extraordinarios por factores externos a ${empresa.nombre} serán de responsabilidad de quien contrate los servicios; ${empresa.nombre} hará una cotización aparte por ellos.`} />
-      </View>
+      </View>}
     </View>
   );
 
@@ -323,12 +335,12 @@ export default function CotizacionPDF(p: CotizacionPDFProps) {
 
   const Detalle = () => (
     <View>
-      <Text style={s.bloqueTitulo}>DETALLE DE LA COTIZACIÓN</Text>
+      <Text style={[s.bloqueTitulo, { borderBottomColor: acento }]}>DETALLE DE LA COTIZACIÓN</Text>
       {doc.que_ve_cliente === 'detalle' ? (
         <>
           {partidas.map((pt, i) => (
             <View key={pt.id}>
-              <View style={s.partidaCab} wrap={false}>
+              <View style={[s.partidaCab, { borderLeftColor: acento }]} wrap={false}>
                 <Text style={{ fontSize: 8.8, fontFamily: 'Helvetica-Bold', flex: 1 }}>{i + 1}. {pt.nombre || 'Partida'}</Text>
                 <Text style={{ fontSize: 8.8, fontFamily: 'Helvetica-Bold' }}>{fmt(r.partidas.get(pt.id)?.subtotal)}</Text>
               </View>
@@ -337,7 +349,7 @@ export default function CotizacionPDF(p: CotizacionPDFProps) {
             </View>
           ))}
           {sueltas.length > 0 && (<View>
-            <View style={s.partidaCab}><Text style={{ fontSize: 8.8, fontFamily: 'Helvetica-Bold' }}>Ítems adicionales</Text></View>
+            <View style={[s.partidaCab, { borderLeftColor: acento }]}><Text style={{ fontSize: 8.8, fontFamily: 'Helvetica-Bold' }}>Ítems adicionales</Text></View>
             <DetalleLineas lineas={sueltas} pt={{ id: '', nombre: '', cantidad: 1, unidad: 'global', tipo: 'venta' }} />
           </View>)}
         </>
@@ -400,20 +412,20 @@ export default function CotizacionPDF(p: CotizacionPDFProps) {
   const HojaFinal = () => (
     <View>
       {doc.aclaraciones?.trim() ? (<View style={{ marginBottom: 14 }}>
-        <Text style={s.bloqueTitulo}>ACLARACIONES Y GARANTÍAS</Text>
+        <Text style={[s.bloqueTitulo, { borderBottomColor: acento }]}>ACLARACIONES Y GARANTÍAS</Text>
         <TextoFormato texto={doc.aclaraciones} />
       </View>) : null}
       <View style={{ flexDirection: 'row' }} wrap={false}>
-        <View style={[s.card, { flex: 1, marginRight: 12 }]}>
+        {ver('mostrar_como_aceptar') && <View style={[s.card, { borderLeftColor: acento, flex: 1, marginRight: 12 }]}>
           <Text style={s.rotulo}>CÓMO ACEPTAR</Text>
           <Text style={[s.texto, { fontSize: 7.8 }]}>
             {p.enlace ? 'Acepta en línea desde el enlace que te enviamos' : 'Responde aceptando esta cotización'}
             {(p.correoAceptar || empresa.email) ? ` o escribe a ${p.correoAceptar || empresa.email}` : ''}, indicando el N° {folio}.
           </Text>
           {p.enlace ? <Text style={[s.texto, { fontSize: 7.2, color: MUTED, marginTop: 3 }]}>{p.enlace}</Text> : null}
-        </View>
-        {(empresa.banco || empresa.cuenta_bancaria) ? (
-          <View style={[s.card, { flex: 1 }]}>
+        </View>}
+        {ver('mostrar_banco') && (empresa.banco || empresa.cuenta_bancaria) ? (
+          <View style={[s.card, { borderLeftColor: acento, flex: 1 }]}>
             <Text style={s.rotulo}>DATOS PARA TRANSFERENCIA</Text>
             <View style={s.fila}><Text style={s.k}>Titular</Text><Text style={s.v}>{empresa.nombre}</Text></View>
             {empresa.rut ? <View style={s.fila}><Text style={s.k}>RUT</Text><Text style={s.v}>{empresa.rut}</Text></View> : null}
@@ -424,7 +436,7 @@ export default function CotizacionPDF(p: CotizacionPDFProps) {
           </View>
         ) : null}
       </View>
-      <View style={s.firmas} wrap={false}>
+      {ver('mostrar_firmas') && <View style={s.firmas} wrap={false}>
         <View style={s.firmaCol}>
           {p.aceptacion?.firma ? <Image src={p.aceptacion.firma} style={s.firmaImg} /> : <View style={{ height: 52 }} />}
           <View style={s.firmaLinea} />
@@ -437,7 +449,7 @@ export default function CotizacionPDF(p: CotizacionPDFProps) {
           <Text style={{ fontSize: 8.5, fontFamily: 'Helvetica-Bold' }}>{p.vendedor?.nombre || empresa.nombre}</Text>
           <Text style={{ fontSize: 7, color: MUTED }}>{p.vendedor?.nombre ? `${p.vendedor.cargo || 'Representante comercial'} · ${empresa.nombre}` : 'Representante comercial'}</Text>
         </View>
-      </View>
+      </View>}
     </View>
   );
 
@@ -449,7 +461,7 @@ export default function CotizacionPDF(p: CotizacionPDFProps) {
         <PreparadoPara />
         {portada ? (
           <View style={{ marginTop: 50, marginBottom: 40 }}>
-            <View style={{ width: 60, height: 4, backgroundColor: SPARK, marginBottom: 16 }} />
+            <View style={{ width: 60, height: 4, backgroundColor: acento, marginBottom: 16 }} />
             <Text style={{ fontSize: 26, fontFamily: 'Helvetica-Bold', lineHeight: 1.25, marginBottom: 10 }}>{portada.titulo?.trim() || doc.titulo}</Text>
             {portada.subtitulo ? <Text style={{ fontSize: 13, color: MUTED }}>{portada.subtitulo}</Text> : null}
             {portada.texto?.trim() ? <View style={{ marginTop: 14 }}><TextoFormato texto={portada.texto} /></View> : null}
@@ -471,7 +483,7 @@ export default function CotizacionPDF(p: CotizacionPDFProps) {
       {(p.fotos || []).length > 0 && (
         <Page size="A4" style={s.page}>
           <Barra /><Marca />
-          <Text style={s.bloqueTitulo}>REGISTRO FOTOGRÁFICO</Text>
+          <Text style={[s.bloqueTitulo, { borderBottomColor: acento }]}>REGISTRO FOTOGRÁFICO</Text>
           <View style={s.fotos}>
             {(p.fotos || []).map((f, i) => (
               <View key={i} style={s.fotoBox} wrap={false}>

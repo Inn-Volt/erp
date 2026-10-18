@@ -45,6 +45,7 @@ export default function AjustesCotPage() {
         correo_aceptar: a.correo_aceptar || null, usa_presentacion: a.usa_presentacion, responde_en_linea: a.responde_en_linea,
         asunto_correo: a.asunto_correo, mensaje_correo: a.mensaje_correo, mensaje_whatsapp: a.mensaje_whatsapp,
         ...('plan_cobro' in a ? { plan_cobro: a.plan_cobro && a.plan_cobro.length ? a.plan_cobro : PLAN_COBRO_BASE } : {}),
+        ...('pdf_diseno' in a ? { pdf_diseno: a.pdf_diseno || {} } : {}),
       });
       success('Ajustes guardados. Las cotizaciones ya hechas no cambian.');
     } catch (e) { toastError(e instanceof Error ? e.message : 'No se pudo guardar'); }
@@ -89,6 +90,41 @@ export default function AjustesCotPage() {
             <input type="checkbox" checked={a.responde_en_linea} onChange={e => setA({ ...a, responde_en_linea: e.target.checked })} style={{ accentColor: 'var(--y-brand)', width: 16, height: 16 }} />
             Los clientes responden en línea (aceptar o rechazar desde el enlace)</label>
         </div>
+        {'pdf_diseno' in a && (() => {
+          const dz = a.pdf_diseno || {};
+          const setDz = (patch: Record<string, unknown>) => setA({ ...a, pdf_diseno: { ...dz, ...patch } });
+          const bloques: [keyof typeof dz, string][] = [
+            ['mostrar_forma_pago', 'Forma de pago'], ['mostrar_importante', 'Importante'], ['mostrar_como_aceptar', 'Cómo aceptar'],
+            ['mostrar_banco', 'Datos para transferencia'], ['mostrar_firmas', 'Firmas'],
+          ];
+          return (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+              <p className="section-label" style={{ margin: '6px 0 0' }}>Diseño del PDF</p>
+              <div style={fila}>
+                <label><span className="label-muted">Color de acento</span>
+                  <span style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                    <input type="color" value={dz.color || '#ffc600'} onChange={e => setDz({ color: e.target.value })} style={{ width: 44, height: 36, border: 'none', background: 'none', cursor: 'pointer' }} />
+                    <input className="input" value={dz.color || '#ffc600'} onChange={e => setDz({ color: e.target.value })} style={{ maxWidth: 120 }} />
+                    {dz.color && <button type="button" className="btn btn-ghost btn-xs" onClick={() => setDz({ color: undefined })}>Amarillo InnVolt</button>}
+                  </span></label>
+                <label><span className="label-muted">Título del documento</span>
+                  <input className="input" value={dz.titulo || ''} placeholder="COTIZACIÓN" onChange={e => setDz({ titulo: e.target.value })} maxLength={30} /></label>
+              </div>
+              <label><span className="label-muted">Texto del pie de página (vacío: «InnVolt · Cotización IV-0001»)</span>
+                <input className="input" value={dz.pie || ''} onChange={e => setDz({ pie: e.target.value })} maxLength={120} placeholder="InnVolt SpA · Instalaciones eléctricas certificadas SEC" /></label>
+              <div>
+                <span className="label-muted">Bloques que se muestran</span>
+                <div style={{ display: 'flex', gap: 14, flexWrap: 'wrap', marginTop: 4 }}>
+                  {bloques.map(([k, t]) => (
+                    <label key={k} style={{ display: 'flex', gap: 6, alignItems: 'center', fontSize: '0.86rem', color: 'var(--text)' }}>
+                      <input type="checkbox" checked={dz[k] !== false} onChange={e => setDz({ [k]: e.target.checked })} style={{ accentColor: 'var(--y-brand)' }} /> {t}</label>
+                  ))}
+                </div>
+              </div>
+              <p style={{ margin: 0, fontSize: '0.76rem', color: 'var(--muted)' }}>Para ver cómo queda, abre una plantilla en Cotizaciones → Plantillas y usa «Vista previa».</p>
+            </div>
+          );
+        })()}
         <p className="section-label" style={{ margin: '6px 0 0' }}>Mensajes de envío</p>
         <p style={{ fontSize: '0.76rem', color: 'var(--muted)', margin: 0 }}>Puedes usar {'{cliente} {numero} {titulo} {total} {enlace} {vendedor} {empresa}'}.</p>
         <label><span className="label-muted">Asunto del correo</span><input className="input" value={a.asunto_correo || ''} onChange={e => setA({ ...a, asunto_correo: e.target.value })} /></label>

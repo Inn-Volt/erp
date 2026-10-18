@@ -70,6 +70,7 @@ const MENU: { grupo: string; icono: React.ElementType; items: Item[] }[] = [
     { href: '/biblioteca', label: 'Biblioteca de precios', permisos: ['biblioteca.ver'] },
     { href: '/usuarios', label: 'Usuarios', permisos: ['usuarios.ver', 'usuarios.gestionar'] },
     { href: '/roles', label: 'Roles y permisos', permisos: ['roles.gestionar'] },
+    { href: '/plantillas-informe', label: 'Plantillas de informe', permisos: ['cotizaciones.aprobar', 'configuracion.gestionar'] },
     { href: '/personas', label: 'Personas y competencias', permisos: ['personas.ver', 'personas.gestionar'], modulo: 'personas' },
     { href: '/auditoria', label: 'Auditoría', permisos: ['auditoria.ver'] },
     { href: '/configuracion', label: 'Configuración', permisos: ['configuracion.gestionar'] },

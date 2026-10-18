@@ -169,6 +169,7 @@ export const PERMISO_DE_RUTA: { prefijo: string; permisos: string[] }[] = [
   { prefijo: '/auditoria', permisos: ['auditoria.ver'] },
   { prefijo: '/proyectos', permisos: ['proyectos.ver', 'proyectos.gestionar'] },
   { prefijo: '/trabajos', permisos: ['cotizaciones.ver'] },
+  { prefijo: '/plantillas-informe', permisos: ['cotizaciones.aprobar', 'configuracion.gestionar'] },
   { prefijo: '/personas', permisos: ['personas.ver', 'personas.gestionar'] },
   { prefijo: '/traslados', permisos: ['traslados.ver', 'traslados.gestionar'] },
 ];

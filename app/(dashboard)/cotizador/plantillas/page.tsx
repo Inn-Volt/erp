@@ -17,10 +17,11 @@ import FaltaSQL from '@/components/FaltaSQL';
 import CotizacionPDF from '@/components/pdf/CotizacionPDF';
 import type { EmpresaInfo } from '@/components/pdf/PresupuestoPDF';
 import { supabase } from '@/lib/supabase';
-import { faltaFase4, plantillasCotService } from '@/services/cotizador';
+import { ajustesService, faltaFase4, plantillasCotService } from '@/services/cotizador';
 import { useToast } from '@/hooks/useToast';
 import { usePermisos } from '@/hooks/usePermisos';
-import { QUE_VE, TITULO_VALORIZACION, type Plantilla, type Seccion } from '@/lib/cotizador/tipos';
+import { PLAN_COBRO_BASE, QUE_VE, TITULO_VALORIZACION, type Plantilla, type Seccion } from '@/lib/cotizador/tipos';
+import PlanCobro, { sumaPlan } from '@/components/cotizador/PlanCobro';
 import { nuevoId } from '@/lib/cotizador/calculo';
 
 const VACIA: Plantilla = { id: '', nombre: '', para_que: '', descripcion: '', aclaraciones: '', que_ve_cliente: 'partidas', titulo_valorizacion: '', secciones: [], es_la_de_siempre: false, activa: true, version: 1 };
@@ -41,13 +42,17 @@ export default function PlantillasPage() {
   }, [toastError]);
   useEffect(() => { cargar(); }, [cargar]);
 
+  // Fase 8: la forma de pago propia de la plantilla (solo si la base ya tiene la columna).
+  const conPlan = lista.some(p => 'plan_cobro' in p);
   const guardar = async () => {
     if (!sel?.nombre.trim()) { toastError('Ponle nombre a la plantilla'); return; }
+    if (sel.plan_cobro && sel.plan_cobro.length && sumaPlan(sel.plan_cobro) !== 100) { toastError('La forma de pago tiene que sumar 100 %.'); return; }
     setGuardando(true);
     try {
       const id = await plantillasCotService.guardar({
         ...(sel.id ? { id: sel.id } : {}), nombre: sel.nombre.trim(), para_que: sel.para_que || null, descripcion: sel.descripcion || null,
         aclaraciones: sel.aclaraciones || null, que_ve_cliente: sel.que_ve_cliente, titulo_valorizacion: sel.titulo_valorizacion || null,
+        ...(conPlan ? { plan_cobro: sel.plan_cobro && sel.plan_cobro.length ? sel.plan_cobro : null } : {}),
         secciones: sel.secciones, activa: sel.activa,
       });
       if (!lista.length) await plantillasCotService.deSiempre(id);
@@ -62,9 +67,10 @@ export default function PlantillasPage() {
     if (!sel) return;
     const { data } = await supabase.from('empresas').select('*').order('nombre').limit(1);
     const empresa = (data?.[0] || { nombre: 'InnVolt', rut: '', email: '', telefono: '' }) as EmpresaInfo;
+    const aj = await ajustesService.get().catch(() => null);
     const pid = 'p1';
     const blob = await pdf(
-      <CotizacionPDF marca="EJEMPLO" empresa={empresa} cliente={{ id: 'x', nombre_cliente: 'Cliente de ejemplo', empresa: 'Empresa de ejemplo SpA', rut: '76.000.000-0' } as never}
+      <CotizacionPDF marca="EJEMPLO" empresa={empresa} diseno={aj?.pdf_diseno} planCobro={sel.plan_cobro && sel.plan_cobro.length ? sel.plan_cobro : aj?.plan_cobro} cliente={{ id: 'x', nombre_cliente: 'Cliente de ejemplo', empresa: 'Empresa de ejemplo SpA', rut: '76.000.000-0' } as never}
         doc={{
           id: 'x', folio: 0, estado: 'Borrador', revision: 0, titulo: 'Título de la cotización', cliente_id: 'x', moneda: 'CLP',
           que_ve_cliente: sel.que_ve_cliente, titulo_valorizacion: sel.titulo_valorizacion, descripcion_general: sel.descripcion || '',
@@ -115,6 +121,15 @@ export default function PlantillasPage() {
                     {QUE_VE.map(q => <option key={q.valor} value={q.valor}>{q.nombre}</option>)}</select></label>
                 <label><span className="label-muted">Título de la valorización</span><input className="input" value={sel.titulo_valorizacion || ''} placeholder={TITULO_VALORIZACION} onChange={e => setSel({ ...sel, titulo_valorizacion: e.target.value })} /></label>
               </div>
+              {conPlan && (
+                <div>
+                  <label style={{ display: 'flex', gap: 8, alignItems: 'center', fontSize: '0.86rem', color: 'var(--text)' }}>
+                    <input type="checkbox" checked={!!(sel.plan_cobro && sel.plan_cobro.length)} style={{ accentColor: 'var(--y-brand)' }}
+                      onChange={e => setSel({ ...sel, plan_cobro: e.target.checked ? PLAN_COBRO_BASE.map(h => ({ ...h })) : null })} />
+                    Forma de pago propia (si no, la de los ajustes)</label>
+                  {sel.plan_cobro && sel.plan_cobro.length > 0 && <div style={{ marginTop: 6 }}><PlanCobro plan={sel.plan_cobro} onCambiar={pc => setSel({ ...sel, plan_cobro: pc })} /></div>}
+                </div>
+              )}
               <div>
                 <span className="label-muted">Presentación: portada y secciones</span>
                 {sel.secciones.map((s, i) => (
