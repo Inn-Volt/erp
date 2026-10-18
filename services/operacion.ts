@@ -158,7 +158,9 @@ export function dataUriABlob(dataUri: string): Blob {
 }
 
 // ── Órdenes de trabajo ────────────────────────────────────────────────────────
-const SEL_OT = '*, clientes(id, nombre_cliente, telefono, direccion, email, rut), cotizaciones(id, folio, total, total_clp, moneda, subtotal, items)';
+// «cotizaciones!cotizacion_id»: desde la fase 6 la cotización también apunta a su OT de origen
+// (cotizaciones.ot_id), y sin decir por cuál columna unirlas Supabase rechaza la consulta.
+const SEL_OT = '*, clientes(id, nombre_cliente, telefono, direccion, email, rut), cotizaciones!cotizacion_id(id, folio, total, total_clp, moneda, subtotal, items)';
 export const otService = {
   async listar(): Promise<OrdenTrabajo[]> {
     const { data, error } = await supabase.from('ordenes_trabajo').select(SEL_OT).order('folio', { ascending: false });
