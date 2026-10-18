@@ -3,7 +3,8 @@
 /**
  * Buscador del catálogo dentro de una partida (TecApp): busca a la vez en materiales y
  * servicios activos, hasta 20 resultados; Enter agrega el primero. Lo sin precio se ve
- * pero no se agrega. Siempre ofrece «+ Agregar «…» fuera del catálogo».
+ * pero no se agrega. Siempre ofrece «+ Agregar «…» fuera del catálogo» y, junto al
+ * buscador, «+ Nuevo»: no es obligatorio usar la biblioteca.
  */
 
 import { useId, useMemo, useRef, useState } from 'react';
@@ -83,6 +84,9 @@ export default function BuscadorCatalogo({ catalogo, moneda, valorUf, onElegir, 
             placeholder="Busca un producto o servicio: código, nombre, marca…" style={{ paddingLeft: '2rem' }} />
         </div>
         <button type="button" className="btn btn-ghost" onClick={() => setEscanear(true)} title="Escanear código de barras o QR" aria-label="Escanear"><ScanLine size={15} /></button>
+        <button type="button" className="btn btn-ghost" onClick={() => { onFuera(texto.trim()); setTexto(''); }}
+          title="Algo que no está en la biblioteca: escribes qué es, su costo y su ganancia, solo para esta cotización">
+          <Plus size={14} /> Nuevo</button>
       </div>
       {abierto && texto.trim() && (
         <div id={listaId} role="listbox" style={{ position: 'absolute', zIndex: 25, left: 0, right: 0, top: '100%', marginTop: 4, background: 'var(--bg2)', border: '1px solid var(--border2)', borderRadius: 10, boxShadow: '0 12px 30px rgba(0,0,0,.25)', maxHeight: 360, overflowY: 'auto' }}>

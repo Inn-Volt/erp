@@ -13,7 +13,8 @@ import { useParams } from 'next/navigation';
 import { CheckCircle2, Download, XCircle, Loader2, Clock, AlertTriangle, MessageCircle, Mail, ChevronDown, ChevronUp, FileText } from 'lucide-react';
 import type { CotizacionPublica } from '@/types/publico';
 import { MOTIVOS_PERDIDA } from '@/types';
-import { formatMoneda, formatDate, formatFolio, boldPorLinea } from '@/utils';
+import { formatMoneda, formatDate, formatFolio } from '@/utils';
+import TextoFormato from '@/components/TextoFormato';
 import { calcular } from '@/lib/cotizador/calculo';
 import type { CotizacionDoc } from '@/lib/cotizador/tipos';
 import FirmaPad from '@/components/FirmaPad';
@@ -25,23 +26,9 @@ const C = {
 const LOGO_INNVOLT = '/InnVolt-transparente-claro.png';
 const esInnVolt = (n: string) => n.toLowerCase().replace(/[^a-z]/g, '').includes('innvolt');
 
-/** Texto con **negrita** y viñetas (-, •, *), como en el PDF. */
+/** Texto con formato (negrita, cursiva, títulos, listas), como en el PDF. */
 function Texto({ texto }: { texto: string }) {
-  const lineas = boldPorLinea(texto || '').split('\n');
-  const inline = (t: string) => t.split(/(\*\*[^*]+\*\*)/g).map((seg, i) =>
-    seg.startsWith('**') && seg.endsWith('**') ? <strong key={i}>{seg.slice(2, -2)}</strong> : <span key={i}>{seg}</span>);
-  return (
-    <div style={{ fontSize: 14, lineHeight: 1.6, color: '#333' }}>
-      {lineas.map((l, i) => {
-        const t = l.replace(/\s+$/, '');
-        if (!t.trim()) return <div key={i} style={{ height: 6 }} />;
-        const b = /^\s*[-•*]\s+/.test(t);
-        if (b) return <div key={i} style={{ display: 'flex', gap: 8, paddingLeft: 4 }}><span style={{ color: C.faint }}>•</span><span>{inline(t.replace(/^\s*[-•*]\s+/, ''))}</span></div>;
-        if (/^\d+[.)]\s/.test(t.trim())) return <p key={i} style={{ fontWeight: 700, marginTop: 8 }}>{t.trim()}</p>;
-        return <p key={i}>{inline(t)}</p>;
-      })}
-    </div>
-  );
+  return <TextoFormato texto={texto} style={{ fontSize: 14, lineHeight: 1.6, color: '#333' }} />;
 }
 
 function Tarjeta({ children, titulo }: { children: React.ReactNode; titulo?: string }) {
@@ -237,7 +224,7 @@ export default function CotizacionClientePage() {
                     <strong style={{ fontSize: 15 }}>{p.nombre || 'Partida'}</strong>
                     {cot.que_ve_cliente !== 'total' && <strong style={{ whiteSpace: 'nowrap' }}>{fmt(bruto)}</strong>}
                   </div>
-                  {p.descripcion && <p style={{ fontSize: 13, color: C.muted, marginTop: 3 }}>{p.descripcion}</p>}
+                  {p.descripcion && <TextoFormato texto={p.descripcion} style={{ fontSize: 13, color: C.muted, marginTop: 3 }} />}
                   <p style={{ fontSize: 12, color: C.faint, marginTop: 3 }}>{p.cantidad} {p.unidad}</p>
                   {cot.que_ve_cliente === 'detalle' && its.length > 0 && (
                     <ul style={{ margin: '6px 0 0', paddingLeft: 16, fontSize: 12, color: C.muted }}>

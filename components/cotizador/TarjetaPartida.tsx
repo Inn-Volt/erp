@@ -7,8 +7,10 @@
  * una fila (Equipo · HH), y la mano de obra se despliega con ▸.
  */
 
+import EditorFormato from '@/components/EditorFormato';
+import { textoPlano } from '@/lib/textoFormato';
 import { useState } from 'react';
-import { Layers, Package } from 'lucide-react';
+import { Layers, Package, Plus } from 'lucide-react';
 import BuscadorCatalogo from './BuscadorCatalogo';
 import { MenuAcciones, opcionMenu, campoChico } from './ui';
 import type { ArticuloCatalogo, Linea, Moneda, PartidaCot, QueVe, TipoPartida } from '@/lib/cotizador/tipos';
@@ -25,12 +27,18 @@ export interface AccionesPartida {
   onArticulo: (a: ArticuloCatalogo) => void;
   onFuera: (texto: string) => void;
   onReceta: (r: RecetaCompleta) => void;
+  /** Armar una receta nueva desde aquí (sin ir a la Biblioteca). */
+  onRecetaNueva?: () => void;
   onDescuento: (pct: number) => void;
   onDeshacerReceta?: () => void;
   onTraslado?: () => void;
 }
 export interface AccionesLinea {
   cambiar: (id: string, patch: Partial<Linea>) => void;
+  /** Costo o ganancia: si es del catálogo, queda ajustada solo en esta cotización. */
+  ajustar: (id: string, patch: Partial<Linea>) => void;
+  /** Vuelve una línea ajustada al costo y precio de la biblioteca. */
+  alCatalogo: (id: string) => void;
   cantidad: (id: string, v: number) => void;
   quitar: (id: string) => void;
   mover: (id: string, dir: -1 | 1) => void;
@@ -107,7 +115,7 @@ export default function TarjetaPartida(props: {
           <summary style={{ cursor: 'pointer', fontSize: '0.76rem', color: 'var(--muted)' }}>
             {p.descripcion ? 'Descripción para el cliente' : 'Agregar una descripción para el cliente'}
             {(Number(p.cantidad) !== 1 || p.unidad !== 'global') ? ` · ${cantidadLegible(p.cantidad)} ${p.unidad}` : ''}
-            {!conDescripcion && p.descripcion ? <span style={{ color: 'var(--text)' }}>: {p.descripcion.split('\n')[0].slice(0, 90)}</span> : null}
+            {!conDescripcion && p.descripcion ? <span style={{ color: 'var(--text)' }}>: {textoPlano(p.descripcion).slice(0, 90)}</span> : null}
           </summary>
           <div style={{ display: 'grid', gridTemplateColumns: '100px 120px', gap: 8, marginTop: 8 }}>
             <label><span className="label-muted" style={{ display: 'block', fontSize: '0.7rem' }} title="Para el valor unitario del PDF: «3 puertas»">Cantidad</span>
@@ -117,9 +125,10 @@ export default function TarjetaPartida(props: {
               <input className="input" style={campoChico} list="unidades-de-partida" maxLength={20} disabled={!editable} value={p.unidad}
                 onChange={e => acciones.onCambiar({ unidad: e.target.value })} /></label>
           </div>
-          <textarea className="input" rows={3} disabled={!editable} value={p.descripcion || ''} style={{ marginTop: 8, fontSize: '0.86rem' }}
-            onChange={e => acciones.onCambiar({ descripcion: e.target.value })}
-            placeholder="Lo que lee el cliente bajo el nombre (en el PDF va a todo el ancho). **negrita** con dos asteriscos." />
+          <div style={{ marginTop: 8 }}>
+            <EditorFormato valor={p.descripcion || ''} editable={editable} onCambiar={t => acciones.onCambiar({ descripcion: t })} alto={70}
+              etiqueta="Descripción para el cliente" placeholder="Lo que lee el cliente bajo el nombre (en el PDF va a todo el ancho)." />
+          </div>
           <datalist id="unidades-de-partida">{UNIDADES_PARTIDA.map(u => <option key={u} value={u} />)}</datalist>
         </details>
 
@@ -130,6 +139,8 @@ export default function TarjetaPartida(props: {
                 <span style={{ fontSize: '0.84rem', color: 'var(--text)', fontWeight: 600 }}>¿Qué quieres agregar?</span>
                 <button type="button" className="btn btn-ghost btn-sm" onClick={() => setModo('receta')}><Layers size={13} /> Una receta</button>
                 <button type="button" className="btn btn-ghost btn-sm" onClick={() => { setModo('producto'); setModoElegido(true); }}><Package size={13} /> Un producto o servicio</button>
+                <button type="button" className="btn btn-ghost btn-sm" title="Algo que no está en la biblioteca: solo para esta cotización"
+                  onClick={() => { setModo('producto'); acciones.onFuera(''); }}><Plus size={13} /> Uno nuevo (sin biblioteca)</button>
               </div>
             ) : (
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'flex-start' }}>
@@ -146,7 +157,11 @@ export default function TarjetaPartida(props: {
                       onElegir={acciones.onArticulo} onFuera={acciones.onFuera} onBuscarReceta={t => { setBuscaReceta(t); setModo('receta'); }} />
                   ) : (
                     <div style={{ position: 'relative' }}>
-                      <input className="input" value={buscaReceta} onChange={e => setBuscaReceta(e.target.value)} placeholder="Busca una receta…" autoFocus />
+                      <div style={{ display: 'flex', gap: 6 }}>
+                        <input className="input" value={buscaReceta} onChange={e => setBuscaReceta(e.target.value)} placeholder="Busca una receta…" autoFocus />
+                        {acciones.onRecetaNueva && <button type="button" className="btn btn-ghost" onClick={acciones.onRecetaNueva}
+                          title="Arma una receta aquí: la usas solo en esta cotización o la guardas en la biblioteca"><Plus size={14} /> Nueva</button>}
+                      </div>
                       <div style={{ marginTop: 6, border: '1px solid var(--border2)', borderRadius: 8, maxHeight: 240, overflowY: 'auto' }}>
                         {recetasF.length === 0 && <p style={{ padding: '0.6rem', fontSize: '0.82rem', color: 'var(--muted)', margin: 0 }}>
                           {props.recetas.length ? 'Ninguna receta con ese nombre.' : 'Aún no hay recetas: créalas en Biblioteca → Recetas.'}
@@ -276,21 +291,26 @@ function FilaLinea({ l, esLigada, cols, instalacion, calc, moneda, fila, ligadas
           </button>
         )}
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, fontSize: '0.66rem', color: 'var(--muted)', paddingLeft: 4 }}>
-          {l.codigo && !l.fuera && <span style={{ fontFamily: 'monospace' }}>{l.codigo}</span>}
-          {l.fuera && <span style={{ background: 'rgba(217,119,6,.15)', color: '#d97706', borderRadius: 4, padding: '0 4px', fontWeight: 600 }}>Fuera del catálogo</span>}
+          {l.codigo && (!l.fuera || l.ajustada) && <span style={{ fontFamily: 'monospace' }}>{l.codigo}</span>}
+          {l.fuera && !l.ajustada && <span style={{ background: 'rgba(217,119,6,.15)', color: '#d97706', borderRadius: 4, padding: '0 4px', fontWeight: 600 }}>Fuera del catálogo</span>}
+          {l.ajustada && <span style={{ background: 'var(--y-soft)', color: 'var(--text)', borderRadius: 4, padding: '0 4px', fontWeight: 600 }}
+            title="El costo o la ganancia se cambiaron en esta cotización; la biblioteca sigue igual">Ajustado aquí
+            {editable && l.itemId && <button type="button" onClick={() => acc.alCatalogo(l.id)} style={{ background: 'none', border: 'none', color: 'var(--y)', cursor: 'pointer', fontSize: '0.66rem', fontWeight: 400 }}>↺ volver al de la biblioteca</button>}
+          </span>}
           {deAntes && <span style={{ background: 'var(--bg3)', borderRadius: 4, padding: '0 4px' }}>Línea de antes</span>}
           {(l.iva ?? 19) === 0 && <span style={{ background: 'var(--bg3)', borderRadius: 4, padding: '0 4px' }}>Exento de IVA</span>}
           {esLigada && (l.cantidadAMano ? (
             <span>Cantidad a mano {editable && <button type="button" onClick={() => acc.religar(l.id)} style={{ background: 'none', border: 'none', color: 'var(--y)', cursor: 'pointer', fontSize: '0.66rem' }}>↺ seguir al producto</button>}</span>
           ) : <span>{cantidadLegible(l.porUnidad || 1)} por cada {producto?.unidad || 'unidad'}</span>)}
         </div>
-        {l.fuera && editable && (
+        {l.fuera && !l.ajustada && editable && (
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 4, paddingLeft: 4, alignItems: 'flex-end' }}>
-            <label style={{ width: 110 }}><span style={{ fontSize: '0.66rem', color: 'var(--muted)' }}>Costo unitario</span>
-              <input className="input" style={campoChico} type="number" min={0} step="any" value={l.costo || ''} onChange={e => acc.cambiar(l.id, { costo: num(e.target.value) })} /></label>
-            <label style={{ width: 80 }}><span style={{ fontSize: '0.66rem', color: 'var(--muted)' }}>Ganancia %</span>
-              <input className="input" style={campoChico} type="number" min={0} step="any" value={l.ganancia ?? ''}
-                onChange={e => acc.cambiar(l.id, { ganancia: e.target.value.trim() === '' ? null : num(e.target.value) })} /></label>
+            {!verCostos && <>
+              <label style={{ width: 110 }}><span style={{ fontSize: '0.66rem', color: 'var(--muted)' }}>Costo unitario</span>
+                <CeldaNum valor={l.costo} onCambiar={v => acc.cambiar(l.id, { costo: v ?? 0 })} etiqueta="Costo unitario" /></label>
+              <label style={{ width: 80 }}><span style={{ fontSize: '0.66rem', color: 'var(--muted)' }}>Ganancia %</span>
+                <CeldaNum valor={l.ganancia} decimales={1} vacio onCambiar={v => acc.cambiar(l.id, { ganancia: v })} etiqueta="Ganancia %" /></label>
+            </>}
             <label style={{ width: 80 }}><span style={{ fontSize: '0.66rem', color: 'var(--muted)' }}>Unidad</span>
               <input className="input" style={campoChico} list="unidades-de-item" maxLength={20} value={l.unidad} onChange={e => acc.cambiar(l.id, { unidad: e.target.value })} /></label>
             <label style={{ width: 120 }}><span style={{ fontSize: '0.66rem', color: 'var(--muted)' }}>Tipo</span>
@@ -298,6 +318,7 @@ function FilaLinea({ l, esLigada, cols, instalacion, calc, moneda, fila, ligadas
                 <option value="material">Material</option><option value="mano_obra">Mano de obra</option><option value="servicio">Servicio</option><option value="operacion">Operación</option>
               </select></label>
             {(l.costo || 0) > 0 && (l.ganancia === null || l.ganancia === undefined) && <span style={{ fontSize: '0.72rem', color: '#d97706', paddingBottom: 6 }}>Sin ganancia se vende a costo.</span>}
+            <span style={{ fontSize: '0.68rem', color: 'var(--muted)', paddingBottom: 6 }}>Solo en esta cotización: no se agrega a la biblioteca.</span>
           </div>
         )}
       </div>
@@ -307,11 +328,23 @@ function FilaLinea({ l, esLigada, cols, instalacion, calc, moneda, fila, ligadas
           style={{ ...campoChico, width: 62, textAlign: 'right', color: esLigada && !l.cantidadAMano ? 'var(--muted)' : undefined }} />
         <span style={{ fontSize: '0.66rem', color: 'var(--muted)', width: 22, overflow: 'hidden' }}>{l.unidad}</span>
       </div>
-      {verCostos && <>
+      {verCostos && (editable ? <>
+        <CeldaNum valor={l.costo} etiqueta="Costo unitario (no cambia la biblioteca)" onCambiar={v => acc.ajustar(l.id, { costo: v ?? 0 })} />
+        <CeldaNum valor={l.fuera ? l.ganancia : c?.ganancia} decimales={1} vacio={!!l.fuera} etiqueta="Ganancia % sobre el costo (no cambia la biblioteca)"
+          onCambiar={v => acc.ajustar(l.id, { ganancia: v })} />
+        <CeldaNum valor={c?.margenReal} decimales={1} etiqueta="Utilidad % sobre lo que paga el cliente" color={bajoCosto ? 'var(--danger)' : undefined}
+          onCambiar={v => {
+            if (v === null) return;
+            // La ganancia que deja esa utilidad después del descuento de la línea.
+            const u = Math.min(v, 99) / 100;
+            const dto = Math.min(Math.max(l.descuento || 0, 0), 99.9) / 100;
+            acc.ajustar(l.id, { ganancia: (1 / ((1 - u) * (1 - dto)) - 1) * 100 });
+          }} />
+      </> : <>
         <span style={{ ...der, color: 'var(--muted)' }}>{formatMonto(l.costo, moneda, true)}</span>
         <span style={{ ...der, color: 'var(--muted)' }}>{porcentaje(c?.ganancia)}</span>
         <span style={{ ...der, color: bajoCosto ? 'var(--danger)' : 'var(--muted)', fontWeight: bajoCosto ? 700 : 400 }}>{porcentaje(c?.margenReal)}</span>
-      </>}
+      </>)}
       {instalacion ? (esLigada
         ? <><span /><span style={{ ...der, color: 'var(--muted)' }} title="Precio de la mano de obra por unidad">{formatMonto(c?.precio, moneda, true)}</span></>
         : <>{parte(fila?.equipo, fila?.equipoUnitario)}{parte(fila?.hh, fila?.hhUnitario)}</>)
@@ -359,5 +392,29 @@ function FilaLinea({ l, esLigada, cols, instalacion, calc, moneda, fila, ligadas
         )}
       </span>
     </div>
+  );
+}
+
+/** Un número que se escribe en la tabla: mientras se escribe se respeta el texto (decimales a medio
+ *  escribir, coma); al salir vuelve a mostrar el valor. Cada cambio válido se aplica al tiro. */
+function CeldaNum({ valor, onCambiar, etiqueta, decimales = 4, vacio = false, color }: {
+  valor: number | null | undefined; onCambiar: (v: number | null) => void; etiqueta: string;
+  decimales?: number; vacio?: boolean; color?: string;
+}) {
+  const [texto, setTexto] = useState<string | null>(null);
+  const f = 10 ** decimales;
+  const mostrado = texto ?? (valor === null || valor === undefined ? '' : String(Math.round(valor * f) / f));
+  return (
+    <input className="input" inputMode="decimal" value={mostrado} aria-label={etiqueta} title={etiqueta}
+      onFocus={e => { setTexto(mostrado); e.currentTarget.select(); }}
+      onBlur={() => setTexto(null)}
+      onChange={e => {
+        const t = e.target.value;
+        setTexto(t);
+        if (t.trim() === '') { if (vacio) onCambiar(null); return; }
+        const v = Number(t.replace(',', '.'));
+        if (Number.isFinite(v) && v >= 0) onCambiar(v);
+      }}
+      style={{ ...campoChico, textAlign: 'right', alignSelf: 'center', color, fontWeight: color ? 700 : undefined }} />
   );
 }

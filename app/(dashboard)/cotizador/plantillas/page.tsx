@@ -7,6 +7,7 @@
  * cambia algo que se imprime. No se borran: se desactivan; «la de siempre» no.
  */
 
+import EditorFormato from '@/components/EditorFormato';
 import { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
 import { pdf } from '@react-pdf/renderer';
@@ -104,8 +105,10 @@ export default function PlantillasPage() {
                 <label><span className="label-muted">Nombre *</span><input className="input" value={sel.nombre} onChange={e => setSel({ ...sel, nombre: e.target.value })} placeholder="Instalaciones eléctricas" /></label>
                 <label><span className="label-muted">Para qué sirve (se ve al elegirla)</span><input className="input" value={sel.para_que || ''} onChange={e => setSel({ ...sel, para_que: e.target.value })} /></label>
               </div>
-              <label><span className="label-muted">Introducción base</span><textarea className="input" rows={5} value={sel.descripcion || ''} onChange={e => setSel({ ...sel, descripcion: e.target.value })} /></label>
-              <label><span className="label-muted">Aclaraciones y garantías</span><textarea className="input" rows={7} value={sel.aclaraciones || ''} onChange={e => setSel({ ...sel, aclaraciones: e.target.value })} /></label>
+              <div><span className="label-muted">Introducción base</span>
+                <EditorFormato valor={sel.descripcion || ''} editable={editable} alto={110} etiqueta="Introducción base" onCambiar={t => setSel(x => x && { ...x, descripcion: t })} /></div>
+              <div><span className="label-muted">Aclaraciones y garantías</span>
+                <EditorFormato valor={sel.aclaraciones || ''} editable={editable} alto={150} etiqueta="Aclaraciones y garantías" onCambiar={t => setSel(x => x && { ...x, aclaraciones: t })} /></div>
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 10 }}>
                 <label><span className="label-muted">Qué ve el cliente</span>
                   <select className="input" value={sel.que_ve_cliente} onChange={e => setSel({ ...sel, que_ve_cliente: e.target.value as Plantilla['que_ve_cliente'] })}>
@@ -121,7 +124,8 @@ export default function PlantillasPage() {
                       <input className="input" value={s.titulo} placeholder="Título" onChange={e => setSel({ ...sel, secciones: sel.secciones.map((x, j) => (j === i ? { ...x, titulo: e.target.value } : x)) })} />
                       <button type="button" className="btn btn-ghost btn-xs" onClick={() => setSel({ ...sel, secciones: sel.secciones.filter((_, j) => j !== i) })}>✕</button>
                     </div>
-                    <textarea className="input" rows={3} value={s.texto} onChange={e => setSel({ ...sel, secciones: sel.secciones.map((x, j) => (j === i ? { ...x, texto: e.target.value } : x)) })} />
+                    <EditorFormato valor={s.texto} editable={editable} alto={70} etiqueta={s.titulo || 'Texto de la sección'}
+                      onCambiar={t => setSel(y => y && { ...y, secciones: y.secciones.map((x, j) => (j === i ? { ...x, texto: t } : x)) })} />
                   </div>
                 ))}
                 <div style={{ display: 'flex', gap: 8, marginTop: 6 }}>

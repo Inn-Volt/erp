@@ -7,6 +7,7 @@
  * (nombre, RUT, logo, giro, banco) siguen en Configuración → Empresas.
  */
 
+import EditorFormato from '@/components/EditorFormato';
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { ArrowLeft, Loader2, Save } from 'lucide-react';
@@ -68,10 +69,10 @@ export default function AjustesCotPage() {
           <label><span className="label-muted">Correo de «Cómo aceptar»</span>
             <input className="input" type="email" value={a.correo_aceptar || ''} onChange={e => setA({ ...a, correo_aceptar: e.target.value })} placeholder="El de la empresa si se deja vacío" /></label>
         </div>
-        <label><span className="label-muted">Aclaraciones y garantías para una cotización «sin plantilla»</span>
-          <textarea className="input" rows={6} value={a.aclaraciones || ''} onChange={e => setA({ ...a, aclaraciones: e.target.value })} /></label>
-        <label><span className="label-muted">Texto «Importante» (va con la inversión total; vacío usa el de la empresa)</span>
-          <textarea className="input" rows={3} value={a.importante || ''} onChange={e => setA({ ...a, importante: e.target.value })} /></label>
+        <div><span className="label-muted">Aclaraciones y garantías para una cotización «sin plantilla»</span>
+          <EditorFormato valor={a.aclaraciones || ''} onCambiar={t => setA({ ...a, aclaraciones: t })} alto={150} etiqueta="Aclaraciones y garantías por omisión" /></div>
+        <div><span className="label-muted">Texto «Importante» (va con la inversión total; vacío usa el de la empresa)</span>
+          <EditorFormato valor={a.importante || ''} onCambiar={t => setA({ ...a, importante: t })} alto={70} etiqueta="Texto Importante" /></div>
         <div style={fila}>
           <label style={{ display: 'flex', gap: 8, alignItems: 'center', color: 'var(--text)' }}>
             <input type="checkbox" checked={a.usa_presentacion} onChange={e => setA({ ...a, usa_presentacion: e.target.checked })} style={{ accentColor: 'var(--y-brand)', width: 16, height: 16 }} />

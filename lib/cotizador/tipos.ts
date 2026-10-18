@@ -53,6 +53,9 @@ export interface Linea extends CotizacionItem {
   fuera?: boolean;
   /** % de ganancia sobre el costo (solo fuera del catálogo). Vacío: se vende a costo. */
   ganancia?: number | null;
+  /** Del catálogo, pero con el costo o la ganancia cambiados en esta cotización: se calcula
+   *  como una fuera del catálogo (`fuera: true`) y la biblioteca no se toca. */
+  ajustada?: boolean;
   /** Mano de obra ligada a un producto (id de la línea del producto). */
   ligadoA?: string | null;
   /** Cuánta mano de obra por cada unidad del producto. */
