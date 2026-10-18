@@ -282,9 +282,14 @@ export const recetasService = {
       let receta = porNombre.get(sr.nombre.trim().toLowerCase());
       // Las preguntas se configuran en la app (la hoja no las trae): se conservan por descripción.
       const preguntas = new Map<string, string>();
+      const reglas = new Map<string, unknown>();
       if (receta) {
         const prev = await this.getConComponentes(receta.id).catch(() => null);
-        for (const c of prev?.componentes || []) if (c.pregunta) preguntas.set(c.descripcion.trim().toLowerCase(), c.pregunta);
+        for (const c of prev?.componentes || []) {
+          if (c.pregunta) preguntas.set(c.descripcion.trim().toLowerCase(), c.pregunta);
+          const regla = (c as { regla?: unknown }).regla;
+          if (regla) reglas.set(c.descripcion.trim().toLowerCase(), regla);
+        }
       }
       if (receta) {
         await this.update(receta.id, { descripcion: sr.descripcion, unidad: sr.unidad });
@@ -314,7 +319,12 @@ export const recetasService = {
           omitidos++;
         }
       }
-      for (const c of comps) { const q = preguntas.get(c.descripcion.trim().toLowerCase()); if (q) c.pregunta = q; }
+      for (const c of comps) {
+        const k = c.descripcion.trim().toLowerCase();
+        const q = preguntas.get(k); if (q) c.pregunta = q;
+        // Las reglas de la fase 4 (preguntas de la receta) también se conservan.
+        const r = reglas.get(k); if (r) (c as { regla?: unknown }).regla = r;
+      }
       await this.setComponentes(receta.id, comps);
       componentes += comps.length;
     }
@@ -336,6 +346,7 @@ export const recetasService = {
     if (componentes.length === 0) return;
 
     const conPreguntas = componentes.some(c => c.pregunta?.trim());
+    const conReglas = componentes.some(c => (c as { regla?: unknown }).regla);
     const filas = componentes.map((c, i) => ({
       receta_id:   recetaId,
       item_id:     c.item_id ?? null,
@@ -348,6 +359,7 @@ export const recetasService = {
       // La columna `pregunta` es de supabase_fase3_cotizador.sql: solo se envía si alguna
       // receta la usa (así el editor sigue funcionando antes de correr ese SQL).
       ...(conPreguntas ? { pregunta: c.pregunta?.trim() || null } : {}),
+      ...(conReglas ? { regla: (c as { regla?: unknown }).regla || null } : {}),
     }));
     const { error: insErr } = await supabase.from('receta_componentes').insert(filas);
     if (insErr) throw insErr;

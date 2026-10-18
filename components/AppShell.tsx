@@ -34,8 +34,9 @@ const MENU: { grupo: string; icono: React.ElementType; items: Item[] }[] = [
   ] },
   { grupo: 'Comercial', icono: TrendingUp, items: [
     { href: '/solicitudes', label: 'Solicitudes', permisos: ['solicitudes.ver'] },
-    { href: '/cotizador', label: 'Cotizador', exacto: true, permisos: ['cotizaciones.crear'] },
-    { href: '/cotizador/historial', label: 'Historial de cotizaciones', permisos: ['cotizaciones.ver'] },
+    { href: '/cotizador/historial', label: 'Cotizaciones', permisos: ['cotizaciones.ver'] },
+    { href: '/cotizador', label: 'Nueva cotización', exacto: true, permisos: ['cotizaciones.crear'] },
+    { href: '/cotizador/plantillas', label: 'Plantillas', permisos: ['cotizaciones.aprobar'] },
   ] },
   { grupo: 'Operación', icono: Wrench, items: [
     { href: '/ordenes', label: 'Órdenes de trabajo', permisos: ['ot.ver', 'ot.ejecutar'] },

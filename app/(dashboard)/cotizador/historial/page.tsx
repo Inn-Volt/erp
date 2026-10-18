@@ -1,568 +1,186 @@
 'use client';
 
-import { useState, useEffect, useCallback, useMemo } from 'react';
+/**
+ * Comercial → Cotizaciones (historial, como TecApp): tarjetas por estado, vencidas y
+ * «por seguir» (enviadas sin movimiento hace 3 días o más), búsqueda y filtros.
+ * Una cotización no se borra: se anula desde su ficha.
+ */
+
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import {
-  History, Search, Trash2, Copy, Edit3, FileText, ChevronDown,
-  ChevronUp, Download, Loader2, X, Filter, ArrowUpDown, Send, Eye, BellRing, CheckCircle2,
-} from 'lucide-react';
-import { pdf } from '@react-pdf/renderer';
-import { saveAs } from 'file-saver';
-
-import { cotizacionesService, necesitaSeguimiento, diasSinMovimiento } from '@/services/cotizaciones';
-import EnviarCotizacionModal from '@/components/EnviarCotizacionModal';
-import { usePermisos } from '@/hooks/usePermisos';
-import { vendedoresService } from '@/services/vendedores';
-import { levantamientosService } from '@/services/levantamientos';
-import { fotosService } from '@/services/fotos';
-import MotivoPerdidaModal from '@/components/MotivoPerdidaModal';
-import { useToast } from '@/hooks/useToast';
-import { formatCLP, formatMoneda, formatFolio, formatDate, calcularTotals, normalizarItem, nombreArchivo } from '@/utils';
-import type { Cotizacion, EstadoCotizacion, Moneda, Vendedor } from '@/types';
-import { ESTADO_COLORS, ESTADOS_TODOS, SUPUESTOS_DEFAULT } from '@/types';
-import PresupuestoPDF from '@/components/pdf/PresupuestoPDF';
-import { supabase } from '@/lib/supabase';
-import type { EmpresaInfo } from '@/components/pdf/PresupuestoPDF';
+import { BellRing, Copy, FileText, Layers, Plus, Search, Settings2 } from 'lucide-react';
 import PageHeader from '@/components/PageHeader';
+import { EstadoPill } from '@/components/cotizador/ui';
+import { supabase } from '@/lib/supabase';
+import { aDoc, cotizadorService } from '@/services/cotizador';
+import { cotizacionesService, diasSinMovimiento } from '@/services/cotizaciones';
+import { vendedoresService } from '@/services/vendedores';
 import { folioOT } from '@/services/operacion';
+import { usePermisos } from '@/hooks/usePermisos';
+import { useToast } from '@/hooks/useToast';
+import { ESTADOS_COT, type CotizacionDoc, type EstadoCot } from '@/lib/cotizador/tipos';
+import { formatMonto } from '@/lib/cotizador/calculo';
+import { DIAS_SEGUIMIENTO, type Vendedor } from '@/types';
+import { fechaLocal, formatDate } from '@/utils';
 
-type SortKey = 'folio' | 'cliente' | 'total' | 'fecha' | 'estado';
-type SortDir = 'asc' | 'desc';
+type Filtro = 'abiertas' | 'todas' | 'vencidas' | 'seguir' | EstadoCot;
+const folioDe = (n: number) => `IV-${String(n || 0).padStart(4, '0')}`;
+const montoClp = (c: CotizacionDoc) => Number(c.total_clp ?? c.total ?? 0);
 
-const ESTADO_OPTIONS: EstadoCotizacion[] = ESTADOS_TODOS;
-
-export default function HistorialPage() {
+export default function HistorialCotizacionesPage() {
   const router = useRouter();
-  const { success, error: toastError } = useToast();
-
-  const [cotizaciones, setCotizaciones] = useState<Cotizacion[]>([]);
-  const [otDe, setOtDe] = useState<Record<string, { id: string; folio: number }>>({});
-  // Revisiones guardadas (versiones que el cliente ya había recibido antes de un cambio).
-  const [revisiones, setRevisiones] = useState<{ cot: Cotizacion; lista: { revision: number; created_at: string; total: number | null; creado_por: string | null; datos: Cotizacion }[] } | null>(null);
-  const verRevisiones = async (cot: Cotizacion) => {
-    const { data, error } = await supabase.from('cotizacion_revisiones')
-      .select('revision, created_at, total, creado_por, datos').eq('cotizacion_id', cot.id).order('revision', { ascending: false });
-    if (error) { toastError('No se pudieron cargar las revisiones'); return; }
-    setRevisiones({ cot, lista: (data || []) as NonNullable<typeof revisiones>['lista'] });
-  };
-  const [loading, setLoading] = useState(true);
-  const [search, setSearch] = useState('');
-  const [filterEstado, setFilterEstado] = useState<EstadoCotizacion | 'Todos'>('Todos');
-  const [sortKey, setSortKey] = useState<SortKey>('folio');
-  const [sortDir, setSortDir] = useState<SortDir>('desc');
-  const [genPDF, setGenPDF] = useState<string | null>(null);
-  const [showFilters, setShowFilters] = useState(false);
-  const [loadingEmpresa, setLoadingEmpresa] = useState(true);
-  const [soloPorSeguir, setSoloPorSeguir] = useState(false);
-  const [enviar, setEnviar] = useState<Cotizacion | null>(null);
-  const [rechazo, setRechazo] = useState<Cotizacion | null>(null);
-  const [vendedores, setVendedores] = useState<Record<string, Vendedor>>({});
   const { puede } = usePermisos();
-  const puedeCrear = puede('cotizaciones.crear');
-  const puedeAprobar = puede('cotizaciones.aprobar');
-  const puedeAnular = puede('cotizaciones.anular');
-  const vendedorDe = (c: Cotizacion) => (c.vendedor_id ? vendedores[c.vendedor_id] || null : null);
+  const { success, error: toastError } = useToast();
+  const [cots, setCots] = useState<CotizacionDoc[]>([]);
+  const [equipo, setEquipo] = useState<Record<string, Vendedor>>({});
+  const [otDe, setOtDe] = useState<Record<string, { id: string; folio: number }>>({});
+  const [cargando, setCargando] = useState(true);
+  const [filtro, setFiltro] = useState<Filtro>('abiertas');
+  const [busca, setBusca] = useState('');
+  const [quien, setQuien] = useState('');
+  const hoy = fechaLocal();
 
- const load = useCallback(async () => {
-  setLoading(true);
-  try {
-    const [data, mapa] = await Promise.all([cotizacionesService.getAll(), vendedoresService.mapa()]);
-    setCotizaciones(data);
-    setVendedores(mapa);
-    // OT generada por cada cotización aceptada (si ya se corrió la fase 2 y se tiene acceso).
-    supabase.from('ordenes_trabajo').select('id, folio, cotizacion_id').not('cotizacion_id', 'is', null)
-      .then(({ data: o }) => setOtDe(Object.fromEntries((o || []).map(x => [x.cotizacion_id as string, { id: x.id as string, folio: x.folio as number }]))));
-  } catch (e) {
-    console.error('Error al cargar el historial:', e);
-    toastError('No se pudo cargar el historial de cotizaciones');
-  } finally {
-    setLoading(false);
-  }
-}, [toastError]);
-
-useEffect(() => {
-  load();
-}, [load]);
-
-useEffect(() => {
-  // Se cargan TODAS las empresas: cada cotización se genera con la suya.
-  const loadEmpresas = async () => {
+  const cargar = useCallback(async () => {
     try {
-      setLoadingEmpresa(true);
-
-      const { data, error } = await supabase
-        .from('empresas')
-        .select('*')
-        .order('nombre');
-
-      if (error) throw error;
-
-      const lista = (data || []) as EmpresaInfo[];
-      setEmpresas(lista);
-      setEmpresa(lista[0] || null);
-
-    } catch (err) {
-      console.error(err);
-    } finally {
-      setLoadingEmpresa(false);
-    }
-  };
-
-  loadEmpresas();
-}, []);
-  const handleDelete = async (id: string, folio: number) => {
-    if (!confirm(`¿Eliminar cotización ${formatFolio(folio)}? Esta acción no se puede deshacer.`)) return;
-    try {
-      await cotizacionesService.delete(id);
-      success('Cotización eliminada');
-      load();
-    } catch (e: unknown) {
-      toastError('Error al eliminar: ' + (e instanceof Error ? e.message : 'Error'));
-    }
-  };
-
-  const handleEstado = async (cot: Cotizacion, estado: EstadoCotizacion) => {
-    // Rechazar pide el motivo de pérdida (análisis en el dashboard).
-    if (estado === 'Rechazado') { setRechazo(cot); return; }
-    try {
-      await cotizacionesService.updateEstado(cot.id, estado, { motivo_perdida: null, motivo_perdida_nota: null });
-      success(`Estado actualizado a ${estado}`);
-      load();
-    } catch {
-      toastError('Error al actualizar estado');
-    }
-  };
-
-  const confirmarRechazo = async (motivo: string, nota: string) => {
-    if (!rechazo) return;
-    try {
-      await cotizacionesService.updateEstado(rechazo.id, 'Rechazado', { motivo_perdida: motivo, motivo_perdida_nota: nota || null });
-      success(`Marcada como rechazada · ${motivo}`);
-      setRechazo(null);
-      load();
-    } catch {
-      toastError('Error al actualizar estado');
-    }
-  };
-
-  const empresaNombreDe = (cot: Cotizacion) =>
-    (empresas.find(e => e.id === cot.empresa_id) || empresa)?.nombre || 'InnVolt';
-const [empresa, setEmpresa]   = useState<EmpresaInfo | null>(null);
-const [empresas, setEmpresas] = useState<EmpresaInfo[]>([]);
-
-  const handleDownloadPDF = async (cot: Cotizacion) => {
-    if (loadingEmpresa) {
-      toastError('Cargando configuración de empresa...');
-      return;
-    }
-    // Cada cotización se emite con SU empresa; si no la guardó (cotizaciones
-    // antiguas), se usa la primera como respaldo.
-    const empresaCot = empresas.find(e => e.id === cot.empresa_id) || empresa;
-    if (!empresaCot) {
-      toastError('No existe empresa configurada');
-      return;
-    }
-    if (!cot.clientes) { toastError('Cliente no cargado'); return; }
-    setGenPDF(cot.id);
-    try {
-      // Los ítems guardados pueden venir en formato antiguo (sin imprevistos
-      // ni IVA). Sin normalizar, el IVA del PDF saldría en cero.
-      const sup = { ...SUPUESTOS_DEFAULT, ...(cot.supuestos || {}) };
-      const itemsNorm = (cot.items || []).map(i => normalizarItem(i, sup));
-      const totals = calcularTotals(itemsNorm, cot.descuento_global || 0);
-      let fotos: { url: string; caption: string }[] = [];
-      if (cot.incluir_fotos && cot.levantamiento_id) {
-        const lev = await levantamientosService.getById(cot.levantamiento_id);
-        fotos = await fotosService.paraPDF(lev?.data.fotos);
+      const filas: CotizacionDoc[] = [];
+      for (let desde = 0; ; desde += 1000) {
+        const { data, error } = await supabase.from('cotizaciones').select('*, clientes(id, nombre_cliente, empresa, rut, telefono, email)')
+          .order('folio', { ascending: false }).range(desde, desde + 999);
+        if (error) throw error;
+        filas.push(...(data || []).map(f => aDoc(f as Record<string, unknown>)));
+        if (!data || data.length < 1000) break;
       }
-      const blob = await pdf(
-        <PresupuestoPDF
-          cliente={cot.clientes}
-          items={itemsNorm}
-          totals={totals}
-          descuentoPorcentajeMO={cot.descuento_global || 0}
-          folio={formatFolio(cot.folio)}
-          descripcionGeneral={cot.descripcion_general || ''}
-          garantia={cot.condiciones_servicio || ''}
-          condicionesComerciales={cot.condiciones_comerciales || ''}
-          ocultarSuministros={cot.ocultar_suministros || false}
-          empresa={empresaCot}
-          moneda={(cot.moneda as Moneda) || 'CLP'}
-          valorUF={cot.valor_uf || 0}
-          partidas={cot.partidas || []}
-          mostrarDetalle={cot.mostrar_detalle || false}
-          fechaEmision={cot.created_at}
-          fotos={fotos}
-          vendedor={vendedorDe(cot)}
-          portada={!!cot.incluir_portada}
-          revision={cot.revision || 0}
-          aceptacion={['Aceptado', 'Realizado', 'Entregado'].includes(cot.estado) && cot.respondida_por && cot.respondida_at
-            ? { nombre: cot.respondida_por, rut: cot.respondida_rut, fecha: cot.respondida_at, firma: cot.respuesta_firma }
-            : null}
-        />
-      ).toBlob();
-      saveAs(blob, `Cotizacion_${formatFolio(cot.folio)}${cot.revision ? `_R${cot.revision}` : ''}_${nombreArchivo(cot.clientes.nombre_cliente)}.pdf`);
-    } catch (e) {
-      console.error(e);
-      toastError('Error al generar PDF');
-    } finally {
-      setGenPDF(null);
-    }
+      setCots(filas);
+      vendedoresService.mapa().then(setEquipo);
+      supabase.from('ordenes_trabajo').select('id, folio, cotizacion_id').not('cotizacion_id', 'is', null)
+        .then(({ data }) => setOtDe(Object.fromEntries((data || []).map(x => [x.cotizacion_id as string, { id: x.id as string, folio: x.folio as number }]))));
+    } catch (e) { toastError('No se pudo cargar: ' + (e instanceof Error ? e.message : '')); }
+    finally { setCargando(false); }
+  }, [toastError]);
+  useEffect(() => { cargar(); }, [cargar]);
+
+  const vencida = (c: CotizacionDoc) => c.estado === 'Enviada' && !!c.valida_hasta && c.valida_hasta < hoy;
+  const porSeguir = (c: CotizacionDoc) => c.estado === 'Enviada' && diasSinMovimiento({ seguimiento_at: c.seguimiento_at ?? null, enviada_at: c.enviada_at ?? null, created_at: c.created_at }) >= DIAS_SEGUIMIENTO;
+
+  const lista = useMemo(() => {
+    const q = busca.trim().toLowerCase();
+    return cots.filter(c =>
+      filtro === 'todas' ? true : filtro === 'abiertas' ? ['Borrador', 'Enviada'].includes(c.estado)
+        : filtro === 'vencidas' ? vencida(c) : filtro === 'seguir' ? porSeguir(c) : c.estado === filtro)
+      .filter(c => !quien || c.vendedor_id === quien)
+      .filter(c => !q || `${folioDe(c.folio)} ${c.folio} ${c.titulo} ${c.clientes?.nombre_cliente || ''} ${c.clientes?.empresa || ''} ${c.clientes?.rut || ''}`.toLowerCase().includes(q));
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [cots, filtro, busca, quien]);
+
+  const mesActual = hoy.slice(0, 7);
+  const aprobadasMes = cots.filter(c => c.estado === 'Aprobada' && (c.aceptada_at || '').slice(0, 7) === mesActual);
+  const decididas = cots.filter(c => ['Aprobada', 'Rechazada'].includes(c.estado));
+  const tarjetas: { f: Filtro; t: string; n: number; monto?: number; color: string }[] = [
+    { f: 'Borrador', t: 'Borradores', n: cots.filter(c => c.estado === 'Borrador').length, color: '#64748b' },
+    { f: 'Enviada', t: 'Esperando al cliente', n: cots.filter(c => c.estado === 'Enviada').length, monto: cots.filter(c => c.estado === 'Enviada').reduce((s, c) => s + montoClp(c), 0), color: '#2563eb' },
+    { f: 'seguir', t: 'Por seguir', n: cots.filter(porSeguir).length, color: '#ea580c' },
+    { f: 'vencidas', t: 'Vencidas', n: cots.filter(vencida).length, color: '#d97706' },
+    { f: 'Aprobada', t: 'Aprobadas este mes', n: aprobadasMes.length, monto: aprobadasMes.reduce((s, c) => s + montoClp(c), 0), color: '#16a34a' },
+  ];
+
+  const seguir = async (c: CotizacionDoc) => {
+    try {
+      await cotizacionesService.registrarSeguimiento(c.id, c.seguimientos || 0);
+      const tel = (c.clientes?.telefono || '').replace(/[^\d]/g, '');
+      if (tel) window.open(`https://wa.me/${tel}?text=${encodeURIComponent(`Hola ${c.clientes?.nombre_cliente || ''}, ¿pudiste revisar la cotización ${folioDe(c.folio)}: ${c.titulo}? Quedo atento a tus comentarios.`)}`, '_blank');
+      success('Seguimiento anotado');
+      cargar();
+    } catch (e) { toastError(e instanceof Error ? e.message : 'No se pudo'); }
   };
 
-  const toggleSort = (key: SortKey) => {
-    if (sortKey === key) setSortDir(d => d === 'asc' ? 'desc' : 'asc');
-    else { setSortKey(key); setSortDir('desc'); }
-  };
-
-  const filtered = useMemo(() => {
-    let list = [...cotizaciones];
-    if (filterEstado !== 'Todos') list = list.filter(c => c.estado === filterEstado);
-    if (soloPorSeguir) list = list.filter(necesitaSeguimiento);
-    if (search) {
-      const q = search.toLowerCase();
-      list = list.filter(c =>
-        formatFolio(c.folio).toLowerCase().includes(q) ||
-        (c.clientes?.nombre_cliente || '').toLowerCase().includes(q) ||
-        (c.clientes?.empresa || '').toLowerCase().includes(q) ||
-        (c.descripcion_general || '').toLowerCase().includes(q)
-      );
-    }
-    list.sort((a, b) => {
-      let va: string | number = 0, vb: string | number = 0;
-      if (sortKey === 'folio')   { va = a.folio; vb = b.folio; }
-      if (sortKey === 'cliente') { va = a.clientes?.nombre_cliente || ''; vb = b.clientes?.nombre_cliente || ''; }
-      // En pesos: una cotización de 150 UF no debe quedar "debajo" de una de $300.000.
-      if (sortKey === 'total')   { va = a.total_clp ?? a.total; vb = b.total_clp ?? b.total; }
-      if (sortKey === 'fecha')   { va = a.created_at; vb = b.created_at; }
-      if (sortKey === 'estado')  { va = a.estado; vb = b.estado; }
-      if (va < vb) return sortDir === 'asc' ? -1 : 1;
-      if (va > vb) return sortDir === 'asc' ? 1 : -1;
-      return 0;
-    });
-    return list;
-  }, [cotizaciones, filterEstado, search, sortKey, sortDir, soloPorSeguir]);
-
-  const porSeguir = useMemo(() => cotizaciones.filter(necesitaSeguimiento).length, [cotizaciones]);
-
-  // Resumen rápido
-  const resumen = useMemo(() => ({
-    total: filtered.length,
-    montoTotal: filtered.reduce((a, c) => a + (c.total_clp ?? c.total ?? 0), 0),
-    aceptadas: filtered.filter(c => ['Aceptado', 'Realizado', 'Entregado'].includes(c.estado)).length,
-  }), [filtered]);
-
-  const SortIcon = ({ k }: { k: SortKey }) => sortKey === k
-    ? (sortDir === 'asc' ? <ChevronUp size={11} /> : <ChevronDown size={11} />)
-    : <ArrowUpDown size={10} style={{ opacity: 0.3 }} />;
-
-  const thStyle: React.CSSProperties = {
-    fontFamily: 'var(--font-display)', fontWeight: 700, fontSize: '0.74rem', color: 'var(--muted)',
-    padding: '0.5rem 0.875rem', textAlign: 'left', whiteSpace: 'nowrap',
-    cursor: 'pointer', userSelect: 'none', borderBottom: '1px solid var(--border2)',
-    background: 'var(--bg3)',
+  const clonar = async (c: CotizacionDoc) => {
+    try { const id = await cotizadorService.clonar(c.id); router.push(`/cotizador?edit=${id}`); }
+    catch (e) { toastError(e instanceof Error ? e.message : 'No se pudo clonar'); }
   };
 
   return (
     <div className="anim-in">
-      {enviar && (
-        <EnviarCotizacionModal cot={enviar} empresaNombre={empresaNombreDe(enviar)} vendedor={vendedorDe(enviar)} onClose={() => setEnviar(null)} onCambio={load} />
-      )}
-      {rechazo && (
-        <MotivoPerdidaModal folio={formatFolio(rechazo.folio)} onConfirm={confirmarRechazo} onClose={() => setRechazo(null)} />
-      )}
-      {revisiones && (
-        <div className="modal-overlay" onClick={e => { if (e.target === e.currentTarget) setRevisiones(null); }}>
-          <div className="modal-box" style={{ maxWidth: 480 }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '1rem 1.25rem', borderBottom: '1px solid var(--border2)' }}>
-              <p className="section-label" style={{ margin: 0 }}>Revisiones de {formatFolio(revisiones.cot.folio)}</p>
-              <button onClick={() => setRevisiones(null)} aria-label="Cerrar" style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--muted)' }}><X size={16} /></button>
-            </div>
-            <div style={{ padding: '0.5rem 1.25rem 1rem' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '0.6rem 0', borderBottom: '1px solid var(--border2)' }}>
-                <span style={{ flex: 1, fontSize: '0.86rem', color: 'var(--text)' }}><b>Revisión {revisiones.cot.revision}</b> · vigente</span>
-                <span style={{ fontSize: '0.84rem' }}>{formatMoneda(revisiones.cot.total, (revisiones.cot.moneda as Moneda) || 'CLP')}</span>
-              </div>
-              {revisiones.lista.length === 0 && <p style={{ color: 'var(--muted)', fontSize: '0.84rem', padding: '0.8rem 0' }}>No hay versiones anteriores guardadas.</p>}
-              {revisiones.lista.map(r => (
-                <div key={r.revision} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '0.6rem 0', borderBottom: '1px solid var(--border2)' }}>
-                  <span style={{ flex: 1, fontSize: '0.84rem', color: 'var(--text)' }}>
-                    Revisión {r.revision}
-                    <span style={{ display: 'block', fontSize: '0.72rem', color: 'var(--muted)' }}>Reemplazada el {formatDate(r.created_at)}{r.creado_por && vendedores[r.creado_por] ? ` por ${vendedores[r.creado_por].nombre}` : ''}</span>
-                  </span>
-                  <span style={{ fontSize: '0.84rem' }}>{formatMoneda(Number(r.total || 0), (r.datos.moneda as Moneda) || 'CLP')}</span>
-                  <button className="btn btn-ghost btn-sm" disabled={genPDF === `${revisiones.cot.id}-r${r.revision}`} title="Descargar el PDF de esta revisión"
-                    onClick={() => handleDownloadPDF({ ...r.datos, id: `${revisiones.cot.id}-r${r.revision}`, clientes: revisiones.cot.clientes, revision: r.revision })}>
-                    {genPDF === `${revisiones.cot.id}-r${r.revision}` ? <Loader2 size={12} className="iv-spin" /> : <Download size={12} />} PDF
-                  </button>
-                </div>
-              ))}
-              <p style={{ fontSize: '0.72rem', color: 'var(--muted)', marginTop: 8 }}>Se guarda una revisión cada vez que cambias una cotización que el cliente ya había recibido.</p>
-            </div>
-          </div>
-        </div>
-      )}
-      {/* Header */}
-      <PageHeader
-        eyebrow="Registro completo"
-        title="Historial de cotizaciones"
-        actions={puedeCrear ? <>
-          <button onClick={() => router.push('/cotizador')} className="btn btn-primary">
-            <FileText size={13} /> Nueva cotización
-          </button>
-        </> : null}
-      />
+      <PageHeader eyebrow="Comercial" title="Cotizaciones"
+        subtitle={`${cots.length} en total · tasa de cierre ${decididas.length ? Math.round((cots.filter(c => c.estado === 'Aprobada').length / decididas.length) * 100) : 0} %`}
+        actions={<div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+          {puede('cotizaciones.aprobar') && <Link href="/cotizador/plantillas" className="btn btn-ghost"><FileText size={14} /> Plantillas</Link>}
+          {puede('biblioteca.ver') && <Link href="/biblioteca" className="btn btn-ghost"><Layers size={14} /> Recetas y catálogo</Link>}
+          {puede('cotizaciones.aprobar') && <Link href="/cotizador/ajustes" className="btn btn-ghost"><Settings2 size={14} /> Ajustes</Link>}
+          {puede('cotizaciones.crear') && <Link href="/cotizador" className="btn btn-primary"><Plus size={14} /> Nueva cotización</Link>}
+        </div>} />
 
-      {/* KPI strip */}
-      <div className="historial-kpis" style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '2px', marginBottom: '2px' }}>
-        {[
-          { label: 'Cotizaciones', value: resumen.total, color: 'var(--y)' },
-          { label: 'Monto filtrado', value: formatCLP(resumen.montoTotal), color: 'var(--success)' },
-          { label: 'Aceptadas', value: resumen.aceptadas, color: 'var(--info)' },
-        ].map(k => (
-          <div key={k.label} style={{ background: 'var(--bg2)', border: '1px solid var(--border2)', padding: '0.875rem 1rem', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-            <span className="label-muted" style={{ fontSize: '0.55rem' }}>{k.label}</span>
-            <span style={{ fontFamily: 'var(--font-display)', fontWeight: 900, fontSize: '1rem', color: k.color }}>{k.value}</span>
-          </div>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: 8, marginBottom: 12 }}>
+        {tarjetas.map(t => (
+          <button key={t.t} className="kpi-card" onClick={() => setFiltro(filtro === t.f ? 'abiertas' : t.f)}
+            style={{ cursor: 'pointer', textAlign: 'left', border: filtro === t.f ? `1px solid ${t.color}` : undefined }}>
+            <p className="label-muted">{t.t}</p>
+            <p className="kpi-value" style={{ color: t.color }}>{t.n}</p>
+            {t.monto !== undefined && <p style={{ fontSize: '0.78rem', color: 'var(--muted)', margin: 0 }}>{formatMonto(t.monto, 'CLP')}</p>}
+          </button>
         ))}
       </div>
 
-      {/* Search & filter */}
-      <div style={{ background: 'var(--bg2)', border: '1px solid var(--border2)', borderTop: '2px solid var(--y-brand)', padding: '0.875rem 1rem', display: 'flex', gap: '0.5rem', flexWrap: 'wrap', alignItems: 'center', marginBottom: '2px' }}>
-        <div style={{ position: 'relative', flex: 1, minWidth: 200 }}>
-          <Search size={13} style={{ position: 'absolute', left: '0.75rem', top: '50%', transform: 'translateY(-50%)', color: 'var(--muted)' }} />
-          <input
-            className="input input-sm"
-            value={search}
-            onChange={e => setSearch(e.target.value)}
-            placeholder="Buscar por folio, cliente, descripción..."
-            style={{ paddingLeft: '2.25rem' }}
-          />
-          {search && (
-            <button onClick={() => setSearch('')} style={{ position: 'absolute', right: '0.5rem', top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', cursor: 'pointer', color: 'var(--muted)' }}>
-              <X size={12} />
-            </button>
+      <div className="panel-y">
+        <div style={{ padding: '1rem', borderBottom: '1px solid var(--border2)', display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+          <div style={{ position: 'relative', flex: 1, minWidth: 200 }}>
+            <Search size={14} style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', color: 'var(--muted)' }} />
+            <input className="input" value={busca} onChange={e => setBusca(e.target.value)} placeholder="Buscar N°, título, cliente o RUT…" style={{ paddingLeft: '2.2rem' }} />
+          </div>
+          <select className="input" style={{ maxWidth: 190 }} value={filtro} onChange={e => setFiltro(e.target.value as Filtro)}>
+            <option value="abiertas">Abiertas (borrador y enviadas)</option><option value="todas">Todas</option>
+            <option value="seguir">Por seguir</option><option value="vencidas">Vencidas</option>
+            {ESTADOS_COT.map(e => <option key={e.clave} value={e.clave}>{e.clave}</option>)}
+          </select>
+          <select className="input" style={{ maxWidth: 190 }} value={quien} onChange={e => setQuien(e.target.value)}>
+            <option value="">Todos los que cotizan</option>
+            {Object.values(equipo).map(v => <option key={v.id} value={v.id}>{v.nombre}</option>)}
+          </select>
+        </div>
+        {cargando ? <div style={{ padding: '1.5rem' }}><div className="skeleton" style={{ height: 160 }} /></div>
+          : lista.length === 0 ? <p style={{ padding: '2.5rem 1rem', textAlign: 'center', color: 'var(--muted)' }}>No hay cotizaciones en esta vista.</p>
+          : (
+            <div style={{ overflowX: 'auto' }}>
+              <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 760 }}>
+                <thead><tr>
+                  {['N°', 'Cotización', 'Estado', 'Total', 'Fecha', 'Cotiza', ''].map(h => (
+                    <th key={h} style={{ padding: '0.6rem 0.9rem', textAlign: h === 'Total' ? 'right' : 'left', fontSize: '0.7rem', color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: 0.5 }}>{h}</th>
+                  ))}
+                </tr></thead>
+                <tbody>
+                  {lista.map(c => (
+                    <tr key={c.id} onClick={() => router.push(`/cotizador?edit=${c.id}`)} style={{ cursor: 'pointer', borderTop: '1px solid var(--border2)' }}>
+                      <td style={{ padding: '0.65rem 0.9rem', fontWeight: 700, color: 'var(--y)', whiteSpace: 'nowrap' }}>{folioDe(c.folio)}{c.revision > 0 && <span style={{ display: 'block', fontSize: '0.68rem', color: 'var(--muted)', fontWeight: 400 }}>Rev. {c.revision}</span>}</td>
+                      <td style={{ padding: '0.65rem 0.9rem', maxWidth: 380 }}>
+                        <span style={{ display: 'block', fontWeight: 600, color: 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{c.titulo}</span>
+                        <span style={{ fontSize: '0.76rem', color: 'var(--muted)' }}>{c.clientes?.nombre_cliente || 'Sin cliente'}{c.clientes?.empresa ? ` · ${c.clientes.empresa}` : ''}</span>
+                        {otDe[c.id] && <Link href={`/ordenes/${otDe[c.id].id}`} onClick={e => e.stopPropagation()} style={{ marginLeft: 6, fontSize: '0.72rem' }}>{folioOT(otDe[c.id].folio)}</Link>}
+                      </td>
+                      <td style={{ padding: '0.65rem 0.9rem' }}>
+                        <EstadoPill estado={c.estado} vencida={vencida(c)} />
+                        {c.estado === 'Enviada' && c.vista_at && <span style={{ display: 'block', fontSize: '0.68rem', color: 'var(--info)' }}>La abrió el {formatDate(c.vista_at)}</span>}
+                        {porSeguir(c) && <span style={{ display: 'block', fontSize: '0.68rem', color: '#ea580c' }}>Sin respuesta hace {diasSinMovimiento({ seguimiento_at: c.seguimiento_at ?? null, enviada_at: c.enviada_at ?? null, created_at: c.created_at })} días</span>}
+                        {c.estado === 'Rechazada' && c.motivo_perdida && <span style={{ display: 'block', fontSize: '0.68rem', color: 'var(--muted)' }}>{c.motivo_perdida}</span>}
+                      </td>
+                      <td style={{ padding: '0.65rem 0.9rem', textAlign: 'right', fontWeight: 700, whiteSpace: 'nowrap', fontVariantNumeric: 'tabular-nums' }}>{formatMonto(c.total, c.moneda)}</td>
+                      <td style={{ padding: '0.65rem 0.9rem', fontSize: '0.8rem', color: 'var(--muted)', whiteSpace: 'nowrap' }}>{formatDate(c.fecha_emision || c.created_at)}</td>
+                      <td style={{ padding: '0.65rem 0.9rem', fontSize: '0.8rem', color: 'var(--muted)' }}>{c.vendedor_id ? equipo[c.vendedor_id]?.nombre?.split(' ')[0] || '—' : '—'}</td>
+                      <td style={{ padding: '0.65rem 0.9rem' }} onClick={e => e.stopPropagation()}>
+                        <div style={{ display: 'flex', gap: 4, justifyContent: 'flex-end' }}>
+                          {porSeguir(c) && puede('cotizaciones.crear') && <button className="btn btn-ghost btn-xs" title="Hacer seguimiento" onClick={() => seguir(c)} style={{ color: '#ea580c' }}><BellRing size={12} /></button>}
+                          {puede('cotizaciones.crear') && <button className="btn btn-ghost btn-xs" title="Clonar" onClick={() => clonar(c)}><Copy size={12} /></button>}
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           )}
+        <div style={{ padding: '0.75rem 1rem', borderTop: '1px solid var(--border2)', color: 'var(--muted)', fontSize: '0.78rem' }}>
+          {lista.length} cotizaciones · {formatMonto(lista.reduce((s, c) => s + montoClp(c), 0), 'CLP')}
         </div>
-
-        <button onClick={() => setShowFilters(f => !f)} style={{ background: showFilters ? 'var(--y-soft)' : 'var(--bg3)', border: `1px solid ${showFilters ? 'var(--border)' : 'var(--border2)'}`, cursor: 'pointer', padding: '0 0.75rem', height: 32, display: 'inline-flex', alignItems: 'center', gap: '0.4rem', fontFamily: 'var(--font-display)', fontWeight: 700, fontSize: '0.78rem', color: showFilters ? 'var(--y)' : 'var(--muted)' }}>
-          <Filter size={12} /> Filtros
-        </button>
-
-        <button onClick={() => setSoloPorSeguir(v => !v)} title={`Pendientes sin movimiento hace 3 días o más`}
-          style={{ background: soloPorSeguir ? 'rgba(251,146,60,0.14)' : 'var(--bg3)', border: `1px solid ${soloPorSeguir ? 'var(--orange)' : 'var(--border2)'}`, cursor: 'pointer', padding: '0 0.75rem', height: 32, display: 'inline-flex', alignItems: 'center', gap: '0.4rem', fontFamily: 'var(--font-display)', fontWeight: 700, fontSize: '0.78rem', color: porSeguir > 0 ? 'var(--orange)' : 'var(--muted)' }}>
-          <BellRing size={12} /> Por seguir ({porSeguir})
-        </button>
-
-        {filterEstado !== 'Todos' && (
-          <button onClick={() => setFilterEstado('Todos')} style={{ background: 'rgba(248,113,113,0.1)', border: '1px solid rgba(248,113,113,0.2)', cursor: 'pointer', padding: '0 0.75rem', height: 32, display: 'inline-flex', alignItems: 'center', gap: '0.4rem', fontFamily: 'var(--font-display)', fontWeight: 700, fontSize: '0.78rem', color: 'var(--danger)' }}>
-            <X size={11} /> {filterEstado}
-          </button>
-        )}
       </div>
-
-      {/* Estado filter */}
-      {showFilters && (
-        <div style={{ background: 'var(--bg3)', border: '1px solid var(--border2)', borderTop: 'none', padding: '0.75rem 1rem', display: 'flex', gap: '0.4rem', flexWrap: 'wrap', marginBottom: '2px' }}>
-          {(['Todos', ...ESTADO_OPTIONS] as const).map(est => {
-            const active = filterEstado === est;
-            const ec = est !== 'Todos' ? ESTADO_COLORS[est as EstadoCotizacion] : null;
-            return (
-              <button
-                key={est}
-                onClick={() => setFilterEstado(est as EstadoCotizacion | 'Todos')}
-                style={{
-                  background: active ? (ec ? ec.bg : 'var(--y-soft)') : 'transparent',
-                  border: `1px solid ${active ? (ec ? ec.color : 'var(--y)') : 'var(--border2)'}`,
-                  color: active ? (ec ? ec.color : 'var(--y)') : 'var(--muted)',
-                  cursor: 'pointer', padding: '0.2rem 0.75rem',
-                  fontFamily: 'var(--font-display)', fontWeight: 700, fontSize: '0.78rem',
-                }}
-              >
-                {est}
-              </button>
-            );
-          })}
-        </div>
-      )}
-
-      {/* Tabla */}
-      <div className="historial-table-wrap" style={{ background: 'var(--bg2)', border: '1px solid var(--border2)' }}>
-        {loading ? (
-          <div style={{ padding: '2rem', display: 'flex', flexDirection: 'column', gap: 2 }}>
-            {Array.from({ length: 8 }).map((_, i) => (
-              <div key={i} className="skeleton" style={{ height: 52 }} />
-            ))}
-          </div>
-        ) : filtered.length === 0 ? (
-          <div style={{ textAlign: 'center', padding: '4rem', color: 'var(--muted)' }}>
-            <History size={40} style={{ margin: '0 auto 1rem', opacity: 0.2, display: 'block' }} />
-            <p style={{ fontSize: '0.875rem' }}>Sin cotizaciones{search || filterEstado !== 'Todos' ? ' con estos filtros' : ' registradas'}</p>
-          </div>
-        ) : (
-          <table className="iv-table" style={{ tableLayout: 'fixed' }}>
-            <thead>
-              <tr>
-                <th style={{ ...thStyle, width: 90 }} onClick={() => toggleSort('folio')}>
-                  <span style={{ display: 'flex', alignItems: 'center', gap: '0.3rem' }}>Folio <SortIcon k="folio" /></span>
-                </th>
-                <th style={{ ...thStyle }} onClick={() => toggleSort('cliente')}>
-                  <span style={{ display: 'flex', alignItems: 'center', gap: '0.3rem' }}>Cliente <SortIcon k="cliente" /></span>
-                </th>
-                <th className="col-descripcion" style={{ ...thStyle, width: 200 }}>Descripción</th>
-                <th style={{ ...thStyle, width: 100 }} onClick={() => toggleSort('fecha')}>
-                  <span style={{ display: 'flex', alignItems: 'center', gap: '0.3rem' }}>Fecha <SortIcon k="fecha" /></span>
-                </th>
-                <th style={{ ...thStyle, width: 130 }} onClick={() => toggleSort('estado')}>
-                  <span style={{ display: 'flex', alignItems: 'center', gap: '0.3rem' }}>Estado <SortIcon k="estado" /></span>
-                </th>
-                <th style={{ ...thStyle, width: 120, textAlign: 'right' }} onClick={() => toggleSort('total')}>
-                  <span style={{ display: 'flex', alignItems: 'center', gap: '0.3rem', justifyContent: 'flex-end' }}>Total <SortIcon k="total" /></span>
-                </th>
-                <th style={{ ...thStyle, width: 160, textAlign: 'center' }}>Acciones</th>
-              </tr>
-            </thead>
-            <tbody>
-              {filtered.map(cot => {
-                const ec = ESTADO_COLORS[cot.estado];
-                return (
-                  <tr key={cot.id} style={{ cursor: 'pointer' }} onClick={() => router.push(`/cotizador?edit=${cot.id}`)} title="Abrir cotización">
-                    <td>
-                      <span style={{ fontFamily: 'var(--font-display)', fontWeight: 900, fontSize: '0.85rem', color: 'var(--y)' }}>
-                        {formatFolio(cot.folio)}
-                      </span>
-                    </td>
-                    <td>
-                      <p style={{ fontWeight: 500, fontSize: '0.875rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                        {cot.clientes?.nombre_cliente || '—'}
-                      </p>
-                      {cot.clientes?.empresa && (
-                        <p style={{ fontSize: '0.72rem', color: 'var(--muted)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                          {cot.clientes.empresa}
-                        </p>
-                      )}
-                      {vendedorDe(cot) && (
-                        <p style={{ fontSize: '0.7rem', color: 'var(--faint)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title="Quién cotizó">
-                          por {vendedorDe(cot)!.nombre}
-                        </p>
-                      )}
-                    </td>
-                    <td className="col-descripcion" style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: '0.8rem', color: 'var(--muted)' }}>
-                      {cot.descripcion_general || '—'}
-                    </td>
-                    <td style={{ fontSize: '0.8rem', color: 'var(--muted)', whiteSpace: 'nowrap' }}>
-                      {formatDate(cot.created_at)}
-                    </td>
-                    <td>
-                      <div onClick={e => e.stopPropagation()} style={{ display: 'inline-flex', alignItems: 'center', gap: '0.4rem', background: ec.bg, border: `1px solid ${ec.color}55`, borderRadius: 'var(--r-sm)', padding: '0.2rem 0.5rem' }}>
-                        <span style={{ width: 7, height: 7, borderRadius: '50%', background: ec.color, flexShrink: 0 }} />
-                        <select
-                          value={cot.estado}
-                          disabled={!puedeAprobar}
-                          title={puedeAprobar ? undefined : 'Tu rol no puede cambiar estados'}
-                          onChange={e => handleEstado(cot, e.target.value as EstadoCotizacion)}
-                          onClick={e => e.stopPropagation()}
-                          style={{
-                            background: 'transparent', border: 'none', color: ec.color, cursor: 'pointer',
-                            fontWeight: 600, fontSize: '0.72rem', outline: 'none', appearance: 'none',
-                            paddingRight: '0.15rem',
-                          }}
-                        >
-                          {ESTADO_OPTIONS.map(e => (
-                            <option key={e} value={e} style={{ background: 'var(--bg2)', color: 'var(--text)' }}>{e}</option>
-                          ))}
-                        </select>
-                      </div>
-                      {necesitaSeguimiento(cot) && (
-                        <p style={{ fontSize: '0.64rem', color: 'var(--orange)', marginTop: 3, display: 'flex', alignItems: 'center', gap: 3 }} title="Sin respuesta: haz seguimiento">
-                          <BellRing size={10} /> Seguir · {diasSinMovimiento(cot)} días
-                        </p>
-                      )}
-                      {cot.estado === 'Pendiente' && cot.vista_at && (
-                        <p style={{ fontSize: '0.64rem', color: 'var(--info)', marginTop: 2, display: 'flex', alignItems: 'center', gap: 3 }} title={`Abierta por el cliente el ${formatDate(cot.vista_at)}`}>
-                          <Eye size={10} /> Vista {formatDate(cot.vista_at)}
-                        </p>
-                      )}
-                      {cot.respondida_at && cot.respondida_por && (
-                        <p style={{ fontSize: '0.64rem', color: cot.estado === 'Rechazado' ? 'var(--danger)' : 'var(--success)', marginTop: 2, display: 'flex', alignItems: 'center', gap: 3 }} title={cot.respuesta_comentario || ''}>
-                          <CheckCircle2 size={10} /> Online: {cot.respondida_por}
-                        </p>
-                      )}
-                      {otDe[cot.id] && (
-                        <p style={{ fontSize: '0.64rem', marginTop: 2 }}>
-                          <a href={`/ordenes/${otDe[cot.id].id}`} onClick={e => { e.stopPropagation(); e.preventDefault(); router.push(`/ordenes/${otDe[cot.id].id}`); }} style={{ color: 'var(--y)' }}>{folioOT(otDe[cot.id].folio)}</a>
-                        </p>
-                      )}
-                      {(cot.revision || 0) > 0 && (
-                        <p style={{ fontSize: '0.64rem', marginTop: 2 }}>
-                          <button onClick={e => { e.stopPropagation(); verRevisiones(cot); }} title="Versiones anteriores que recibió el cliente"
-                            style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', color: 'var(--info)', fontSize: '0.64rem', textDecoration: 'underline' }}>
-                            Revisión {cot.revision}
-                          </button>
-                        </p>
-                      )}
-                      {cot.estado === 'Rechazado' && cot.motivo_perdida && (
-                        <p style={{ fontSize: '0.64rem', color: 'var(--muted)', marginTop: 2 }} title={cot.motivo_perdida_nota || ''}>{cot.motivo_perdida}</p>
-                      )}
-                    </td>
-                    <td style={{ textAlign: 'right', fontFamily: 'var(--font-display)', fontWeight: 700, fontSize: '0.9rem', whiteSpace: 'nowrap' }}>
-                      {formatMoneda(cot.total, (cot.moneda as Moneda) || 'CLP')}
-                    </td>
-                    <td>
-                      <div onClick={e => e.stopPropagation()} style={{ display: 'flex', gap: '0.3rem', justifyContent: 'center' }}>
-                        {puedeCrear && <button
-                          onClick={() => router.push(`/cotizador?edit=${cot.id}`)}
-                          title="Editar"
-                          style={{ background: 'none', border: '1px solid var(--border2)', cursor: 'pointer', padding: '0.25rem 0.4rem', color: 'var(--muted)' }}
-                        >
-                          <Edit3 size={12} />
-                        </button>}
-                        {puedeCrear && <button
-                          onClick={() => router.push(`/cotizador?clone=${cot.id}`)}
-                          title="Clonar"
-                          style={{ background: 'none', border: '1px solid var(--border2)', cursor: 'pointer', padding: '0.25rem 0.4rem', color: 'var(--muted)' }}
-                        >
-                          <Copy size={12} />
-                        </button>}
-                        {puedeCrear && <button
-                          onClick={() => setEnviar(cot)}
-                          title={necesitaSeguimiento(cot) ? 'Hacer seguimiento' : 'Enviar al cliente'}
-                          style={{ background: 'none', border: `1px solid ${necesitaSeguimiento(cot) ? 'var(--orange)' : 'var(--border2)'}`, cursor: 'pointer', padding: '0.25rem 0.4rem', color: necesitaSeguimiento(cot) ? 'var(--orange)' : 'var(--y)' }}
-                        >
-                          <Send size={12} />
-                        </button>}
-                        <button
-                          onClick={() => handleDownloadPDF(cot)}
-                          title="Descargar PDF"
-                          disabled={genPDF === cot.id}
-                          style={{ background: 'none', border: '1px solid rgba(74,222,128,0.2)', cursor: 'pointer', padding: '0.25rem 0.4rem', color: 'var(--success)' }}
-                        >
-                          {genPDF === cot.id ? <Loader2 size={12} className="iv-spin" /> : <Download size={12} />}
-                        </button>
-                        {puedeAnular && <button
-                          onClick={() => handleDelete(cot.id, cot.folio)}
-                          title="Eliminar"
-                          style={{ background: 'none', border: '1px solid rgba(248,113,113,0.2)', cursor: 'pointer', padding: '0.25rem 0.4rem', color: 'var(--danger)' }}
-                        >
-                          <Trash2 size={12} />
-                        </button>}
-                      </div>
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        )}
-      </div>
-
-      {!loading && filtered.length > 0 && (
-        <div style={{ padding: '0.6rem 1rem', background: 'var(--bg3)', border: '1px solid var(--border2)', borderTop: 'none', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <span style={{ fontSize: '0.75rem', color: 'var(--muted)' }}>{filtered.length} cotización{filtered.length !== 1 ? 'es' : ''}</span>
-          <span style={{ fontFamily: 'var(--font-display)', fontWeight: 700, fontSize: '0.85rem', color: 'var(--y)' }}>{formatCLP(resumen.montoTotal)}</span>
-        </div>
-      )}
     </div>
   );
-  
 }

@@ -6,7 +6,7 @@ import { supabase } from '@/lib/supabase';
 import { useToast } from '@/hooks/useToast';
 import { INNVOLT_INFO } from '@/types';
 import IAEstadoCard from '@/components/IAEstadoCard';
-import PlantillasCard from '@/components/PlantillasCard';
+import Link from 'next/link';
 import PageHeader from '@/components/PageHeader';
 
 interface Config {
@@ -196,8 +196,14 @@ export default function ConfiguracionPage() {
           </div>
         </div>
 
-        {/* Plantillas por tipo de servicio */}
-        <PlantillasCard />
+        {/* Plantillas y ajustes de cotización: ahora viven en Comercial (cotizador TecApp). */}
+        <div className="panel-y" style={{ padding: '1rem 1.25rem', display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'center' }}>
+          <span style={{ flex: 1, minWidth: 220, fontSize: '0.86rem', color: 'var(--text)' }}>
+            Las plantillas de cotización (textos, presentación) y los ajustes (validez, mensajes, próximo N°) se manejan desde Cotizaciones.
+          </span>
+          <Link href="/cotizador/plantillas" className="btn btn-ghost btn-sm">Plantillas</Link>
+          <Link href="/cotizador/ajustes" className="btn btn-ghost btn-sm">Ajustes de cotización</Link>
+        </div>
 
         {/* Inteligencia artificial: proveedores y prueba */}
         <IAEstadoCard />

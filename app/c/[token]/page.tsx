@@ -13,7 +13,9 @@ import { useParams } from 'next/navigation';
 import { CheckCircle2, Download, XCircle, Loader2, Clock, AlertTriangle, MessageCircle, Mail, ChevronDown, ChevronUp, FileText } from 'lucide-react';
 import type { CotizacionPublica } from '@/types/publico';
 import { MOTIVOS_PERDIDA } from '@/types';
-import { calcularTotals, formatMoneda, formatDate, formatFolio, nombreArchivo, boldPorLinea } from '@/utils';
+import { formatMoneda, formatDate, formatFolio, boldPorLinea } from '@/utils';
+import { calcular } from '@/lib/cotizador/calculo';
+import type { CotizacionDoc } from '@/lib/cotizador/tipos';
 import FirmaPad from '@/components/FirmaPad';
 
 const C = {
@@ -74,41 +76,40 @@ export default function CotizacionClientePage() {
   }, [token]);
   useEffect(() => { cargar(); }, [cargar]);
 
-  // Totales con el mismo motor del ERP; cifras redondeadas que cuadran como en el PDF.
+  // La cotización como la arma el ERP (con los precios congelados) y sus cuentas.
+  const doc: CotizacionDoc | null = useMemo(() => cot ? {
+    id: '', folio: cot.folio, estado: cot.estado, revision: cot.revision || 0, titulo: cot.titulo, cliente_id: null,
+    items: cot.items, partidas: cot.partidas, moneda: cot.moneda, valor_uf: cot.valor_uf, fecha_valor_uf: cot.fecha_valor_uf,
+    que_ve_cliente: cot.que_ve_cliente, titulo_valorizacion: cot.titulo_valorizacion, descripcion_general: cot.descripcion_general,
+    aclaraciones: cot.aclaraciones, secciones: cot.secciones, fecha_emision: cot.fecha_emision, valida_hasta: cot.vence,
+    subtotal: 0, iva: 0, total: 0, created_at: cot.created_at, incluir_fotos: cot.fotos.length > 0,
+  } : null, [cot]);
   const t = useMemo(() => {
-    if (!cot) return null;
-    const tot = calcularTotals(cot.items, cot.descuento_global);
-    const red = (v: number) => (cot.moneda === 'UF' ? Math.round(v * 100) / 100 : Math.round(v));
-    const subtotal = red(cot.items.reduce((s, i) => s + (i.precio || 0) * (i.cantidad || 0), 0));
-    const neto = red(tot.netoGeneral); const total = red(tot.total);
-    return { tot, subtotal, neto, total, descuento: Math.max(0, red(subtotal - neto)), iva: red(total - neto) };
-  }, [cot]);
+    if (!doc) return null;
+    const r = calcular(doc.items, doc.partidas, doc.moneda, doc.valor_uf);
+    return { r, subtotal: r.totales.subtotal, neto: r.totales.neto, total: r.totales.total, descuento: r.totales.descuento, iva: r.totales.iva };
+  }, [doc]);
 
   const fmt = (v: number) => formatMoneda(v, cot?.moneda || 'CLP');
 
   const descargarPDF = async () => {
-    if (!cot || !t) return;
+    if (!cot || !doc) return;
     setGenPDF(true);
     try {
-      const [{ pdf }, { default: PresupuestoPDF }, { saveAs }] = await Promise.all([
-        import('@react-pdf/renderer'), import('@/components/pdf/PresupuestoPDF'), import('file-saver'),
+      const [{ pdf }, { default: CotizacionPDF, nombrePDF }, { saveAs }] = await Promise.all([
+        import('@react-pdf/renderer'), import('@/components/pdf/CotizacionPDF'), import('file-saver'),
       ]);
       const cliente = { id: '', estado: 'activo' as const, ...cot.cliente };
       const blob = await pdf(
-        <PresupuestoPDF
-          cliente={cliente} items={cot.items} totals={t.tot} descuentoPorcentajeMO={cot.descuento_global}
-          folio={formatFolio(cot.folio)} descripcionGeneral={cot.descripcion_general}
-          garantia={cot.condiciones_servicio} condicionesComerciales={cot.condiciones_comerciales}
-          ocultarSuministros={cot.ocultar_suministros} empresa={cot.empresa}
-          moneda={cot.moneda} valorUF={cot.valor_uf || 0} partidas={cot.partidas}
-          mostrarDetalle={cot.mostrar_detalle} fechaEmision={cot.created_at} fotos={cot.fotos} vendedor={cot.vendedor}
-          portada={!!cot.incluir_portada} revision={cot.revision || 0}
-          aceptacion={['Aceptado', 'Realizado', 'Entregado'].includes(cot.estado) && cot.respondida_por && cot.respondida_at
+        <CotizacionPDF doc={doc} cliente={cliente} empresa={cot.empresa} vendedor={cot.vendedor}
+          sucursal={cot.sucursal} contacto={cot.contacto} importante={cot.importante} correoAceptar={cot.correo_aceptar}
+          enlace={typeof window !== 'undefined' ? window.location.href.split('?')[0] : null}
+          marca={cot.estado === 'Anulada' ? 'ANULADA' : null} fotos={cot.fotos}
+          aceptacion={cot.estado === 'Aprobada' && cot.respondida_por && cot.respondida_at
             ? { nombre: cot.respondida_por, rut: cot.respondida_rut, fecha: cot.respondida_at, firma: cot.respuesta_firma }
-            : null}
-        />,
+            : null} />,
       ).toBlob();
-      saveAs(blob, `Cotizacion_${formatFolio(cot.folio)}_${nombreArchivo(cot.cliente.nombre_cliente)}.pdf`);
+      saveAs(blob, nombrePDF(doc, cot.cliente.nombre_cliente));
     } catch { alert('No se pudo generar el PDF. Intenta nuevamente.'); }
     finally { setGenPDF(false); }
   };
@@ -151,8 +152,8 @@ export default function CotizacionClientePage() {
   }
 
   const logo = cot.empresa.logo_url || (esInnVolt(cot.empresa.nombre) ? LOGO_INNVOLT : '');
-  const pendiente = cot.estado === 'Pendiente';
-  const aceptada = ['Aceptado', 'Realizado', 'Entregado'].includes(cot.estado);
+  const pendiente = cot.estado === 'Enviada' && cot.responde_en_linea;
+  const aceptada = cot.estado === 'Aprobada';
   // WhatsApp de quien cotizó (si tiene teléfono); si no, el de la empresa.
   const telEmpresa = (cot.vendedor?.telefono || cot.empresa.telefono || '').replace(/\D/g, '');
   const wa = telEmpresa ? `https://wa.me/${telEmpresa.startsWith('56') ? telEmpresa : '56' + telEmpresa}?text=${encodeURIComponent(`Hola, tengo una consulta sobre la cotización ${formatFolio(cot.folio)}.`)}` : '';
@@ -176,7 +177,7 @@ export default function CotizacionClientePage() {
           </div>
           <div style={{ textAlign: 'right', fontSize: 12, color: C.muted }}>
             <div style={{ fontWeight: 800, color: C.ink, fontSize: 15 }}>Cotización {formatFolio(cot.folio)}</div>
-            <div>Emitida {formatDate(cot.created_at)}</div>
+            <div>Emitida {formatDate(cot.fecha_emision || cot.created_at)}{cot.revision ? ` · Revisión ${cot.revision}` : ''}</div>
           </div>
         </header>
 
@@ -189,8 +190,12 @@ export default function CotizacionClientePage() {
           <div style={{ background: C.okBg, border: `1px solid ${C.ok}33`, color: C.ok, borderRadius: 12, padding: 14, marginBottom: 12, display: 'flex', gap: 8, alignItems: 'center' }}>
             <CheckCircle2 size={18} /> <span style={{ fontWeight: 600 }}>Cotización aceptada{cot.respondida_por ? ` por ${cot.respondida_por}` : ''}{cot.respondida_at ? ` el ${formatDate(cot.respondida_at)}` : ''}.</span>
           </div>
-        ) : cot.estado === 'Rechazado' ? (
+        ) : cot.estado === 'Rechazada' ? (
           <div style={{ background: '#f4f4f4', border: `1px solid ${C.line}`, color: C.muted, borderRadius: 12, padding: 14, marginBottom: 12 }}>Esta cotización fue marcada como no aceptada.</div>
+        ) : cot.estado === 'Anulada' ? (
+          <div style={{ background: '#f4f4f4', border: `1px solid ${C.line}`, color: C.muted, borderRadius: 12, padding: 14, marginBottom: 12 }}>Esta cotización fue anulada: ya no corresponde.</div>
+        ) : cot.estado === 'Borrador' ? (
+          <div style={{ background: '#fffbea', border: '1px solid #f5d97a', color: '#7a5b00', borderRadius: 12, padding: 14, marginBottom: 12 }}>Esta cotización se está actualizando: te enviaremos la nueva versión.</div>
         ) : !cot.vigente ? (
           <div style={{ background: C.badBg, border: `1px solid ${C.bad}33`, color: C.bad, borderRadius: 12, padding: 14, marginBottom: 12, display: 'flex', gap: 8, alignItems: 'center' }}>
             <AlertTriangle size={18} /> <span>Esta cotización venció el {formatDate(cot.vence)}. Escríbenos y la actualizamos.</span>
@@ -212,25 +217,29 @@ export default function CotizacionClientePage() {
           <p style={{ fontSize: 13, color: '#cfcfcf', marginTop: 8 }}>Preparada para <strong style={{ color: '#fff' }}>{cot.cliente.nombre_cliente}</strong>{cot.cliente.empresa ? ` · ${cot.cliente.empresa}` : ''}</p>
         </section>
 
+        <h1 style={{ fontSize: 22, fontWeight: 800, lineHeight: 1.25, margin: '4px 0 12px' }}>{cot.titulo}</h1>
         {cot.descripcion_general.trim() && (
-          <Tarjeta titulo="Descripción del trabajo"><Texto texto={cot.descripcion_general} /></Tarjeta>
+          <Tarjeta titulo="Introducción"><Texto texto={cot.descripcion_general} /></Tarjeta>
         )}
+        {cot.secciones.filter(x => x.tipo === 'texto' && x.texto.trim()).map(x => (
+          <Tarjeta key={x.clave} titulo={x.titulo || undefined}><Texto texto={x.texto} /></Tarjeta>
+        ))}
 
         {/* Detalle: tarjetas apiladas (se leen bien en celular) */}
         <Tarjeta titulo="Detalle">
           <div style={{ display: 'flex', flexDirection: 'column' }}>
             {cot.partidas.map(p => {
               const its = cot.items.filter(i => i.partidaId === p.id);
-              const bruto = its.reduce((s, i) => s + (i.precio || 0) * (i.cantidad || 0), 0);
+              const bruto = t.r.partidas.get(p.id)?.subtotal || 0;
               return (
                 <div key={p.id} style={{ padding: '12px 0', borderBottom: `1px solid ${C.line}` }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12 }}>
                     <strong style={{ fontSize: 15 }}>{p.nombre || 'Partida'}</strong>
-                    <strong style={{ whiteSpace: 'nowrap' }}>{fmt(bruto)}</strong>
+                    {cot.que_ve_cliente !== 'total' && <strong style={{ whiteSpace: 'nowrap' }}>{fmt(bruto)}</strong>}
                   </div>
                   {p.descripcion && <p style={{ fontSize: 13, color: C.muted, marginTop: 3 }}>{p.descripcion}</p>}
                   <p style={{ fontSize: 12, color: C.faint, marginTop: 3 }}>{p.cantidad} {p.unidad}</p>
-                  {cot.mostrar_detalle && its.length > 0 && (
+                  {cot.que_ve_cliente === 'detalle' && its.length > 0 && (
                     <ul style={{ margin: '6px 0 0', paddingLeft: 16, fontSize: 12, color: C.muted }}>
                       {its.map(i => <li key={i.id}>{i.descripcion} — {i.cantidad} {i.unidad}</li>)}
                     </ul>
@@ -278,16 +287,15 @@ export default function CotizacionClientePage() {
           </Tarjeta>
         )}
 
-        {(cot.condiciones_servicio.trim() || cot.condiciones_comerciales.trim()) && (
+        {cot.aclaraciones.trim() && (
           <Tarjeta>
             <button onClick={() => setVerCond(v => !v)} style={{ width: '100%', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'none', border: 'none', cursor: 'pointer', padding: 0, color: C.ink }}>
-              <span style={{ fontSize: 11, fontWeight: 800, letterSpacing: 1.6, textTransform: 'uppercase' }}>Garantía y condiciones</span>
+              <span style={{ fontSize: 11, fontWeight: 800, letterSpacing: 1.6, textTransform: 'uppercase' }}>Aclaraciones y garantías</span>
               {verCond ? <ChevronUp size={18} /> : <ChevronDown size={18} />}
             </button>
             {verCond && (
               <div style={{ marginTop: 12, display: 'flex', flexDirection: 'column', gap: 12 }}>
-                {cot.condiciones_servicio.trim() && <div><p style={{ fontWeight: 700, marginBottom: 4 }}>Garantía</p><Texto texto={cot.condiciones_servicio} /></div>}
-                {cot.condiciones_comerciales.trim() && <div><p style={{ fontWeight: 700, marginBottom: 4 }}>Condiciones comerciales</p><Texto texto={cot.condiciones_comerciales} /></div>}
+                <Texto texto={cot.aclaraciones} />
               </div>
             )}
           </Tarjeta>

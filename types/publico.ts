@@ -1,7 +1,8 @@
 // Datos de una cotización tal como los ve el CLIENTE en el link público (/c/<token>).
 // Nunca incluye costos, márgenes, imprevistos ni supuestos internos.
 
-import type { Cliente, CotizacionItem, EstadoCotizacion, Moneda, Partida } from '@/types';
+import type { Cliente, CotizacionItem, Moneda, Partida } from '@/types';
+import type { EstadoCot, QueVe, Seccion } from '@/lib/cotizador/tipos';
 import type { EmpresaInfo } from '@/components/pdf/PresupuestoPDF';
 
 export interface FotoPublica { url: string; caption: string; }
@@ -11,8 +12,22 @@ export interface CotizacionPublica {
   incluir_portada?: boolean;
   revision?: number;
   folio: number;
-  estado: EstadoCotizacion;
+  estado: EstadoCot;
   created_at: string;
+  titulo: string;
+  fecha_emision: string | null;
+  valida_hasta: string | null;
+  fecha_valor_uf: string | null;
+  que_ve_cliente: QueVe;
+  titulo_valorizacion: string | null;
+  aclaraciones: string;
+  secciones: Seccion[];
+  /** Ajustes: si el cliente puede responder en línea, «Importante» y el correo de «Cómo aceptar». */
+  responde_en_linea: boolean;
+  importante: string | null;
+  correo_aceptar: string | null;
+  sucursal: { nombre: string; direccion: string | null; comuna: string | null } | null;
+  contacto: { nombre: string; email: string | null; telefono: string | null } | null;
   moneda: Moneda;
   valor_uf: number | null;
   descuento_global: number;
