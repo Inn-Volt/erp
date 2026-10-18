@@ -14,6 +14,7 @@
  */
 
 import React from 'react';
+import { aDoc, esLista, esTituloDeAntes, type Lista, type NodoTexto } from '@/lib/textoFormato';
 import { Document, Page, Text, View, StyleSheet, Image } from '@react-pdf/renderer';
 import type { Cliente, Vendedor } from '@/types';
 import type { EmpresaInfo } from '@/components/pdf/PresupuestoPDF';
@@ -76,29 +77,48 @@ const s = StyleSheet.create({
   foto: { width: '100%', height: 185, objectFit: 'cover', borderRadius: 4 },
 });
 
-/** Texto con **negrita**, viñetas («- », «• ») y párrafos. */
+/** Texto con formato (lib/textoFormato): negrita, cursiva, subrayado, tachado, títulos y listas. */
 function TextoFormato({ texto, estilo = s.texto }: { texto?: string | null; estilo?: typeof s.texto }) {
-  const lineas = (texto || '').split('\n');
-  const partes = (l: string) => l.split(/(\*\*[^*]+\*\*)/g).filter(Boolean).map((t, i) =>
-    t.startsWith('**') && t.endsWith('**') ? <Text key={i} style={{ fontFamily: 'Helvetica-Bold' }}>{t.slice(2, -2)}</Text> : <Text key={i}>{t}</Text>);
-  return (
-    <View>
-      {lineas.map((l, i) => {
-        if (!l.trim()) return <View key={i} style={{ height: 5 }} />;
-        // «1) Cobertura»: un título de las aclaraciones, en negrita.
-        if (/^\s*\d+[.)]\s+\S/.test(l) && l.trim().length <= 70 && !l.includes('**')) {
-          return <Text key={i} style={[estilo, { fontFamily: 'Helvetica-Bold', marginTop: i ? 5 : 0 }]}>{l.trim()}</Text>;
-        }
-        const vin = /^\s*([-•*]|\d+[.)])\s+/.exec(l);
-        if (vin) {
+  if (!(texto || '').trim()) return null;
+  const linea = (nodos: NodoTexto[] | undefined) => (nodos || []).map((n, i) => {
+    const ms = (n.marks || []).map(m => m.type);
+    const negrita = ms.includes('bold');
+    const cursiva = ms.includes('italic');
+    const deco = [ms.includes('underline') ? 'underline' : '', ms.includes('strike') ? 'line-through' : ''].filter(Boolean).join(' ');
+    const fuente = negrita && cursiva ? 'Helvetica-BoldOblique' : negrita ? 'Helvetica-Bold' : cursiva ? 'Helvetica-Oblique' : undefined;
+    return <Text key={i} style={{ ...(fuente ? { fontFamily: fuente } : {}), ...(deco ? { textDecoration: deco as 'underline' } : {}) }}>{n.text}</Text>;
+  });
+  const lista = (l: Lista, nivel: number, k: number): React.ReactNode => {
+    let n = l.attrs?.start ?? 1;
+    return (
+      <View key={k} style={{ marginLeft: nivel ? 12 : 0 }}>
+        {(l.content || []).map((it, j) => {
+          const marca = l.type === 'orderedList' ? `${n++}.` : nivel % 2 ? '–' : '•';
           return (
-            <View key={i} style={{ flexDirection: 'row', marginBottom: 1.5 }}>
-              <Text style={[estilo, { width: 12, color: MUTED }]}>{/\d/.test(vin[1]) ? vin[1] : '•'}</Text>
-              <Text style={[estilo, { flex: 1 }]}>{partes(l.slice(vin[0].length))}</Text>
+            <View key={j} style={{ flexDirection: 'row', marginBottom: 1.5 }}>
+              <Text style={[estilo, { width: 13, color: MUTED }]}>{marca}</Text>
+              <View style={{ flex: 1 }}>
+                {(it.content || []).map((b, i) => (esLista(b) ? lista(b, nivel + 1, i)
+                  : <Text key={i} style={estilo}>{linea((b as { content?: NodoTexto[] }).content)}</Text>))}
+              </View>
             </View>
           );
+        })}
+      </View>
+    );
+  };
+  const tam = (estilo as { fontSize?: number }).fontSize || 9;
+  return (
+    <View>
+      {aDoc(texto).content.map((b, i) => {
+        if (b.type === 'heading') {
+          return <Text key={i} style={[estilo, { fontFamily: 'Helvetica-Bold', fontSize: b.attrs.level === 1 ? tam + 2.5 : tam + 1, color: INK, marginTop: i ? 6 : 0, marginBottom: 2 }]}>{linea(b.content)}</Text>;
         }
-        return <Text key={i} style={estilo}>{partes(l)}</Text>;
+        if (esLista(b)) return lista(b, 0, i);
+        if (!(b.content || []).length) return <View key={i} style={{ height: 5 }} />;
+        // «1) Cobertura»: un título de las aclaraciones de antes, en negrita.
+        if (esTituloDeAntes(b)) return <Text key={i} style={[estilo, { fontFamily: 'Helvetica-Bold', marginTop: i ? 5 : 0 }]}>{b.content[0].text.trim()}</Text>;
+        return <Text key={i} style={estilo}>{linea(b.content)}</Text>;
       })}
     </View>
   );

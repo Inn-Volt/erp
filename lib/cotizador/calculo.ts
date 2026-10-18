@@ -312,10 +312,11 @@ export function sinDescuentoGlobal(lineas: Linea[], descuentoGlobal?: number | n
 // ── Formatos ──
 export function formatMonto(v: number | null | undefined, moneda: Moneda, unitario = false): string {
   if (v === null || v === undefined || !Number.isFinite(v)) return '—';
+  if (Object.is(v, -0) || Math.abs(v) < 1e-9) v = 0; // sin «$-0»
   if (moneda === 'UF') {
     return 'UF ' + v.toLocaleString('es-CL', { minimumFractionDigits: 2, maximumFractionDigits: unitario ? 4 : 2 });
   }
-  return '$' + Math.round(v).toLocaleString('es-CL');
+  return '$' + (Math.round(v) || 0).toLocaleString('es-CL');
 }
 export const cantidadLegible = (v: number) => (Number(v) || 0).toLocaleString('es-CL', { maximumFractionDigits: 3 });
 export const porcentaje = (v: number | null | undefined) => (v === null || v === undefined ? '—' : `${v.toLocaleString('es-CL', { maximumFractionDigits: 1 })} %`);

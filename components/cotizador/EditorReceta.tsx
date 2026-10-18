@@ -48,8 +48,13 @@ function BuscarArticulo({ catalogo, onElegir, placeholder }: { catalogo: Articul
   );
 }
 
-export default function EditorReceta({ receta, catalogo, onCerrar, onGuardada }: {
-  receta: RecetaCompleta | null; catalogo: ArticuloCatalogo[]; onCerrar: () => void; onGuardada: () => void;
+export default function EditorReceta({ receta, catalogo, onCerrar, onGuardada, onUsarAqui, puedeGuardar = true }: {
+  receta: RecetaCompleta | null; catalogo: ArticuloCatalogo[]; onCerrar: () => void;
+  /** Recibe el id con que quedó guardada en la biblioteca. */
+  onGuardada: (id: string) => void;
+  /** Desde el cotizador: usarla solo en esta cotización, sin guardarla en la biblioteca. */
+  onUsarAqui?: (r: RecetaCompleta) => void;
+  puedeGuardar?: boolean;
 }) {
   const { success, error: toastError } = useToast();
   const [r, setR] = useState<RecetaCompleta>(() => receta ? JSON.parse(JSON.stringify(receta)) : { id: '', nombre: '', descripcion: '', unidad: 'un', preguntas: [], componentes: [], activo: true });
@@ -89,18 +94,23 @@ export default function EditorReceta({ receta, catalogo, onCerrar, onGuardada }:
     finally { setIaCargando(false); }
   };
 
-  const guardar = async () => {
-    if (!r.nombre.trim()) { toastError('Ponle nombre a la receta'); return; }
-    if (!r.componentes.length) { toastError('Agrega al menos un componente'); return; }
+  const valida = () => {
+    if (!r.nombre.trim()) { toastError('Ponle nombre a la receta'); return false; }
+    if (!r.componentes.length) { toastError('Agrega al menos un componente'); return false; }
     for (const p of r.preguntas) {
-      if (!p.texto.trim()) { toastError('Hay una pregunta sin texto'); return; }
-      if (p.tipo === 'producto' && !(p.opciones || []).length) { toastError(`«${p.texto}» no tiene opciones`); return; }
+      if (!p.texto.trim()) { toastError('Hay una pregunta sin texto'); return false; }
+      if (p.tipo === 'producto' && !(p.opciones || []).length) { toastError(`«${p.texto}» no tiene opciones`); return false; }
     }
     for (const c of r.componentes) {
-      if (c.regla?.cada !== undefined && c.regla?.cada !== null && !(c.regla.cada > 0)) { toastError('«Cada» tiene que ser más que 0: «1 cada 4 puertas».'); return; }
+      if (c.regla?.cada !== undefined && c.regla?.cada !== null && !(c.regla.cada > 0)) { toastError('«Cada» tiene que ser más que 0: «1 cada 4 puertas».'); return false; }
     }
+    return true;
+  };
+
+  const guardar = async () => {
+    if (!valida()) return;
     setGuardando(true);
-    try { await recetasCotService.guardar(r); success('Receta guardada'); onGuardada(); }
+    try { const id = await recetasCotService.guardar(r); success('Receta guardada en la biblioteca'); onGuardada(id); }
     catch (e) { toastError('No se pudo guardar: ' + (e instanceof Error ? e.message : '')); }
     finally { setGuardando(false); }
   };
@@ -115,7 +125,10 @@ export default function EditorReceta({ receta, catalogo, onCerrar, onGuardada }:
         Con las respuestas por omisión: {ejemplo.lineas.length} línea{ejemplo.lineas.length === 1 ? '' : 's'}{ejemplo.noVan.length ? ` · ${ejemplo.noVan.length} no van` : ''}
       </span>
       <button className="btn btn-ghost" onClick={onCerrar}>Cancelar</button>
-      <button className="btn btn-primary" onClick={guardar} disabled={guardando}>{guardando ? <Loader2 size={14} className="iv-spin" /> : <Save size={14} />} Guardar</button>
+      {onUsarAqui && <button className={puedeGuardar ? 'btn btn-ghost' : 'btn btn-primary'} disabled={guardando}
+        title="Se agrega a esta cotización y la biblioteca no cambia" onClick={() => { if (valida()) onUsarAqui({ ...r, id: r.id || `aqui-${Date.now()}` }); }}>
+        Usar solo en esta cotización</button>}
+      {puedeGuardar && <button className="btn btn-primary" onClick={guardar} disabled={guardando}>{guardando ? <Loader2 size={14} className="iv-spin" /> : <Save size={14} />} {onUsarAqui ? 'Guardar en la biblioteca y usar' : 'Guardar'}</button>}
     </>}>
       <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: 10 }}>
         <label><span className="label-muted">Nombre *</span><input className="input" autoFocus value={r.nombre} onChange={e => setR({ ...r, nombre: e.target.value })} placeholder="Puerta con control de acceso" /></label>
@@ -194,10 +207,24 @@ export default function EditorReceta({ receta, catalogo, onCerrar, onGuardada }:
           return (
             <div key={c.id} style={{ border: '1px solid var(--border2)', borderRadius: 8, padding: '0.6rem', marginBottom: 6, display: 'flex', flexDirection: 'column', gap: 6 }}>
               <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
-                <span style={{ flex: 1, minWidth: 200, fontSize: '0.88rem', fontWeight: 600, color: 'var(--text)' }}>
-                  {g.elegido_en ? `El producto elegido en «${r.preguntas.find(p => p.clave === g.elegido_en)?.texto || '…'}»` : (a?.descripcion || c.descripcion)}
-                  {!g.elegido_en && !c.item_id && <span style={{ fontSize: '0.7rem', color: '#d97706' }}> · fuera del catálogo ({formatMonto(c.costo, 'CLP')} costo)</span>}
-                </span>
+                {!g.elegido_en && !c.item_id ? (
+                  // Fuera de la biblioteca: se escribe aquí qué es, su tipo, su unidad y su costo.
+                  <span style={{ flex: 1, minWidth: 260, display: 'flex', flexWrap: 'wrap', gap: 6, alignItems: 'center' }}>
+                    <input className="input" style={{ flex: 1, minWidth: 180 }} value={c.descripcion} placeholder="Qué es: soporte especial, cableado…"
+                      aria-label="Descripción del componente" onChange={e => setC(i, { descripcion: e.target.value })} />
+                    <select className="input" style={{ width: 130 }} value={c.categoria} aria-label="Tipo" onChange={e => setC(i, { categoria: e.target.value })}>
+                      {Object.entries(CATEGORIA_LABELS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+                    </select>
+                    <input className="input" style={{ width: 70 }} value={c.unidad} aria-label="Unidad" placeholder="un" onChange={e => setC(i, { unidad: e.target.value })} />
+                    <label style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: '0.76rem', color: 'var(--muted)' }}>Costo
+                      <input className="input" style={{ width: 100 }} type="number" min={0} step="any" value={c.costo || ''} onChange={e => setC(i, { costo: Number(e.target.value) || 0 })} /></label>
+                    <span style={{ fontSize: '0.7rem', color: '#d97706' }}>fuera de la biblioteca</span>
+                  </span>
+                ) : (
+                  <span style={{ flex: 1, minWidth: 200, fontSize: '0.88rem', fontWeight: 600, color: 'var(--text)' }}>
+                    {g.elegido_en ? `El producto elegido en «${r.preguntas.find(p => p.clave === g.elegido_en)?.texto || '…'}»` : (a?.descripcion || c.descripcion)}
+                  </span>
+                )}
                 {elegibles.length > 0 && (
                   <select className="input" style={{ width: 230 }} value={g.elegido_en || ''} onChange={e => setRegla(i, { elegido_en: e.target.value || null })}>
                     <option value="">Producto fijo</option>
@@ -258,7 +285,14 @@ export default function EditorReceta({ receta, catalogo, onCerrar, onGuardada }:
             </div>
           );
         })}
-        <BuscarArticulo catalogo={catalogo} onElegir={agregarComponente} placeholder="Agregar un componente del catálogo…" />
+        <div style={{ display: 'flex', gap: 6, alignItems: 'flex-start' }}>
+          <div style={{ flex: 1 }}><BuscarArticulo catalogo={catalogo} onElegir={agregarComponente} placeholder="Agregar un componente del catálogo…" /></div>
+          <button type="button" className="btn btn-ghost" title="Un componente que no está en la biblioteca"
+            onClick={() => {
+              if (r.componentes.length >= TOPES.componentes) { toastError(`Hasta ${TOPES.componentes} componentes.`); return; }
+              setR(x => ({ ...x, componentes: [...x.componentes, { id: nuevoId(), item_id: null, descripcion: '', categoria: 'material', unidad: 'un', costo: 0, cantidad: 1, regla: null }] }));
+            }}><Plus size={14} /> Nuevo</button>
+        </div>
       </div>
 
       {avisos.length > 0 && (

@@ -10,6 +10,8 @@
  * Solo un Borrador se edita; el estado cambia solo con sus botones (lo exige la base).
  */
 
+import { textoPlano } from '@/lib/textoFormato';
+import EditorFormato from '@/components/EditorFormato';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
@@ -25,6 +27,7 @@ import CotizacionPDF, { nombrePDF } from '@/components/pdf/CotizacionPDF';
 import type { EmpresaInfo } from '@/components/pdf/PresupuestoPDF';
 import TarjetaPartida, { type AccionesLinea } from './TarjetaPartida';
 import AsistenteReceta from './AsistenteReceta';
+import EditorReceta from './EditorReceta';
 import TrasladoModal from './TrasladoModal';
 import { proyectosService, folioProyecto, type Proyecto } from '@/services/fase5';
 import { BloquePlegable, EstadoPill, MenuAcciones, opcionMenu, PedirMotivo, etiqueta } from './ui';
@@ -35,7 +38,7 @@ import {
   type Plantilla, type Seccion, type TipoPartida,
 } from '@/lib/cotizador/tipos';
 import {
-  aMoneda, calcular, formatMonto, lineaFuera, lineasDeArticulo, nuevoId, porcentaje, q, sinDescuentoGlobal,
+  aMoneda, calcular, calcularLinea, formatMonto, lineaFuera, lineasDeArticulo, nuevoId, porcentaje, q, sinDescuentoGlobal,
 } from '@/lib/cotizador/calculo';
 import { revisar, llenarMensaje } from '@/lib/cotizador/revision';
 import type { RecetaCompleta, Respuestas } from '@/lib/cotizador/recetas';
@@ -110,6 +113,8 @@ export default function EditorCotizacion({ id, clonarDe, clienteInicial, solicit
 
   const [modal, setModal] = useState<null | 'revisar' | 'reenviar' | 'aprobar' | 'rechazar' | 'historial' | 'volver' | 'anular' | 'ia'>(null);
   const [asistente, setAsistente] = useState<{ receta: RecetaCompleta; partidaId: string } | null>(null);
+  // Receta nueva armada desde una partida (para usarla solo aquí o guardarla en la biblioteca).
+  const [recetaNuevaPara, setRecetaNuevaPara] = useState<string | null>(null);
   const recordadas = useRef<Map<string, Respuestas>>(new Map());
   const [recetaAgregada, setRecetaAgregada] = useState<{ partidaId: string; nombre: string; cuantas: number; antes: Linea[]; ids: string[] } | null>(null);
   const [recienCreada, setRecienCreada] = useState<string | null>(null);
@@ -291,6 +296,22 @@ export default function EditorCotizacion({ id, clonarDe, clienteInicial, solicit
 
   const lineaAcc: AccionesLinea = {
     cambiar: (lid, patch) => setItems(items => items.map(l => (l.id === lid ? { ...l, ...patch } : l))),
+    // Cambiar el costo o la ganancia de algo del catálogo: queda «ajustada» en esta cotización
+    // (se calcula desde su costo y su ganancia) y la biblioteca no se toca. Parte de la ganancia
+    // que hoy tiene, para que el precio no salte hasta que se cambie algo.
+    ajustar: (lid, patch) => setItems(items => items.map(l => {
+      if (l.id !== lid) return l;
+      if (l.fuera) return { ...l, ...patch };
+      const ci = (l.costo || 0) * (1 + (l.imprevistos || 0) / 100);
+      const precio = calcularLinea(l, d.moneda).precio;
+      return { ...l, fuera: true, ajustada: true, ganancia: ci > 0 ? (precio / ci - 1) * 100 : 0, ...patch };
+    })),
+    alCatalogo: lid => setItems(items => items.map(l => {
+      const a = l.id === lid && l.itemId ? catMap.get(l.itemId) : undefined;
+      if (!a || a.precio_venta === null) return l;
+      return { ...l, fuera: false, ajustada: false, ganancia: null,
+        costo: aMoneda(a.costo || 0, d.moneda, d.valor_uf, true), precio: aMoneda(a.precio_venta, d.moneda, d.valor_uf) };
+    })),
     cantidad: (lid, v) => setItems(items => {
       const l = items.find(x => x.id === lid);
       if (!l) return items;
@@ -872,11 +893,11 @@ export default function EditorCotizacion({ id, clonarDe, clienteInicial, solicit
           </BloquePlegable>
 
           {/* 3. Introducción */}
-          <BloquePlegable id="cot-bloque-descripcion" titulo="Introducción" resumen={d.descripcion_general.split('\n')[0].slice(0, 100) || 'Sin introducción'}
+          <BloquePlegable id="cot-bloque-descripcion" titulo="Introducción" resumen={textoPlano(d.descripcion_general).slice(0, 100) || 'Sin introducción'}
             abierto={abierto.descripcion} onAlternar={() => setAbierto(a => ({ ...a, descripcion: !a.descripcion }))}>
             <span style={etiqueta}>Introducción (la lee el cliente al comienzo, antes de la valorización)</span>
-            <textarea className="input" rows={6} disabled={!editable} value={d.descripcion_general} onChange={e => set({ descripcion_general: e.target.value })}
-              placeholder="De qué trata el trabajo: qué necesita el cliente, qué proponemos y qué resultado tendrá. **negrita** y viñetas con «- »." />
+            <EditorFormato valor={d.descripcion_general} editable={editable} onCambiar={t => set({ descripcion_general: t })} alto={130} etiqueta="Introducción"
+              placeholder="De qué trata el trabajo: qué necesita el cliente, qué proponemos y qué resultado tendrá." />
           </BloquePlegable>
 
           {/* 4. Presentación */}
@@ -928,10 +949,14 @@ export default function EditorCotizacion({ id, clonarDe, clienteInicial, solicit
                   }),
                   onAgregarDebajo: t => agregarPartida(t, p.id),
                   onArticulo: a => agregarArticulo(p, a),
-                  onFuera: texto => agregarLineas(p.id, [lineaFuera(texto, p.id)]),
+                  onFuera: texto => agregarLineas(p.id, [{ ...lineaFuera(texto, p.id), ganancia: GANANCIA_POR_TIPO.material }]),
                   onReceta: r => {
                     if (d.moneda === 'UF' && !(Number(d.valor_uf) > 0)) { warning('Está en UF: escribe el valor de la UF antes de agregar.'); return; }
                     setAsistente({ receta: r, partidaId: p.id });
+                  },
+                  onRecetaNueva: () => {
+                    if (d.moneda === 'UF' && !(Number(d.valor_uf) > 0)) { warning('Está en UF: escribe el valor de la UF antes de agregar.'); return; }
+                    setRecetaNuevaPara(p.id);
                   },
                   onDescuento: pct => setItems(items => items.map(l => (l.partidaId === p.id ? { ...l, descuento: pct } : l))),
                   onDeshacerReceta: () => { if (recetaAgregada) { setItems(() => recetaAgregada.antes); setRecetaAgregada(null); } },
@@ -971,10 +996,10 @@ export default function EditorCotizacion({ id, clonarDe, clienteInicial, solicit
           </section>
 
           {/* 7. Aclaraciones */}
-          <BloquePlegable id="cot-bloque-aclaraciones" titulo="Aclaraciones y garantías" resumen={d.aclaraciones.split('\n')[0].slice(0, 100) || 'Sin aclaraciones'}
+          <BloquePlegable id="cot-bloque-aclaraciones" titulo="Aclaraciones y garantías" resumen={textoPlano(d.aclaraciones).slice(0, 100) || 'Sin aclaraciones'}
             abierto={abierto.aclaraciones} onAlternar={() => setAbierto(a => ({ ...a, aclaraciones: !a.aclaraciones }))}>
             <span style={etiqueta}>Aclaraciones y garantías (las lee el cliente al final, antes de la firma)</span>
-            <textarea className="input" rows={8} disabled={!editable} value={d.aclaraciones} onChange={e => set({ aclaraciones: e.target.value })}
+            <EditorFormato valor={d.aclaraciones} editable={editable} onCambiar={t => set({ aclaraciones: t })} alto={170} etiqueta="Aclaraciones y garantías"
               placeholder="La garantía de los equipos y de la mano de obra, lo que no incluye, los horarios, la forma de pago." />
             {editable && <p style={{ fontSize: '0.74rem', color: 'var(--muted)', margin: '6px 0 0' }}>
               Aquí se cambian solo para esta cotización. {plantillaActual ? `La plantilla «${plantillaActual.nombre}» trae las suyas al elegirla.` : '«Sin plantilla» trae las de los Ajustes.'} Los datos para transferir no van aquí: el PDF los imprime solos al final.
@@ -1017,6 +1042,19 @@ export default function EditorCotizacion({ id, clonarDe, clienteInicial, solicit
           setTrasladoPara(null);
           success('Traslado agregado');
         }} />
+      )}
+      {recetaNuevaPara && (
+        <EditorReceta receta={null} catalogo={catalogo} puedeGuardar={puede('biblioteca.editar')}
+          onCerrar={() => setRecetaNuevaPara(null)}
+          onUsarAqui={r => { setAsistente({ receta: r, partidaId: recetaNuevaPara }); setRecetaNuevaPara(null); }}
+          onGuardada={async id => {
+            const pid = recetaNuevaPara;
+            setRecetaNuevaPara(null);
+            const lista = await recetasCotService.listar().catch(() => recetas);
+            setRecetas(lista);
+            const r = lista.find(x => x.id === id);
+            if (r) setAsistente({ receta: r, partidaId: pid });
+          }} />
       )}
       {asistente && (
         <AsistenteReceta receta={asistente.receta} partida={d.partidas.find(p => p.id === asistente.partidaId)!} catalogo={catMap}
@@ -1087,7 +1125,8 @@ function EditorSecciones({ secciones, editable, puedeAgregar, tituloCot, onCambi
             {editable && <button type="button" className="btn btn-ghost btn-xs" onClick={() => onCambiar(ss => ss.filter(x => x.clave !== s.clave))} aria-label="Quitar">✕</button>}
           </div>
           {s.tipo === 'portada' && <input className="input" disabled={!editable} value={s.subtitulo || ''} onChange={e => cambiar(s.clave, { subtitulo: e.target.value })} placeholder="Subtítulo (opcional)" />}
-          <textarea className="input" rows={s.tipo === 'portada' ? 2 : 4} disabled={!editable} value={s.texto} onChange={e => cambiar(s.clave, { texto: e.target.value })}
+          <EditorFormato valor={s.texto} editable={editable} onCambiar={t => cambiar(s.clave, { texto: t })} alto={s.tipo === 'portada' ? 60 : 100}
+            etiqueta={s.titulo || 'Texto de la sección'}
             placeholder={s.tipo === 'portada' ? 'Texto de la portada (opcional)' : 'Quiénes somos, el alcance, la metodología, la experiencia…'} />
           {s.tipo !== 'portada' && (
             <label style={{ display: 'flex', gap: 6, alignItems: 'center', fontSize: '0.8rem', color: 'var(--text)' }}>

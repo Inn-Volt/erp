@@ -3,6 +3,7 @@
 /** Piezas chicas del cotizador TecApp: estado, bloque plegable, menú ⋯, modal y motivo. */
 
 import { useEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { ChevronDown, ChevronRight, Loader2, MoreHorizontal, X } from 'lucide-react';
 import { estadoCot } from '@/lib/cotizador/tipos';
 
@@ -32,27 +33,67 @@ export function BloquePlegable({ id, titulo, resumen, abierto, onAlternar, child
   );
 }
 
-/** Menú ⋯ que se cierra al tocar fuera. `children` recibe `cerrar`. */
+/**
+ * Menú ⋯ que se cierra al tocar fuera. `children` recibe `cerrar`.
+ * Se dibuja sobre toda la página (portal, posición fija): una tabla con scroll o una
+ * tarjeta con `overflow: hidden` no lo recortan. Se abre hacia abajo, o hacia arriba
+ * si no cabe.
+ */
 export function MenuAcciones({ etiqueta, children, ancho = 230 }: { etiqueta: string; children: (cerrar: () => void) => React.ReactNode; ancho?: number }) {
-  const [abierto, setAbierto] = useState(false);
-  const ref = useRef<HTMLDivElement>(null);
+  const [pos, setPos] = useState<{ top?: number; bottom?: number; left: number; maxH: number } | null>(null);
+  const boton = useRef<HTMLButtonElement>(null);
+  const menu = useRef<HTMLDivElement>(null);
+  const abierto = pos !== null;
+  const cerrar = () => setPos(null);
+
+  const abrir = () => {
+    const r = boton.current?.getBoundingClientRect();
+    if (!r) return;
+    const left = Math.max(8, Math.min(r.right - ancho, window.innerWidth - ancho - 8));
+    const abajo = window.innerHeight - r.bottom - 8;
+    const arriba = r.top - 8;
+    setPos(abajo >= 260 || abajo >= arriba
+      ? { top: r.bottom + 4, left, maxH: abajo - 4 }
+      : { bottom: window.innerHeight - r.top + 4, left, maxH: arriba - 4 });
+  };
+
   useEffect(() => {
     if (!abierto) return;
-    const fuera = (e: MouseEvent) => { if (ref.current && !ref.current.contains(e.target as Node)) setAbierto(false); };
+    const fuera = (e: MouseEvent) => {
+      const t = e.target as Node;
+      if (!menu.current?.contains(t) && !boton.current?.contains(t)) setPos(null);
+    };
+    const tecla = (e: KeyboardEvent) => { if (e.key === 'Escape') setPos(null); };
+    // Al desplazar la página (no el propio menú) o cambiar el tamaño, se cierra: quedaría flotando lejos del botón.
+    const mover = (e: Event) => { if (!menu.current?.contains(e.target as Node)) setPos(null); };
     document.addEventListener('mousedown', fuera);
-    return () => document.removeEventListener('mousedown', fuera);
+    document.addEventListener('keydown', tecla);
+    window.addEventListener('scroll', mover, true);
+    window.addEventListener('resize', cerrar);
+    return () => {
+      document.removeEventListener('mousedown', fuera);
+      document.removeEventListener('keydown', tecla);
+      window.removeEventListener('scroll', mover, true);
+      window.removeEventListener('resize', cerrar);
+    };
   }, [abierto]);
+
   return (
-    <div ref={ref} style={{ position: 'relative' }}>
-      <button type="button" aria-label={etiqueta} title={etiqueta} onClick={() => setAbierto(v => !v)} className="btn btn-ghost btn-xs" style={{ padding: '0.25rem 0.4rem' }}>
+    <>
+      <button ref={boton} type="button" aria-label={etiqueta} title={etiqueta} aria-expanded={abierto} aria-haspopup="menu"
+        onClick={() => (abierto ? cerrar() : abrir())} className="btn btn-ghost btn-xs" style={{ padding: '0.25rem 0.4rem' }}>
         <MoreHorizontal size={14} />
       </button>
-      {abierto && (
-        <div className="menu-cot" style={{ position: 'absolute', right: 0, top: '100%', zIndex: 30, width: ancho, background: 'var(--bg2)', border: '1px solid var(--border2)', borderRadius: 10, boxShadow: '0 10px 30px rgba(0,0,0,.25)', overflow: 'hidden', marginTop: 4 }}>
-          {children(() => setAbierto(false))}
-        </div>
+      {pos && createPortal(
+        <div ref={menu} role="menu" className="menu-cot" style={{
+          position: 'fixed', top: pos.top, bottom: pos.bottom, left: pos.left, zIndex: 300, width: ancho, maxHeight: pos.maxH, overflowY: 'auto',
+          background: 'var(--bg2)', border: '1px solid var(--border2)', borderRadius: 10, boxShadow: '0 10px 30px rgba(0,0,0,.25)',
+        }}>
+          {children(cerrar)}
+        </div>,
+        document.body,
       )}
-    </div>
+    </>
   );
 }
 

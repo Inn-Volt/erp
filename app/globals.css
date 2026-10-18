@@ -731,3 +731,44 @@ aside.sidebar-desktop { border-right-color: rgb(var(--line)) !important; }
   transition: background 0.1s;
 }
 .dropdown-item:hover { background: rgb(var(--surface-3)); }
+
+/* ── Texto con formato (components/EditorFormato y TextoFormato) ──
+   El reinicio de la base y Tailwind les quitan márgenes y viñetas: aquí se devuelven. */
+.texto-formato { color: rgb(var(--content)); line-height: 1.55; overflow-wrap: anywhere; font-size: 0.9rem; }
+.texto-formato p { margin: 0 0 0.3rem; }
+.texto-formato p:last-child { margin-bottom: 0; }
+.texto-formato :is(h1, h3, .tf-h1) { margin: 0.55rem 0 0.25rem; font-family: var(--font-display); font-size: 1.12em; font-weight: 700; line-height: 1.3; }
+.texto-formato :is(h2, h4, .tf-h2) { margin: 0.45rem 0 0.2rem; font-size: 1em; font-weight: 700; }
+.texto-formato > :is(h1, h2, h3, h4):first-child { margin-top: 0; }
+.texto-formato :is(ul, ol) { margin: 0 0 0.3rem; padding-left: 1.5em; }
+.texto-formato ul { list-style-type: disc; }
+.texto-formato ul ul { list-style-type: circle; }
+.texto-formato ol { list-style-type: decimal; }
+.texto-formato li > p { margin: 0; }
+.texto-formato strong { font-weight: 700; }
+.tf-vacio { font-size: 0.86rem; font-style: italic; color: rgb(var(--content-muted)); }
+
+.tf-caja {
+  background: var(--input-bg); border: 1px solid var(--input-border); border-radius: 8px;
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+.tf-caja:focus-within { border-color: var(--y-brand); box-shadow: 0 0 0 3px var(--focus-ring); }
+.tf-solo-lectura { background: rgb(var(--surface-3)); padding: 0.55rem 0.75rem; }
+.tf-barra {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 2px; padding: 4px;
+  border-bottom: 1px solid rgb(var(--line)); background: rgb(var(--surface-3) / 0.6);
+  border-top-left-radius: 8px; border-top-right-radius: 8px;
+}
+.tf-boton {
+  display: inline-flex; align-items: center; justify-content: center; width: 30px; height: 28px;
+  border: none; border-radius: 6px; background: transparent; color: rgb(var(--content-muted)); cursor: pointer;
+}
+.tf-boton:hover:not(:disabled) { background: rgb(var(--surface)); color: rgb(var(--content)); }
+.tf-boton.activo { background: var(--y-soft); color: rgb(var(--content)); box-shadow: inset 0 0 0 1px var(--border); }
+.tf-boton:disabled { opacity: 0.35; cursor: default; }
+.tf-sep { width: 1px; height: 18px; margin: 0 4px; background: rgb(var(--line)); }
+.tf-editor { padding: 0.55rem 0.75rem; outline: none; cursor: text; }
+.tf-editor p.is-editor-empty:first-child::before {
+  content: attr(data-placeholder); float: left; height: 0; pointer-events: none; color: rgb(var(--content-faint));
+}
+@media (max-width: 640px) { .tf-editor { font-size: 16px; } }
