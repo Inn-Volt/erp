@@ -13,7 +13,7 @@ import InformeVisitaModal from '@/components/informes/InformeVisitaModal';
 import { supabase } from '@/lib/supabase';
 import { fotosService } from '@/services/fotos';
 import {
-  folioInforme, informeDesde, tipoDe, informesVisitaService, pathsDe, plantillasInformeServicio,
+  folioInforme, informeDesde, tipoDe, type DatosPrecarga, informesVisitaService, pathsDe, plantillasInformeServicio,
   type InformeVisita, type PlantillaInformeCompleta,
 } from '@/services/informes';
 import { useToast } from '@/hooks/useToast';
@@ -23,7 +23,12 @@ export interface DatosVisitaPDF {
   fecha: string; titulo: string; responsable: string;
   cliente: { nombre: string; rut?: string | null; direccion?: string | null };
   contacto?: string | null; telefono?: string | null; hora?: string | null;
+  /** Lo que pidió el cliente (solicitud o notas de la cita): prellena el motivo. */
+  motivo?: string | null;
 }
+const fijosDe = (v: DatosVisitaPDF): DatosPrecarga => ({
+  cliente: v.cliente.nombre, direccion: v.cliente.direccion, contacto: v.contacto, telefono: v.telefono, fecha: v.fecha, tecnico: v.responsable, motivo: v.motivo,
+});
 
 /** Descarga el PDF de un informe de visita. */
 export async function pdfInformeVisita(inf: InformeVisita, v: DatosVisitaPDF) {
@@ -69,7 +74,7 @@ export default function InformesDeVisita({ agendaId, editable, datos, tiposServi
     try {
       // Todo informe lleva sus fotos: si la planilla no pide fotos, se agrega un paso «Fotos» al final.
       const v = datos();
-      const inf = informeDesde(p, { cliente: v.cliente.nombre, direccion: v.cliente.direccion, contacto: v.contacto, telefono: v.telefono, fecha: v.fecha, tecnico: v.responsable });
+      const inf = informeDesde(p, fijosDe(v));
       if (!inf.campos.some(c => tipoDe(c) === 'foto')) {
         inf.campos.push({ clave: '_s_fotos', etiqueta: 'Fotos', tipo: 'seccion' }, { clave: 'fotos', etiqueta: 'Fotos de la visita', tipo: 'foto' });
       }
@@ -134,7 +139,7 @@ export default function InformesDeVisita({ agendaId, editable, datos, tiposServi
       ))}
 
       {abierto && (
-        <InformeVisitaModal informe={abierto} editable={editable} onPDF={pdf}
+        <InformeVisitaModal informe={abierto} editable={editable} onPDF={pdf} fijos={fijosDe(datos())}
           onCerrar={act => { setAbierto(null); setLista(l => (l || []).map(x => (x.id === act.id ? act : x))); cargar(); }} />
       )}
     </div>

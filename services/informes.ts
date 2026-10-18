@@ -49,13 +49,30 @@ export const NATURALEZAS: { clave: Naturaleza; nombre: string }[] = [
   { clave: 'observado', nombre: 'Observado' }, { clave: 'medido', nombre: 'Medido' },
   { clave: 'declarado', nombre: 'Declarado por el cliente' }, { clave: 'estimado', nombre: 'Estimado / inferido' },
 ];
-/** Datos de la visita que una pregunta puede traer ya llenos. */
-export type Precarga = 'cliente' | 'direccion' | 'contacto' | 'telefono' | 'fecha' | 'tecnico';
+/** Datos de la visita que una pregunta puede traer ya llenos. Los «fijos» vienen de la cita y no
+ *  se editan en el informe (se muestran en la tarjeta de la visita y se actualizan con ella); el
+ *  motivo llega prellenado (lo que pidió el cliente) pero el técnico lo puede precisar. */
+export type Precarga = 'cliente' | 'direccion' | 'contacto' | 'telefono' | 'fecha' | 'tecnico' | 'motivo';
 export const PRECARGAS: { clave: Precarga; nombre: string }[] = [
-  { clave: 'cliente', nombre: 'Cliente' }, { clave: 'direccion', nombre: 'Dirección' }, { clave: 'contacto', nombre: 'Contacto' },
-  { clave: 'telefono', nombre: 'Teléfono' }, { clave: 'fecha', nombre: 'Fecha de la visita' }, { clave: 'tecnico', nombre: 'Técnico' },
+  { clave: 'cliente', nombre: 'Cliente (fijo)' }, { clave: 'direccion', nombre: 'Dirección (fija)' }, { clave: 'contacto', nombre: 'Contacto (fijo)' },
+  { clave: 'telefono', nombre: 'Teléfono (fijo)' }, { clave: 'fecha', nombre: 'Fecha de la visita (fija)' }, { clave: 'tecnico', nombre: 'Técnico (fijo)' },
+  { clave: 'motivo', nombre: 'Lo que pidió el cliente (editable)' },
 ];
+export const PRECARGA_FIJA: Precarga[] = ['cliente', 'direccion', 'contacto', 'telefono', 'fecha', 'tecnico'];
+export const esFijo = (c: CampoInforme) => !!c.precarga && PRECARGA_FIJA.includes(c.precarga);
 export type DatosPrecarga = Partial<Record<Precarga, string | null | undefined>>;
+
+/** Pone en el informe los datos fijos de la visita tal como están hoy en la cita. */
+export function conDatosFijos<T extends InformeLleno>(i: T, datos: DatosPrecarga): { informe: T; cambio: boolean } {
+  let cambio = false;
+  const respuestas = { ...i.respuestas };
+  for (const c of i.campos || []) {
+    if (!esFijo(c)) continue;
+    const v = datos[c.precarga!] || null;
+    if ((respuestas[c.clave] ?? null) !== v) { cambio = true; if (v) respuestas[c.clave] = v; else delete respuestas[c.clave]; }
+  }
+  return { informe: cambio ? { ...i, respuestas } : i, cambio };
+}
 export type EstadoPlantilla = 'borrador' | 'activa' | 'archivada';
 
 export interface CondicionCampo { campo: string; op: '=' | '≠'; valor: string }

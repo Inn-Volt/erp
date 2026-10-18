@@ -106,7 +106,7 @@ function AgendaModal({ cita, clientes, createdBy, prefill, onClose, onSaved, onD
     const cli = clientes.find(c => c.id === clienteId);
     const tecnico = usuarios.find(u => u.id === tecnicoId);
     return { fecha, titulo, hora: horaIni || null, responsable: tecnico?.nombre || tecnico?.email || RESPONSABLE_LABEL[responsable],
-      contacto: cli?.contacto_nombre || cli?.nombre_cliente, telefono: cli?.telefono,
+      contacto: cli?.contacto_nombre || null, telefono: cli?.telefono, motivo: notas.trim() || null,
       cliente: { nombre: cli?.nombre_cliente || 'Sin cliente', rut: cli?.rut, direccion: direccion || cli?.direccion } };
   };
   const pdfVisita = async () => {

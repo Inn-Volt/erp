@@ -21,7 +21,7 @@ import { supabase } from '@/lib/supabase';
 import { BUCKET_FOTOS, fotosService } from '@/services/fotos';
 import { dataUriABlob } from '@/services/operacion';
 import {
-  filaLegible, fueraDeRango, NATURALEZAS, pathsDe, seccionesDe, SI_NO_NA, tipoDe, vacio, valorLegible,
+  esFijo, filaLegible, fueraDeRango, NATURALEZAS, pathsDe, seccionesDe, SI_NO_NA, tipoDe, vacio, valorLegible,
   type CampoInforme, type FilaLista, type FotoInforme, type InformeLleno, type ValorCampo,
 } from '@/services/informes';
 
@@ -63,13 +63,28 @@ export default function FormularioInforme({ informe, onCambiar, editable = true,
     <div style={{ display: 'flex', flexDirection: 'column', gap: 14, minWidth: 0 }}>
       {seccion === undefined && informe.intro?.trim() && <TextoFormato texto={informe.intro} style={{ fontSize: '0.86rem', color: 'var(--muted)' }} />}
 
-      {visibles.map(s => (
+      {visibles.map(s => {
+        // Los datos fijos de la visita (cliente, dirección, contacto…) no se escriben acá: se muestran.
+        const fijos = s.campos.filter(esFijo);
+        return (
         <div key={s.clave} style={{ display: 'flex', flexDirection: 'column', gap: 10, minWidth: 0 }}>
           {(seccion === undefined && (secciones.length > 1 || s.clave !== '_general')) && (
             <p className="section-label" style={{ margin: 0, paddingBottom: 4, borderBottom: '1px solid var(--border2)' }}>{s.titulo}</p>
           )}
+          {fijos.length > 0 && (
+            <div style={{ border: '1px solid var(--border2)', borderRadius: 10, padding: '0.6rem 0.75rem', display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 200px), 1fr))', gap: '6px 14px' }}>
+              {fijos.map(c => (
+                <div key={c.clave} style={{ minWidth: 0 }}>
+                  <span className="label-muted" style={{ display: 'block', fontSize: '0.68rem' }}>{c.etiqueta}</span>
+                  <span style={{ fontSize: '0.9rem', color: vacio(informe.respuestas[c.clave]) ? 'var(--muted)' : 'var(--text)', overflowWrap: 'anywhere' }}>
+                    {vacio(informe.respuestas[c.clave]) ? 'Sin registrar en la visita' : String(informe.respuestas[c.clave])}</span>
+                </div>
+              ))}
+              {editable && <span style={{ gridColumn: '1 / -1', fontSize: '0.72rem', color: 'var(--muted)' }}>Datos de la visita: se corrigen en la Agenda.</span>}
+            </div>
+          )}
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 220px), 1fr))', gap: 14 }}>
-            {s.campos.map((c, ci) => {
+            {s.campos.filter(c => !esFijo(c)).map((c, ci) => {
               const t = tipoDe(c);
               const v = informe.respuestas[c.clave];
               const ancho = ['parrafo', 'lista', 'foto', 'archivo', 'firma', 'multiseleccion', 'si_no_na'].includes(t)
@@ -97,7 +112,8 @@ export default function FormularioInforme({ informe, onCambiar, editable = true,
             })}
           </div>
         </div>
-      ))}
+        );
+      })}
 
       {verChecklist && (
         <div style={{ border: '1px solid var(--border2)', borderRadius: 10, padding: '0.5rem 0.75rem' }}>

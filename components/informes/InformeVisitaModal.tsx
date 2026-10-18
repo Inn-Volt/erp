@@ -17,7 +17,7 @@ import { createPortal } from 'react-dom';
 import { ArrowLeft, ArrowRight, Check, CheckCircle2, Download, Info, Loader2, RotateCcw, WifiOff, X } from 'lucide-react';
 import FormularioInforme from '@/components/informes/FormularioInforme';
 import TextoFormato from '@/components/TextoFormato';
-import { faltantes, folioInforme, informesVisitaService, seccionesDe, type InformeLleno, type InformeVisita } from '@/services/informes';
+import { conDatosFijos, faltantes, folioInforme, informesVisitaService, seccionesDe, type DatosPrecarga, type InformeLleno, type InformeVisita } from '@/services/informes';
 import { useToast } from '@/hooks/useToast';
 
 type Respaldo = { t: number; respuestas: InformeVisita['respuestas']; checklist: InformeVisita['checklist'] };
@@ -29,8 +29,10 @@ function escribirRespaldo(id: string, r: Respaldo | null) {
   try { if (r) localStorage.setItem(claveRespaldo(id), JSON.stringify(r)); else localStorage.removeItem(claveRespaldo(id)); } catch { /* sin almacenamiento */ }
 }
 
-export default function InformeVisitaModal({ informe: inicial, editable, onCerrar, onPDF }: {
+export default function InformeVisitaModal({ informe: inicial, editable, onCerrar, onPDF, fijos }: {
   informe: InformeVisita; editable: boolean; onCerrar: (actualizado: InformeVisita) => void; onPDF: (i: InformeVisita) => void;
+  /** Los datos de la cita (cliente, dirección, contacto…): mandan sobre lo guardado en el informe. */
+  fijos?: DatosPrecarga;
 }) {
   const { success, error: toastError, warning } = useToast();
   const cambiado = useRef(false);
@@ -38,8 +40,14 @@ export default function InformeVisitaModal({ informe: inicial, editable, onCerra
   const [d, setD] = useState<InformeVisita>(() => {
     const r = inicial.estado === 'borrador' ? leerRespaldo(inicial.id) : null;
     const servidor = new Date(inicial.updated_at || inicial.created_at).getTime();
-    if (r && r.t > servidor) { cambiado.current = true; return { ...inicial, respuestas: r.respuestas, checklist: r.checklist }; }
-    return inicial;
+    let base = inicial;
+    if (r && r.t > servidor) { cambiado.current = true; base = { ...inicial, respuestas: r.respuestas, checklist: r.checklist }; }
+    // Un informe en borrador se actualiza con los datos de la cita (si la cita cambió).
+    if (fijos && base.estado === 'borrador' && editable) {
+      const f = conDatosFijos(base, fijos);
+      if (f.cambio) { cambiado.current = true; base = f.informe; }
+    }
+    return base;
   });
   const [paso, setPaso] = useState(0);
   const [marcar, setMarcar] = useState(false);

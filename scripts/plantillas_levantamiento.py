@@ -69,7 +69,7 @@ def antecedentes(*extra):
         T('direccion', 'Dirección', precarga='direccion'),
         T('contacto', 'Contacto en sitio', precarga='contacto'),
         T('telefono', 'Teléfono del contacto', precarga='telefono'),
-        P('motivo', 'Motivo de la visita / qué solicita el cliente', requerido=True, naturaleza='declarado',
+        P('motivo', 'Motivo de la visita / qué solicita el cliente', requerido=True, naturaleza='declarado', precarga='motivo',
           cotizacion=['requisito'], placeholder='En palabras del cliente: qué necesita y para cuándo.'),
         S('tipo_inmueble', 'Tipo de inmueble', ['Casa', 'Departamento', 'Local comercial', 'Oficina',
           'Bodega / industria', 'Edificio / condominio', 'Otro'], cotizacion=['antecedente']),

@@ -141,7 +141,8 @@ export default function VisitaPage() {
         <p style={{ margin: 0, fontSize: '0.8rem', color: 'var(--muted)' }}>Elige la planilla (levantamiento, checklist…), llénala por pasos y agrega las fotos dentro del informe.</p>
         <InformesDeVisita agendaId={v.id} editable={puedeTrabajar} tiposServicio={v.tipos_servicio}
           datos={() => ({ fecha: v.fecha, titulo: v.titulo, responsable: v.tecnico?.nombre || v.tecnico?.email || RESPONSABLE_LABEL[v.responsable],
-            hora: v.hora_inicio?.slice(0, 5) || null, contacto: cli?.contacto_nombre || cli?.nombre_cliente, telefono: cli?.telefono,
+            hora: v.hora_inicio?.slice(0, 5) || null, contacto: cli?.contacto_nombre || null, telefono: cli?.telefono,
+            motivo: v.solicitudes?.descripcion?.trim() || v.notas?.trim() || null,
             cliente: { nombre: cli?.nombre_cliente || 'Sin cliente', rut: cli?.rut, direccion } })} />
       </div>
 
