@@ -37,6 +37,14 @@ export default function HistorialPage() {
 
   const [cotizaciones, setCotizaciones] = useState<Cotizacion[]>([]);
   const [otDe, setOtDe] = useState<Record<string, { id: string; folio: number }>>({});
+  // Revisiones guardadas (versiones que el cliente ya había recibido antes de un cambio).
+  const [revisiones, setRevisiones] = useState<{ cot: Cotizacion; lista: { revision: number; created_at: string; total: number | null; creado_por: string | null; datos: Cotizacion }[] } | null>(null);
+  const verRevisiones = async (cot: Cotizacion) => {
+    const { data, error } = await supabase.from('cotizacion_revisiones')
+      .select('revision, created_at, total, creado_por, datos').eq('cotizacion_id', cot.id).order('revision', { ascending: false });
+    if (error) { toastError('No se pudieron cargar las revisiones'); return; }
+    setRevisiones({ cot, lista: (data || []) as NonNullable<typeof revisiones>['lista'] });
+  };
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [filterEstado, setFilterEstado] = useState<EstadoCotizacion | 'Todos'>('Todos');
@@ -186,12 +194,14 @@ const [empresas, setEmpresas] = useState<EmpresaInfo[]>([]);
           fechaEmision={cot.created_at}
           fotos={fotos}
           vendedor={vendedorDe(cot)}
+          portada={!!cot.incluir_portada}
+          revision={cot.revision || 0}
           aceptacion={['Aceptado', 'Realizado', 'Entregado'].includes(cot.estado) && cot.respondida_por && cot.respondida_at
             ? { nombre: cot.respondida_por, rut: cot.respondida_rut, fecha: cot.respondida_at, firma: cot.respuesta_firma }
             : null}
         />
       ).toBlob();
-      saveAs(blob, `Cotizacion_${formatFolio(cot.folio)}_${nombreArchivo(cot.clientes.nombre_cliente)}.pdf`);
+      saveAs(blob, `Cotizacion_${formatFolio(cot.folio)}${cot.revision ? `_R${cot.revision}` : ''}_${nombreArchivo(cot.clientes.nombre_cliente)}.pdf`);
     } catch (e) {
       console.error(e);
       toastError('Error al generar PDF');
@@ -260,6 +270,37 @@ const [empresas, setEmpresas] = useState<EmpresaInfo[]>([]);
       )}
       {rechazo && (
         <MotivoPerdidaModal folio={formatFolio(rechazo.folio)} onConfirm={confirmarRechazo} onClose={() => setRechazo(null)} />
+      )}
+      {revisiones && (
+        <div className="modal-overlay" onClick={e => { if (e.target === e.currentTarget) setRevisiones(null); }}>
+          <div className="modal-box" style={{ maxWidth: 480 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '1rem 1.25rem', borderBottom: '1px solid var(--border2)' }}>
+              <p className="section-label" style={{ margin: 0 }}>Revisiones de {formatFolio(revisiones.cot.folio)}</p>
+              <button onClick={() => setRevisiones(null)} aria-label="Cerrar" style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--muted)' }}><X size={16} /></button>
+            </div>
+            <div style={{ padding: '0.5rem 1.25rem 1rem' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '0.6rem 0', borderBottom: '1px solid var(--border2)' }}>
+                <span style={{ flex: 1, fontSize: '0.86rem', color: 'var(--text)' }}><b>Revisión {revisiones.cot.revision}</b> · vigente</span>
+                <span style={{ fontSize: '0.84rem' }}>{formatMoneda(revisiones.cot.total, (revisiones.cot.moneda as Moneda) || 'CLP')}</span>
+              </div>
+              {revisiones.lista.length === 0 && <p style={{ color: 'var(--muted)', fontSize: '0.84rem', padding: '0.8rem 0' }}>No hay versiones anteriores guardadas.</p>}
+              {revisiones.lista.map(r => (
+                <div key={r.revision} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '0.6rem 0', borderBottom: '1px solid var(--border2)' }}>
+                  <span style={{ flex: 1, fontSize: '0.84rem', color: 'var(--text)' }}>
+                    Revisión {r.revision}
+                    <span style={{ display: 'block', fontSize: '0.72rem', color: 'var(--muted)' }}>Reemplazada el {formatDate(r.created_at)}{r.creado_por && vendedores[r.creado_por] ? ` por ${vendedores[r.creado_por].nombre}` : ''}</span>
+                  </span>
+                  <span style={{ fontSize: '0.84rem' }}>{formatMoneda(Number(r.total || 0), (r.datos.moneda as Moneda) || 'CLP')}</span>
+                  <button className="btn btn-ghost btn-sm" disabled={genPDF === `${revisiones.cot.id}-r${r.revision}`} title="Descargar el PDF de esta revisión"
+                    onClick={() => handleDownloadPDF({ ...r.datos, id: `${revisiones.cot.id}-r${r.revision}`, clientes: revisiones.cot.clientes, revision: r.revision })}>
+                    {genPDF === `${revisiones.cot.id}-r${r.revision}` ? <Loader2 size={12} className="iv-spin" /> : <Download size={12} />} PDF
+                  </button>
+                </div>
+              ))}
+              <p style={{ fontSize: '0.72rem', color: 'var(--muted)', marginTop: 8 }}>Se guarda una revisión cada vez que cambias una cotización que el cliente ya había recibido.</p>
+            </div>
+          </div>
+        </div>
       )}
       {/* Header */}
       <PageHeader
@@ -450,6 +491,14 @@ const [empresas, setEmpresas] = useState<EmpresaInfo[]>([]);
                       {otDe[cot.id] && (
                         <p style={{ fontSize: '0.64rem', marginTop: 2 }}>
                           <a href={`/ordenes/${otDe[cot.id].id}`} onClick={e => { e.stopPropagation(); e.preventDefault(); router.push(`/ordenes/${otDe[cot.id].id}`); }} style={{ color: 'var(--y)' }}>{folioOT(otDe[cot.id].folio)}</a>
+                        </p>
+                      )}
+                      {(cot.revision || 0) > 0 && (
+                        <p style={{ fontSize: '0.64rem', marginTop: 2 }}>
+                          <button onClick={e => { e.stopPropagation(); verRevisiones(cot); }} title="Versiones anteriores que recibió el cliente"
+                            style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', color: 'var(--info)', fontSize: '0.64rem', textDecoration: 'underline' }}>
+                            Revisión {cot.revision}
+                          </button>
                         </p>
                       )}
                       {cot.estado === 'Rechazado' && cot.motivo_perdida && (

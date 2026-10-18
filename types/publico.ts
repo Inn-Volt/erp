@@ -7,6 +7,9 @@ import type { EmpresaInfo } from '@/components/pdf/PresupuestoPDF';
 export interface FotoPublica { url: string; caption: string; }
 
 export interface CotizacionPublica {
+  /** Portada de presentación en el PDF y n° de revisión vigente (fase 3). */
+  incluir_portada?: boolean;
+  revision?: number;
   folio: number;
   estado: EstadoCotizacion;
   created_at: string;

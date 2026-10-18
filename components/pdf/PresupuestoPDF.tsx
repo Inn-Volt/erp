@@ -430,6 +430,10 @@ interface Props {
   aceptacion?: AceptacionPDF | null;
   /** Quién cotiza (la cuenta que hizo la cotización): contacto en el encabezado y en la firma. */
   vendedor?: Vendedor | null;
+  /** Portada de presentación antes del detalle (traído de TecApp). */
+  portada?: boolean;
+  /** N° de revisión (0 = original). Desde la 1 se muestra «Rev. N» junto al folio. */
+  revision?: number;
 }
 
 export interface AceptacionPDF {
@@ -520,6 +524,7 @@ export default function PresupuestoPDF({
   folio, descripcionGeneral, garantia, condicionesComerciales,
   ocultarSuministros, empresa, moneda = 'CLP', valorUF = 0,
   partidas = [], mostrarDetalle = false, fechaEmision, fotos = [], aceptacion = null, vendedor = null,
+  portada = false, revision = 0,
 }: Props) {
 
   // Formateador de moneda de todo el documento (CLP o UF).
@@ -612,6 +617,14 @@ export default function PresupuestoPDF({
     (esInnVolt(empresa.nombre)
       ? (typeof window !== 'undefined' ? window.location.origin : '') + LOGO_PDF
       : '');
+  // Portada (fondo oscuro): logo de tinta clara si es InnVolt.
+  const logoPortada = empresa.logo_url ||
+    (esInnVolt(empresa.nombre)
+      ? (typeof window !== 'undefined' ? window.location.origin : '') + '/InnVolt-transparente-oscuro.png'
+      : '');
+  const tituloPortada = (partidas.length === 1 ? partidas[0].nombre : '')
+    || (descripcionGeneral || '').replace(/\*\*/g, '').split('\n').map(l => l.trim()).find(Boolean)?.slice(0, 110)
+    || 'Propuesta de servicios eléctricos';
 
   const textoImportante =
     empresa.texto_importante ||
@@ -622,6 +635,34 @@ export default function PresupuestoPDF({
 
   return (
     <Document>
+      {portada && (
+        <Page size="A4" style={{ backgroundColor: DARK, color: WHITE, fontFamily: 'Helvetica', padding: 48, justifyContent: 'space-between' }}>
+          <View>
+            {logoPortada ? (
+              // eslint-disable-next-line jsx-a11y/alt-text -- <Image> de @react-pdf no admite alt
+              <Image style={{ width: 170, objectFit: 'contain' }} src={logoPortada} />
+            ) : <Text style={{ fontSize: 22, fontFamily: 'Helvetica-Bold' }}>{empresa.nombre.toUpperCase()}</Text>}
+          </View>
+          <View>
+            <View style={{ width: 60, height: 4, backgroundColor: SPARK, marginBottom: 18 }} />
+            <Text style={{ fontSize: 10, color: SPARK, fontFamily: 'Helvetica-Bold', letterSpacing: 3, marginBottom: 10 }}>PROPUESTA TÉCNICA Y ECONÓMICA</Text>
+            <Text style={{ fontSize: 26, fontFamily: 'Helvetica-Bold', lineHeight: 1.25, marginBottom: 14 }}>{tituloPortada}</Text>
+            <Text style={{ fontSize: 13, color: '#d0d0d0' }}>Preparada para {cliente.empresa || cliente.nombre_cliente}</Text>
+            {cliente.empresa && cliente.nombre_cliente !== cliente.empresa ? <Text style={{ fontSize: 10, color: '#a8a8a8', marginTop: 3 }}>At. {cliente.nombre_cliente}</Text> : null}
+          </View>
+          <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-end', borderTopWidth: 1, borderTopColor: '#444', paddingTop: 14 }}>
+            <View>
+              <Text style={{ fontSize: 9, color: '#a8a8a8' }}>Cotización {folio}{revision > 0 ? ` · Rev. ${revision}` : ''}</Text>
+              <Text style={{ fontSize: 9, color: '#a8a8a8', marginTop: 2 }}>Emitida {fechaEmisionTxt} · válida hasta {validaHastaTxt}</Text>
+              {vendedor?.nombre ? <Text style={{ fontSize: 9, color: '#a8a8a8', marginTop: 2 }}>{vendedor.nombre}{vendedor.telefono ? ` · ${vendedor.telefono}` : ''}</Text> : null}
+            </View>
+            <View style={{ alignItems: 'flex-end' }}>
+              <Text style={{ fontSize: 8, color: SPARK, fontFamily: 'Helvetica-Bold', letterSpacing: 2 }}>INVERSIÓN TOTAL</Text>
+              <Text style={{ fontSize: 20, fontFamily: 'Helvetica-Bold', marginTop: 3 }}>{fmt(totalR)}</Text>
+            </View>
+          </View>
+        </Page>
+      )}
 
       {/* ══════════════════════════════════════════════════════════════════════
           PÁGINA 1 — Datos del documento + tabla de ítems
@@ -660,6 +701,7 @@ export default function PresupuestoPDF({
           <View style={s.folioCard}>
             <Text style={s.folioLabel}>COTIZACIÓN</Text>
             <Text style={s.folioNum}>{folio}</Text>
+            {revision > 0 ? <Text style={[s.folioDate, { color: SPARK }]}>Revisión {revision}</Text> : null}
             <View style={s.folioDivider} />
             <Text style={s.folioDate}>Emitida {fechaEmisionTxt}</Text>
             <Text style={[s.folioDate, { color: SPARK, marginTop: 2 }]}>Válida hasta {validaHastaTxt}</Text>

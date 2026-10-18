@@ -43,6 +43,8 @@ export interface FilaCotizacion {
   respondida_rut?: string | null;
   respuesta_firma?: string | null;   // puede no existir si falta correr el SQL
   vendedor_id?: string | null;       // quién cotizó (Fase 1)
+  incluir_portada?: boolean | null;  // Fase 3
+  revision?: number | null;          // Fase 3
   clientes: {
     nombre_cliente: string; empresa: string | null; rut: string; email: string | null;
     telefono: string | null; direccion: string | null; contacto_nombre: string | null;
@@ -146,6 +148,8 @@ export async function aPublica(cot: FilaCotizacion): Promise<CotizacionPublica> 
     condiciones_comerciales: cot.condiciones_comerciales || '',
     ocultar_suministros: !!cot.ocultar_suministros,
     mostrar_detalle: !!cot.mostrar_detalle,
+    incluir_portada: !!cot.incluir_portada,
+    revision: cot.revision || 0,
     items: (cot.items || []).map(itemPublico),
     partidas: (cot.partidas || []).map(partidaPublica),
     cliente: {
