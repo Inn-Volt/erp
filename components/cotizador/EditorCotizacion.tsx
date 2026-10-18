@@ -25,6 +25,8 @@ import CotizacionPDF, { nombrePDF } from '@/components/pdf/CotizacionPDF';
 import type { EmpresaInfo } from '@/components/pdf/PresupuestoPDF';
 import TarjetaPartida, { type AccionesLinea } from './TarjetaPartida';
 import AsistenteReceta from './AsistenteReceta';
+import TrasladoModal from './TrasladoModal';
+import { proyectosService, folioProyecto, type Proyecto } from '@/services/fase5';
 import { BloquePlegable, EstadoPill, MenuAcciones, opcionMenu, PedirMotivo, etiqueta } from './ui';
 import { AprobarModal, HistorialModal, RechazarModal, RevisarYEnviar, type Canal } from './Modales';
 import {
@@ -71,11 +73,11 @@ function docVacio(): CotizacionDoc {
 const huella = (d: CotizacionDoc) => JSON.stringify([
   d.titulo, d.cliente_id, d.sucursal_id, d.contacto_id, d.empresa_id, d.plantilla_id, d.items, d.partidas, d.moneda, d.valor_uf,
   d.fecha_valor_uf, d.que_ve_cliente, d.titulo_valorizacion, d.descripcion_general, d.aclaraciones, d.secciones, d.valida_hasta,
-  d.valida_hasta_a_mano, d.incluir_fotos,
+  d.valida_hasta_a_mano, d.incluir_fotos, d.proyecto_id,
 ]);
 
-export default function EditorCotizacion({ id, clonarDe, clienteInicial, solicitudInicial, levantamientoInicial }: {
-  id: string | null; clonarDe?: string | null; clienteInicial?: string | null; solicitudInicial?: string | null; levantamientoInicial?: string | null;
+export default function EditorCotizacion({ id, clonarDe, clienteInicial, solicitudInicial, levantamientoInicial, proyectoInicial }: {
+  id: string | null; clonarDe?: string | null; clienteInicial?: string | null; solicitudInicial?: string | null; levantamientoInicial?: string | null; proyectoInicial?: string | null;
 }) {
   const router = useRouter();
   const { perfil, puede } = usePermisos();
@@ -114,6 +116,9 @@ export default function EditorCotizacion({ id, clonarDe, clienteInicial, solicit
   const [deshacerPlantilla, setDeshacerPlantilla] = useState<{ texto: string; antes: CotizacionDoc } | null>(null);
   const [cambioMoneda, setCambioMoneda] = useState<Moneda | null>(null);
   const [trayendoUF, setTrayendoUF] = useState(false);
+  const [proyectos, setProyectos] = useState<Proyecto[]>([]);
+  const [trasladoPara, setTrasladoPara] = useState<string | null>(null);
+  useEffect(() => { proyectosService.listar().then(setProyectos).catch(() => setProyectos([])); }, []);
 
   const editable = puedeEditar && d.estado === 'Borrador';
   const sucio = editable && huella(d) !== guardadaHuella;
@@ -188,6 +193,7 @@ export default function EditorCotizacion({ id, clonarDe, clienteInicial, solicit
           valida_hasta: sumarDias(fechaLocal(), aj.dias_validez),
           partidas: [{ id: pid, nombre: '', cantidad: 1, unidad: 'global', tipo: 'instalacion' }],
           cliente_id: clienteInicial || null,
+          proyecto_id: proyectoInicial || null,
         };
         if (levantamientoInicial) {
           const lev = await levantamientosService.getById(levantamientoInicial).catch(() => null);
@@ -394,6 +400,7 @@ export default function EditorCotizacion({ id, clonarDe, clienteInicial, solicit
       subtotal: r.totales.neto, iva: r.totales.iva, total: r.totales.total, total_clp: r.totales.totalClp, descuento_global: 0,
       costo_directo: r.internos.costoConImprevistos, utilidad: r.internos.utilidad,
       solicitud_id: x.solicitud_id || null, levantamiento_id: x.levantamiento_id || null, incluir_fotos: !!x.incluir_fotos,
+      ...(proyectos.length || x.proyecto_id ? { proyecto_id: x.proyecto_id || null } : {}),
     };
   };
 
@@ -736,6 +743,14 @@ export default function EditorCotizacion({ id, clonarDe, clienteInicial, solicit
             )}
           </section>
 
+          {cliente?.estado_pago && cliente.estado_pago !== 'al_dia' && (
+            <p role="alert" style={{ margin: 0, borderRadius: 10, padding: '0.6rem 0.8rem', fontSize: '0.86rem', fontWeight: 600,
+              background: cliente.estado_pago === 'bloqueado' ? 'rgba(220,38,38,.1)' : 'rgba(217,119,6,.1)', color: cliente.estado_pago === 'bloqueado' ? 'var(--danger)' : '#d97706' }}>
+              {cliente.estado_pago === 'bloqueado' ? '⛔ El cliente está bloqueado por pagos pendientes: no se le puede enviar.' : '⚠ El cliente no está al día con sus pagos.'}
+              {cliente.nota_pago ? ` ${cliente.nota_pago}` : ''}
+            </p>
+          )}
+
           {/* 1. Cliente */}
           <BloquePlegable id="cot-bloque-cliente" titulo="Cliente" resumen={resumenCliente} abierto={abierto.cliente}
             onAlternar={() => setAbierto(a => ({ ...a, cliente: !a.cliente }))} marcado={!d.cliente_id && !!cot}>
@@ -784,6 +799,13 @@ export default function EditorCotizacion({ id, clonarDe, clienteInicial, solicit
                 </select>
                 {vendedor && <span style={{ fontSize: '0.74rem', color: 'var(--muted)' }}>Firma: {firmaVendedor(vendedor, empresa?.nombre || '')}</span>}
               </label>
+              {(proyectos.length > 0 || d.proyecto_id) && (
+                <label><span style={etiqueta}>Proyecto</span>
+                  <select className="input" disabled={!editable} value={d.proyecto_id || ''} onChange={e => set({ proyecto_id: e.target.value || null })}>
+                    <option value="">Sin proyecto</option>
+                    {proyectos.filter(p => !d.cliente_id || !p.cliente_id || p.cliente_id === d.cliente_id || p.id === d.proyecto_id).map(p => <option key={p.id} value={p.id}>{folioProyecto(p.folio)} · {p.nombre}</option>)}
+                  </select></label>
+              )}
               {(d.solicitud_id || d.levantamiento_id) && (
                 <div style={{ fontSize: '0.82rem', color: 'var(--muted)', display: 'flex', flexDirection: 'column', gap: 4 }}>
                   <span style={etiqueta}>Origen</span>
@@ -913,6 +935,7 @@ export default function EditorCotizacion({ id, clonarDe, clienteInicial, solicit
                   },
                   onDescuento: pct => setItems(items => items.map(l => (l.partidaId === p.id ? { ...l, descuento: pct } : l))),
                   onDeshacerReceta: () => { if (recetaAgregada) { setItems(() => recetaAgregada.antes); setRecetaAgregada(null); } },
+                  onTraslado: () => setTrasladoPara(p.id),
                 }} />
             ))}
             {sueltas.length > 0 && (
@@ -982,6 +1005,18 @@ export default function EditorCotizacion({ id, clonarDe, clienteInicial, solicit
         <PedirMotivo titulo={`Anular ${folioDe(cot.folio)}`} accion="Anular" peligro onCerrar={() => setModal(null)}
           ayuda="Queda Anulada y no vuelve; conserva su N°. Para cotizar de nuevo, clónala."
           onConfirmar={async m => { try { await cotizadorService.anular(cot.id, m); success('Cotización anulada'); await recargar(); } catch (e) { toastError(e instanceof Error ? e.message : 'No se pudo'); } }} />
+      )}
+      {trasladoPara && (
+        <TrasladoModal onCerrar={() => setTrasladoPara(null)} onAgregar={(t, visitas) => {
+          if (d.moneda === 'UF' && !(Number(d.valor_uf) > 0)) { warning('Está en UF: escribe el valor de la UF antes de agregar.'); return; }
+          agregarLineas(trasladoPara, [{
+            id: nuevoId(), partidaId: trasladoPara, descripcion: `Traslado a ${t.comuna}${t.desde_otra_base ? ` (desde ${t.sale_desde})` : ''}`,
+            categoria: 'operacion', unidad: 'visita', cantidad: visitas, costo: aMoneda(t.total, d.moneda, d.valor_uf, true),
+            imprevistos: 0, margen: 0, precio: 0, iva: IVA, descuento: 0, fuera: true, ganancia: 0,
+          }]);
+          setTrasladoPara(null);
+          success('Traslado agregado');
+        }} />
       )}
       {asistente && (
         <AsistenteReceta receta={asistente.receta} partida={d.partidas.find(p => p.id === asistente.partidaId)!} catalogo={catMap}

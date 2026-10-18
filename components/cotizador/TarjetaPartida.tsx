@@ -27,6 +27,7 @@ export interface AccionesPartida {
   onReceta: (r: RecetaCompleta) => void;
   onDescuento: (pct: number) => void;
   onDeshacerReceta?: () => void;
+  onTraslado?: () => void;
 }
 export interface AccionesLinea {
   cambiar: (id: string, patch: Partial<Linea>) => void;
@@ -92,6 +93,7 @@ export default function TarjetaPartida(props: {
             {cerrar => (<>
               <button type="button" style={opcionMenu} onClick={() => { cerrar(); acciones.onAgregarDebajo('instalacion'); }}>Agregar partida de instalación debajo</button>
               <button type="button" style={opcionMenu} onClick={() => { cerrar(); acciones.onAgregarDebajo('venta'); }}>Agregar partida de venta debajo</button>
+              {acciones.onTraslado && <button type="button" style={{ ...opcionMenu, borderTop: '1px solid var(--border2)' }} onClick={() => { cerrar(); acciones.onTraslado!(); }}>Agregar traslado (por comuna)</button>}
               <button type="button" style={{ ...opcionMenu, borderTop: '1px solid var(--border2)' }} disabled={indice === 0} onClick={() => { cerrar(); acciones.onMover(-1); }}>↑ Subir</button>
               <button type="button" style={opcionMenu} disabled={indice === total - 1} onClick={() => { cerrar(); acciones.onMover(1); }}>↓ Bajar</button>
               <button type="button" style={{ ...opcionMenu, borderTop: '1px solid var(--border2)', color: 'var(--danger)' }} onClick={() => { cerrar(); acciones.onQuitar(); }}>Quitar la partida</button>

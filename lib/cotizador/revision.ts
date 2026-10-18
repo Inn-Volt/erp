@@ -23,6 +23,8 @@ export function revisar(doc: CotizacionDoc, r: Resultado, cliente: Cliente | nul
   if (doc.moneda === 'UF' && !(Number(doc.valor_uf) > 0)) a.push({ nivel: 'rojo', texto: 'Está en UF y falta el valor de la UF.', ir: 'cot-bloque-cotizacion' });
   if (doc.valida_hasta_a_mano && doc.valida_hasta && doc.valida_hasta < extra.hoy) a.push({ nivel: 'rojo', texto: 'La «válida hasta» escrita a mano ya pasó.', ir: 'cot-bloque-cotizacion' });
   if (!cliente) a.push({ nivel: 'rojo', texto: 'Falta el cliente.', ir: 'cot-bloque-cliente' });
+  if (cliente?.estado_pago === 'bloqueado') a.push({ nivel: 'rojo', texto: `El cliente está bloqueado por pagos pendientes${cliente.nota_pago ? `: ${cliente.nota_pago}` : ''}. Habla con Facturación.`, ir: 'cot-bloque-cliente' });
+  if (cliente?.estado_pago === 'atrasado') a.push({ nivel: 'ambar', texto: `El cliente no está al día con sus pagos${cliente.nota_pago ? `: ${cliente.nota_pago}` : ''}.`, ir: 'cot-bloque-cliente' });
 
   for (const l of lineas) {
     const c = r.lineas.get(l.id);

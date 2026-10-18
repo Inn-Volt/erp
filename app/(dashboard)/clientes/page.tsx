@@ -80,6 +80,20 @@ function ClienteModal({ cliente, onClose, onSave }: {
               <label className="label-muted" style={{ display: 'block', marginBottom: '0.4rem' }}>Dirección</label>
               <input className="input" value={form.direccion || ''} onChange={set('direccion')} placeholder="Av. Ejemplo 123, Santiago" />
             </div>
+            {cliente?.estado_pago !== undefined && (
+              <div style={{ gridColumn: '1/-1', display: 'grid', gridTemplateColumns: '180px 1fr', gap: '0.6rem' }}>
+                <div>
+                  <label className="label-muted" style={{ display: 'block', marginBottom: '0.4rem' }}>Estado de pago</label>
+                  <select className="input" value={form.estado_pago || 'al_dia'} onChange={e => setForm(p => ({ ...p, estado_pago: e.target.value as Cliente['estado_pago'] }))}>
+                    <option value="al_dia">Al día</option><option value="atrasado">Atrasado (avisa al cotizar)</option><option value="bloqueado">Bloqueado (no se le envían cotizaciones)</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="label-muted" style={{ display: 'block', marginBottom: '0.4rem' }}>Nota de pago</label>
+                  <input className="input" value={form.nota_pago || ''} onChange={e => setForm(p => ({ ...p, nota_pago: e.target.value }))} placeholder="Factura 1234 vencida hace 60 días" />
+                </div>
+              </div>
+            )}
             <div style={{ gridColumn: '1/-1' }}>
               <label className="label-muted" style={{ display: 'block', marginBottom: '0.4rem' }}>Notas</label>
               <textarea className="input" value={form.notas || ''} onChange={set('notas')} rows={2} placeholder="Observaciones internas..." style={{ resize: 'vertical' }} />
@@ -292,6 +306,7 @@ export default function ClientesPage() {
                   <div>
                     <p style={{ fontWeight: 500, fontSize: '0.875rem' }}>{c.nombre_cliente}</p>
                     {c.empresa && <p style={{ fontSize: '0.75rem', color: 'var(--muted)' }}>{c.empresa}</p>}
+                    {c.estado_pago && c.estado_pago !== 'al_dia' && <p style={{ fontSize: '0.7rem', fontWeight: 700, color: c.estado_pago === 'bloqueado' ? 'var(--danger)' : '#d97706' }}>{c.estado_pago === 'bloqueado' ? 'Bloqueado por pagos' : 'Pagos atrasados'}</p>}
                     {/* Mobile-only: show RUT + phone inline */}
                     <p className="mobile-meta" style={{ fontSize: '0.72rem', color: 'var(--dim)', marginTop: '0.2rem' }}>
                       {c.rut && <span style={{ fontFamily: 'monospace' }}>{c.rut}</span>}

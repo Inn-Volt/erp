@@ -30,6 +30,7 @@ import { permisosDeRuta } from '@/lib/permisos';
 type Item = { href: string; label: string; exacto?: boolean; permisos?: string[] };
 const MENU: { grupo: string; icono: React.ElementType; items: Item[] }[] = [
   { grupo: 'Inicio', icono: Home, items: [
+    { href: '/inicio', label: 'Mi día' },
     { href: '/dashboard', label: 'Dashboard', permisos: ['dashboard.ver'] },
   ] },
   { grupo: 'Comercial', icono: TrendingUp, items: [
@@ -37,6 +38,8 @@ const MENU: { grupo: string; icono: React.ElementType; items: Item[] }[] = [
     { href: '/cotizador/historial', label: 'Cotizaciones', permisos: ['cotizaciones.ver'] },
     { href: '/cotizador', label: 'Nueva cotización', exacto: true, permisos: ['cotizaciones.crear'] },
     { href: '/cotizador/plantillas', label: 'Plantillas', permisos: ['cotizaciones.aprobar'] },
+    { href: '/proyectos', label: 'Proyectos', permisos: ['proyectos.ver', 'proyectos.gestionar'] },
+    { href: '/traslados', label: 'Traslados', permisos: ['traslados.ver', 'traslados.gestionar'] },
   ] },
   { grupo: 'Operación', icono: Wrench, items: [
     { href: '/ordenes', label: 'Órdenes de trabajo', permisos: ['ot.ver', 'ot.ejecutar'] },
@@ -57,6 +60,8 @@ const MENU: { grupo: string; icono: React.ElementType; items: Item[] }[] = [
     { href: '/biblioteca', label: 'Biblioteca de precios', permisos: ['biblioteca.ver'] },
     { href: '/usuarios', label: 'Usuarios', permisos: ['usuarios.ver', 'usuarios.gestionar'] },
     { href: '/roles', label: 'Roles y permisos', permisos: ['roles.gestionar'] },
+    { href: '/personas', label: 'Personas y competencias', permisos: ['personas.ver', 'personas.gestionar'] },
+    { href: '/mi-cuenta', label: 'Mi cuenta' },
     { href: '/auditoria', label: 'Auditoría', permisos: ['auditoria.ver'] },
     { href: '/configuracion', label: 'Configuración', permisos: ['configuracion.gestionar'] },
   ] },

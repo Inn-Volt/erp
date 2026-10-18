@@ -17,6 +17,8 @@ import {
   type CategoriaGasto, type Gasto, type OrdenTrabajo,
 } from '@/services/operacion';
 import { vendedoresService } from '@/services/vendedores';
+import Anticipos from '@/components/gastos/Anticipos';
+import { anticiposService, type Anticipo } from '@/services/fase5';
 import { usePermisos } from '@/hooks/usePermisos';
 import { useToast } from '@/hooks/useToast';
 import { fechaLocal, formatCLP, formatDate } from '@/utils';
@@ -30,9 +32,9 @@ const ESTADOS: Record<Gasto['estado'], { nombre: string; color: string }> = {
 };
 const categoria = (c: string) => CATEGORIAS_GASTO.find(x => x.clave === c)?.nombre || c;
 
-function NuevoGasto({ ots, otInicial, onClose, onListo }: { ots: OrdenTrabajo[]; otInicial: string; onClose: () => void; onListo: () => void }) {
+function NuevoGasto({ ots, otInicial, anticipos, onClose, onListo }: { ots: OrdenTrabajo[]; otInicial: string; anticipos: Anticipo[]; onClose: () => void; onListo: () => void }) {
   const { success, error: toastError } = useToast();
-  const [f, setF] = useState({ fecha: fechaLocal(), monto: 0, categoria: 'combustible' as CategoriaGasto, descripcion: '', ot_id: otInicial });
+  const [f, setF] = useState({ fecha: fechaLocal(), monto: 0, categoria: 'combustible' as CategoriaGasto, descripcion: '', ot_id: otInicial, anticipo_id: anticipos.find(a => a.estado === 'entregado')?.id || '' });
   const [boleta, setBoleta] = useState<File | null>(null);
   const [guardando, setGuardando] = useState(false);
   const lbl = { display: 'block', marginBottom: 6 } as const;
@@ -42,7 +44,7 @@ function NuevoGasto({ ots, otInicial, onClose, onListo }: { ots: OrdenTrabajo[];
     setGuardando(true);
     try {
       const boleta_path = boleta ? await archivosOT.subir('gastos', boleta) : null;
-      await gastosService.crear({ ...f, descripcion: f.descripcion.trim() || null, ot_id: f.ot_id || null, boleta_path });
+      await gastosService.crear({ ...f, descripcion: f.descripcion.trim() || null, ot_id: f.ot_id || null, boleta_path, ...(f.anticipo_id ? { anticipo_id: f.anticipo_id } : {}) } as Partial<Gasto>);
       success('Gasto registrado'); onListo();
     } catch (e) { toastError(e instanceof Error ? e.message : 'No se pudo registrar'); }
     finally { setGuardando(false); }
@@ -64,6 +66,13 @@ function NuevoGasto({ ots, otInicial, onClose, onListo }: { ots: OrdenTrabajo[];
             <select className="input" value={f.categoria} onChange={e => setF({ ...f, categoria: e.target.value as CategoriaGasto })}>
               {CATEGORIAS_GASTO.map(c => <option key={c.clave} value={c.clave}>{c.nombre}</option>)}</select></div>
           <div><label className="label-muted" style={lbl}>Detalle</label><input className="input" value={f.descripcion} onChange={e => setF({ ...f, descripcion: e.target.value })} placeholder="Bencina camioneta, peaje Ruta 68…" /></div>
+          {anticipos.some(a => a.estado === 'entregado') && (
+            <div><label className="label-muted" style={lbl}>Rendir contra el anticipo</label>
+              <select className="input" value={f.anticipo_id} onChange={e => setF({ ...f, anticipo_id: e.target.value })}>
+                <option value="">No (me lo reembolsan aparte)</option>
+                {anticipos.filter(a => a.estado === 'entregado').map(a => <option key={a.id} value={a.id}>AN-{String(a.folio).padStart(4, '0')} · saldo {formatCLP(a.saldo ?? a.monto)}{a.motivo ? ` · ${a.motivo}` : ''}</option>)}
+              </select></div>
+          )}
           <div><label className="label-muted" style={lbl}>OT asociada</label>
             <select className="input" value={f.ot_id} onChange={e => setF({ ...f, ot_id: e.target.value })}>
               <option value="">Sin OT (gasto general)</option>
@@ -98,6 +107,7 @@ export default function GastosPage() {
   const [nuevo, setNuevo] = useState(false);
   const [otInicial, setOtInicial] = useState('');
   const [urlBoleta, setUrlBoleta] = useState<string | null>(null);
+  const [anticipos, setAnticipos] = useState<Anticipo[]>([]);
 
   useEffect(() => {
     // /gastos?ot=<id> (desde el detalle de una OT) abre el formulario con esa OT.
@@ -112,6 +122,7 @@ export default function GastosPage() {
       const [g, e] = await Promise.all([gastosService.listar(verTodos ? null : perfil.id), vendedoresService.mapa()]);
       setGastos(g); setEquipo(e);
       otService.listar().then(o => setOts(o.filter(x => !['cerrada', 'anulada'].includes(x.estado)))).catch(() => {});
+      anticiposService.listar(verTodos ? null : perfil.id).then(setAnticipos).catch(() => setAnticipos([]));
     } catch (err) { if (faltaFase2(err)) setFalta(true); else toastError('No se pudieron cargar los gastos: ' + (err instanceof Error ? err.message : '')); }
     finally { setCargando(false); }
   }, [perfil, verTodos, toastError]);
@@ -124,7 +135,8 @@ export default function GastosPage() {
   // Rendición: aprobado y aún no reembolsado, por persona.
   const rendicion = useMemo(() => {
     const m: Record<string, number> = {};
-    gastos.filter(g => g.estado === 'aprobado').forEach(g => { m[g.usuario_id] = (m[g.usuario_id] || 0) + Number(g.monto); });
+    // Lo rendido contra un anticipo ya se pagó por adelantado: no se reembolsa.
+    gastos.filter(g => g.estado === 'aprobado' && !g.anticipo_id).forEach(g => { m[g.usuario_id] = (m[g.usuario_id] || 0) + Number(g.monto); });
     return Object.entries(m).sort((a, b) => b[1] - a[1]);
   }, [gastos]);
 
@@ -139,7 +151,7 @@ export default function GastosPage() {
   };
 
   const reembolsarTodo = async (uid: string) => {
-    const ids = gastos.filter(g => g.usuario_id === uid && g.estado === 'aprobado');
+    const ids = gastos.filter(g => g.usuario_id === uid && g.estado === 'aprobado' && !g.anticipo_id);
     if (!confirm(`¿Marcar como reembolsados ${ids.length} gastos de ${equipo[uid]?.nombre || 'esta persona'} por ${formatCLP(suma(ids))}?`)) return;
     try { for (const g of ids) await gastosService.actualizar(g.id, { estado: 'reembolsado' }); success('Rendición pagada'); cargar(); }
     catch (e) { toastError(e instanceof Error ? e.message : 'No se pudo actualizar'); }
@@ -160,7 +172,7 @@ export default function GastosPage() {
 
   return (
     <div className="anim-in">
-      {nuevo && <NuevoGasto ots={ots} otInicial={otInicial} onClose={() => setNuevo(false)} onListo={() => { setNuevo(false); cargar(); }} />}
+      {nuevo && <NuevoGasto ots={ots} otInicial={otInicial} anticipos={anticipos.filter(a => a.usuario_id === perfil?.id)} onClose={() => setNuevo(false)} onListo={() => { setNuevo(false); cargar(); }} />}
       {urlBoleta && (
         <div className="modal-overlay" onClick={() => setUrlBoleta(null)}>
           <img src={urlBoleta} alt="Boleta" style={{ maxWidth: '92vw', maxHeight: '88vh', borderRadius: 8 }} />
@@ -171,9 +183,11 @@ export default function GastosPage() {
 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: 8, marginBottom: 12 }}>
         <div className="kpi-card"><p className="label-muted">Mis pendientes</p><p className="kpi-value" style={{ color: '#d97706' }}>{formatCLP(suma(mios.filter(g => g.estado === 'pendiente')))}</p></div>
-        <div className="kpi-card"><p className="label-muted">Me deben (aprobado)</p><p className="kpi-value" style={{ color: '#2563eb' }}>{formatCLP(suma(mios.filter(g => g.estado === 'aprobado')))}</p></div>
+        <div className="kpi-card"><p className="label-muted">Me deben (aprobado)</p><p className="kpi-value" style={{ color: '#2563eb' }}>{formatCLP(suma(mios.filter(g => g.estado === 'aprobado' && !g.anticipo_id)))}</p></div>
         {aprueba && <div className="kpi-card"><p className="label-muted">Por revisar</p><p className="kpi-value">{gastos.filter(g => g.estado === 'pendiente').length}</p></div>}
       </div>
+
+      <Anticipos anticipos={anticipos} equipo={equipo} ots={ots} aprueba={aprueba} yo={perfil?.id} onCambio={cargar} />
 
       {aprueba && rendicion.length > 0 && (
         <div className="panel-y" style={{ marginBottom: 12 }}>

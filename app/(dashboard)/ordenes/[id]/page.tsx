@@ -17,6 +17,10 @@ import FaltaSQL from '@/components/FaltaSQL';
 import ChipEstadoOT from '@/components/ChipEstadoOT';
 import LinksMapa from '@/components/LinksMapa';
 import InformeEditor, { CHECKLIST_BASE } from '@/components/InformeEditor';
+import VisitasOT from '@/components/ot/VisitasOT';
+import PedidosMaterial from '@/components/bodega/PedidosMaterial';
+import { plantillasInformeService, proyectosService, folioProyecto, type PlantillaInforme, type Proyecto } from '@/services/fase5';
+import { TIPO_SERVICIO_OPCIONES } from '@/types/solicitud';
 import type { EmpresaInfo } from '@/components/pdf/PresupuestoPDF';
 import {
   bodegaService, CATEGORIAS_GASTO, faltaFase2, folioOT, gastosService, informesService, otService,
@@ -71,6 +75,21 @@ export default function DetalleOTPage() {
   const [catalogo, setCatalogo] = useState<CatalogoItem[]>([]);
   const [sacando, setSacando] = useState(false);
   const [mat, setMat] = useState({ busca: '', articulo_id: '', bodega_id: '', cantidad: 1, serie: '' });
+
+  // Fase 5: plantilla del informe, proyecto, tipo de servicio y etiquetas
+  const [plantillasInf, setPlantillasInf] = useState<PlantillaInforme[]>([]);
+  const [plantillaSel, setPlantillaSel] = useState('');
+  const [proyectos, setProyectos] = useState<Proyecto[]>([]);
+  const [etiqueta, setEtiqueta] = useState('');
+  useEffect(() => {
+    plantillasInformeService.listar().then(setPlantillasInf).catch(() => {});
+    proyectosService.listar().then(setProyectos).catch(() => {});
+  }, []);
+  const guardarCampo = async (patch: Partial<OrdenTrabajo>) => {
+    if (!ot) return;
+    try { await otService.actualizar(ot.id, patch); setOt({ ...ot, ...patch }); setNotas(await otService.notas(ot.id)); }
+    catch (e) { toastError(e instanceof Error ? e.message : 'No se pudo guardar'); }
+  };
 
   const cargar = useCallback(async () => {
     try {
@@ -156,7 +175,9 @@ export default function DetalleOTPage() {
   const nuevoInforme = async () => {
     if (!ot) return;
     try {
-      const inf = await informesService.crear(ot.id, CHECKLIST_BASE);
+      const pl = plantillasInf.find(p => p.id === plantillaSel) || plantillasInf.find(p => p.tipo_servicio && p.tipo_servicio === ot.tipo_servicio);
+      const checklist = pl ? pl.checklist.map(c => ({ texto: c.texto, ok: false })) : CHECKLIST_BASE;
+      const inf = await informesService.crear(ot.id, checklist);
       setInformes(x => [...x, inf]);
       if (['por_coordinar', 'coordinada'].includes(ot.estado)) await cambiarEstado('en_progreso');
     } catch (e) { toastError(e instanceof Error ? e.message : 'No se pudo crear el informe'); }
@@ -256,6 +277,24 @@ export default function DetalleOTPage() {
             {ot.direccion && <div><span className="label-muted">Dirección: </span>{ot.direccion} <div style={{ marginTop: 4 }}><LinksMapa direccion={ot.direccion} compacto /></div></div>}
             {ot.cotizaciones && <div><span className="label-muted">Cotización: </span><Link href={`/cotizador?edit=${ot.cotizaciones.id}`}>{formatFolio(ot.cotizaciones.folio)}</Link>{verCostos || puede('cotizaciones.ver') ? ` · ${formatCLP(Number(ot.cotizaciones.total_clp ?? ot.cotizaciones.total ?? 0))}` : ''}</div>}
             {ot.descripcion && <p style={{ whiteSpace: 'pre-wrap', margin: 0, color: 'var(--muted)' }}>{ot.descripcion}</p>}
+            <fieldset disabled={!puede('ot.crear')} style={{ border: 'none', padding: 0, margin: '4px 0 0', display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: 8 }}>
+              <label><span className="label-muted" style={lbl}>Tipo de servicio</span>
+                <select className="input" value={ot.tipo_servicio || ''} onChange={e => guardarCampo({ tipo_servicio: e.target.value || null })}>
+                  <option value="">—</option>{TIPO_SERVICIO_OPCIONES.map(t => <option key={t.key} value={t.key}>{t.label}</option>)}</select></label>
+              {proyectos.length > 0 && <label><span className="label-muted" style={lbl}>Proyecto</span>
+                <select className="input" value={ot.proyecto_id || ''} onChange={e => guardarCampo({ proyecto_id: e.target.value || null })}>
+                  <option value="">Sin proyecto</option>{proyectos.map(p => <option key={p.id} value={p.id}>{folioProyecto(p.folio)} · {p.nombre}</option>)}</select></label>}
+            </fieldset>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, alignItems: 'center' }}>
+              {(ot.etiquetas || []).map(t => (
+                <span key={t} className="badge" style={{ background: 'var(--bg3)', color: 'var(--text)', fontSize: '0.72rem' }}>
+                  {t}{puede('ot.crear') && <button type="button" onClick={() => guardarCampo({ etiquetas: (ot.etiquetas || []).filter(x => x !== t) })} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--muted)', marginLeft: 4 }}>✕</button>}
+                </span>
+              ))}
+              {puede('ot.crear') && <input className="input" value={etiqueta} onChange={e => setEtiqueta(e.target.value)} placeholder="+ etiqueta"
+                onKeyDown={e => { if (e.key === 'Enter' && etiqueta.trim()) { guardarCampo({ etiquetas: Array.from(new Set([...(ot.etiquetas || []), etiqueta.trim()])) }); setEtiqueta(''); } }}
+                style={{ width: 120, padding: '0.25rem 0.5rem', fontSize: '0.78rem' }} />}
+            </div>
           </div>
         </Seccion>
 
@@ -279,8 +318,15 @@ export default function DetalleOTPage() {
         </Seccion>
       </div>
 
+      <Seccion icono={<CalendarPlus size={15} />} titulo="Visitas">
+        <VisitasOT ot={ot} equipo={equipo} puedeProgramar={puede('ot.crear')} puedeEjecutar={puedeEjecutar} uid={perfil?.id} onCambio={cargar} />
+      </Seccion>
+
       <Seccion icono={<FileText size={15} />} titulo={`Informes técnicos (${informes.length})`}
-        accion={puedeEjecutar && abierta ? <button className="btn btn-primary btn-sm" onClick={nuevoInforme}><Plus size={13} /> Nuevo informe</button> : null}>
+        accion={puedeEjecutar && abierta ? <span style={{ display: 'flex', gap: 6 }}>
+          {plantillasInf.length > 0 && <select className="input" style={{ width: 190, padding: '0.3rem' }} value={plantillaSel} onChange={e => setPlantillaSel(e.target.value)} title="Checklist del informe">
+            <option value="">Checklist según el tipo</option>{plantillasInf.map(p => <option key={p.id} value={p.id}>{p.nombre}</option>)}</select>}
+          <button className="btn btn-primary btn-sm" onClick={nuevoInforme}><Plus size={13} /> Nuevo informe</button></span> : null}>
         {informes.length === 0 ? <p style={{ color: 'var(--muted)', margin: 0 }}>Aún no hay informes. Créalo en terreno y fírmalo con el cliente.</p>
           : informes.map(inf => (
             <InformeEditor key={inf.id} ot={ot} informe={inf} empresa={empresa} tecnicoNombre={nombre(inf.tecnico_id)} puedeReabrir={puedeCerrar} onCambio={cargar} />
@@ -323,6 +369,10 @@ export default function DetalleOTPage() {
             ))}
         </Seccion>
 
+        <Seccion icono={<Send size={15} />} titulo="Pedidos de material">
+          <PedidosMaterial otId={ot.id} equipo={equipo} />
+        </Seccion>
+
         <Seccion icono={<Receipt size={15} />} titulo="Gastos de la OT"
           accion={puede('gastos.crear') ? <Link href={`/gastos?ot=${ot.id}`} className="btn btn-ghost btn-sm"><Plus size={13} /> Registrar gasto</Link> : null}>
           {gastos.length === 0 ? <p style={{ color: 'var(--muted)', margin: 0 }}>Sin gastos asociados.</p>
@@ -352,9 +402,13 @@ export default function DetalleOTPage() {
         </Seccion>
       )}
 
-      <Seccion icono={<MessageSquare size={15} />} titulo="Notas">
-        {notas.map(n => (
-          <div key={n.id} style={{ fontSize: '0.87rem', color: 'var(--text)' }}>
+      <Seccion icono={<MessageSquare size={15} />} titulo="Bitácora y notas">
+        {notas.map(n => n.tipo === 'sistema' ? (
+          <div key={n.id} style={{ fontSize: '0.8rem', color: 'var(--muted)', borderLeft: '2px solid var(--border2)', paddingLeft: 8 }}>
+            {n.texto} <span style={{ fontSize: '0.72rem' }}>· {nombre(n.usuario_id) !== '—' ? `${nombre(n.usuario_id)} · ` : ''}{new Date(n.created_at).toLocaleString('es-CL', { dateStyle: 'short', timeStyle: 'short' })}</span>
+          </div>
+        ) : (
+          <div key={n.id} style={{ fontSize: '0.87rem', color: 'var(--text)', borderLeft: '2px solid var(--y-brand)', paddingLeft: 8 }}>
             <span style={{ color: 'var(--muted)', fontSize: '0.76rem' }}>{nombre(n.usuario_id)} · {new Date(n.created_at).toLocaleString('es-CL', { dateStyle: 'short', timeStyle: 'short' })}</span>
             <p style={{ margin: '2px 0 0', whiteSpace: 'pre-wrap' }}>{n.texto}</p>
           </div>

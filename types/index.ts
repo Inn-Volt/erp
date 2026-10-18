@@ -13,6 +13,9 @@ export interface Cliente {
   estado: 'activo' | 'inactivo';
   created_at?: string;
   updated_at?: string;
+  /** Fase 5: al día, atrasado o bloqueado (bloqueado no recibe cotizaciones). */
+  estado_pago?: 'al_dia' | 'atrasado' | 'bloqueado';
+  nota_pago?: string | null;
 }
 
 export type CategoriaItem = 'material' | 'mano_obra' | 'servicio' | 'operacion';

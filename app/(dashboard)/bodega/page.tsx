@@ -17,6 +17,9 @@ import {
   type Bodega, type Movimiento, type OrdenTrabajo, type SerieFila, type StockFila,
 } from '@/services/operacion';
 import { catalogoService } from '@/services/catalogo';
+import PedidosMaterial from '@/components/bodega/PedidosMaterial';
+import { catastroService, type EquipoInstalado } from '@/services/fase5';
+import { formatDate } from '@/utils';
 import { vendedoresService } from '@/services/vendedores';
 import { usePermisos } from '@/hooks/usePermisos';
 import { useToast } from '@/hooks/useToast';
@@ -141,9 +144,16 @@ function Registrar({ bodegas, catalogo, ots, tipoInicial, puedeAjustar, onClose,
 }
 
 export default function BodegaPage() {
-  const { puede } = usePermisos();
+  const { puede, perfil } = usePermisos();
   const { success, error: toastError } = useToast();
-  const [tab, setTab] = useState<'stock' | 'movimientos' | 'series'>('stock');
+  const [tab, setTab] = useState<'stock' | 'movimientos' | 'series' | 'pedidos' | 'catastro' | 'bodegas'>('stock');
+  const [catastro, setCatastro] = useState<EquipoInstalado[] | null>(null);
+  useEffect(() => {
+    // /bodega?tab=pedidos (desde un aviso) abre esa pestaña.
+    const t = new URLSearchParams(window.location.search).get('tab');
+    if (t === 'pedidos' || t === 'catastro') setTab(t);
+  }, []);
+  useEffect(() => { if (tab === 'catastro' && catastro === null) catastroService.listar().then(setCatastro).catch(() => setCatastro([])); }, [tab, catastro]);
   const [bodegas, setBodegas] = useState<Bodega[]>([]);
   const [stock, setStock] = useState<StockFila[]>([]);
   const [movs, setMovs] = useState<Movimiento[]>([]);
@@ -217,9 +227,10 @@ export default function BodegaPage() {
       <div className="panel-y">
         <div style={{ padding: '1rem', borderBottom: '1px solid var(--border2)', display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
           <div style={{ display: 'flex', gap: 4 }}>
-            {(['stock', 'movimientos', 'series'] as const).map(t => (
+            {([['stock', 'Stock'], ['movimientos', 'Movimientos'], ['series', 'Series'], ['pedidos', 'Pedidos'], ['catastro', 'Catastro'],
+              ...(puede('bodega.ajustar') ? [['bodegas', 'Bodegas']] : [])] as [typeof tab, string][]).map(([t, nombre]) => (
               <button key={t} className="btn btn-sm" onClick={() => setTab(t)} style={{ background: tab === t ? 'var(--y-brand)' : 'var(--bg3)', color: tab === t ? '#111' : 'var(--muted)' }}>
-                {t === 'stock' ? 'Stock' : t === 'movimientos' ? 'Movimientos' : 'Series'}</button>
+                {nombre}</button>
             ))}
           </div>
           <div style={{ position: 'relative', flex: 1, minWidth: 180 }}>
@@ -227,7 +238,9 @@ export default function BodegaPage() {
             <input className="input" value={busca} onChange={e => setBusca(e.target.value)} placeholder="Buscar artículo o serie…" style={{ paddingLeft: '2.2rem' }} />
           </div>
           <select className="input" style={{ maxWidth: 190 }} value={bodegaFiltro} onChange={e => setBodegaFiltro(e.target.value)}>
-            <option value="">Todas las bodegas</option>{bodegas.map(b => <option key={b.id} value={b.id}>{b.nombre}</option>)}
+            <option value="">Todas las bodegas</option>
+            {bodegas.some(b => b.responsable_id === perfil?.id) && <option value={bodegas.find(b => b.responsable_id === perfil?.id)!.id}>Mi bodega</option>}
+            {bodegas.map(b => <option key={b.id} value={b.id}>{b.nombre}{b.responsable_id ? ` · ${equipo[b.responsable_id]?.nombre?.split(' ')[0] || ''}` : ''}</option>)}
           </select>
         </div>
 
@@ -274,6 +287,43 @@ export default function BodegaPage() {
                     <td style={td}>{s.ot_id ? <Link href={`/ordenes/${s.ot_id}`}>Ver OT</Link> : bod[s.bodega_id]?.nombre}</td>
                   </tr>))}</tbody>
               </table>)}
+
+            {tab === 'pedidos' && <div style={{ padding: '1rem' }}><PedidosMaterial equipo={equipo} /></div>}
+
+            {tab === 'catastro' && (catastro === null ? <div style={{ padding: '1.5rem' }}><Loader2 className="iv-spin" /></div> : catastro.length === 0
+              ? <p style={{ padding: '2.5rem 1rem', textAlign: 'center', color: 'var(--muted)' }}>Aún no hay equipos instalados con serie. Se anotan solos al sacar un equipo con su serie para una OT.</p>
+              : <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                <thead><tr><th style={th}>Cliente / lugar</th><th style={th}>Equipo</th><th style={th}>Serie</th><th style={th}>Instalado</th><th style={th}>OT</th></tr></thead>
+                <tbody>{catastro.filter(c => !q || `${c.nombre_cliente || ''} ${c.sucursal_nombre || ''} ${c.descripcion} ${c.serie} ${c.marca || ''} ${c.modelo || ''}`.toLowerCase().includes(q)).map(c => (
+                  <tr key={`${c.articulo_id}-${c.serie}`}>
+                    <td style={td}>{c.nombre_cliente || '—'}{c.sucursal_nombre ? <span style={{ color: 'var(--muted)' }}> · {c.sucursal_nombre}</span> : c.direccion ? <span style={{ color: 'var(--muted)' }}> · {c.direccion}</span> : null}</td>
+                    <td style={td}>{c.descripcion}{c.marca || c.modelo ? <span style={{ color: 'var(--muted)' }}> · {[c.marca, c.modelo].filter(Boolean).join(' ')}</span> : null}{c.garantia ? <span style={{ display: 'block', fontSize: '0.72rem', color: 'var(--muted)' }}>Garantía: {c.garantia}</span> : null}</td>
+                    <td style={{ ...td, fontWeight: 600 }}>{c.serie}</td>
+                    <td style={{ ...td, color: 'var(--muted)' }}>{formatDate(c.instalado_at)}</td>
+                    <td style={td}><Link href={`/ordenes/${c.ot_id}`}>OT-{String(c.ot_folio).padStart(4, '0')}</Link></td>
+                  </tr>))}</tbody>
+              </table>)}
+
+            {tab === 'bodegas' && (
+              <div style={{ padding: '1rem', display: 'flex', flexDirection: 'column', gap: 8 }}>
+                <p style={{ margin: 0, fontSize: '0.8rem', color: 'var(--muted)' }}>Una bodega con responsable es «su bodega» (por ejemplo, la camioneta de un técnico): ahí llegan sus pedidos y desde ahí descuenta lo que instala.</p>
+                {bodegas.map(b => (
+                  <div key={b.id} style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap', borderBottom: '1px solid var(--border2)', paddingBottom: 6, opacity: b.activo ? 1 : 0.5 }}>
+                    <b style={{ flex: 1, minWidth: 160, color: 'var(--text)' }}>{b.nombre}</b>
+                    <select className="input" style={{ width: 220 }} value={b.responsable_id || ''} onChange={async e => {
+                      try { await bodegaService.actualizarBodega(b.id, { responsable_id: e.target.value || null }); success('Responsable guardado'); cargar(); }
+                      catch (err) { toastError(err instanceof Error ? err.message : 'No se pudo'); }
+                    }}>
+                      <option value="">Sin responsable (bodega común)</option>
+                      {Object.values(equipo).map(p => <option key={p.id} value={p.id}>{p.nombre}</option>)}
+                    </select>
+                    <button className="btn btn-ghost btn-xs" onClick={async () => {
+                      try { await bodegaService.actualizarBodega(b.id, { activo: !b.activo }); cargar(); } catch (err) { toastError(err instanceof Error ? err.message : 'No se pudo'); }
+                    }}>{b.activo ? 'Desactivar' : 'Activar'}</button>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         )}
       </div>
