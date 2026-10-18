@@ -21,7 +21,7 @@ function Cotizador() {
   const clone = sp.get('clone');
   return (
     <EditorCotizacion key={id || clone || 'nueva'} id={id} clonarDe={clone}
-      clienteInicial={sp.get('cliente')} solicitudInicial={sp.get('solicitud')} levantamientoInicial={sp.get('levantamiento')} />
+      clienteInicial={sp.get('cliente')} solicitudInicial={sp.get('solicitud')} levantamientoInicial={sp.get('levantamiento')} proyectoInicial={sp.get('proyecto')} />
   );
 }
 

@@ -24,9 +24,9 @@ export const CATALOGO: AreaDef[] = [
     { modulo: 'cotizaciones', nombre: 'Cotizaciones', permisos: [
       { clave: 'cotizaciones.ver', nombre: 'Ver' },
       { clave: 'cotizaciones.crear', nombre: 'Crear, editar y enviar' },
-      { clave: 'cotizaciones.aprobar', nombre: 'Cambiar estado', ayuda: 'Aceptar, rechazar, realizado, entregado' },
+      { clave: 'cotizaciones.aprobar', nombre: 'Anotar la respuesta del cliente', ayuda: 'Aprobada o rechazada; también plantillas y ajustes de cotización' },
       { clave: 'cotizaciones.ver_costos', nombre: 'Ver costos y márgenes' },
-      { clave: 'cotizaciones.anular', nombre: 'Eliminar' },
+      { clave: 'cotizaciones.anular', nombre: 'Anular (heredado)', ayuda: 'Anular lo hace «Crear»; una aprobada pide «Crear» y «Aprobar»' },
     ] },
     { modulo: 'clientes', nombre: 'Clientes', permisos: [
       { clave: 'clientes.ver', nombre: 'Ver' },
@@ -35,6 +35,14 @@ export const CATALOGO: AreaDef[] = [
     ] },
     { modulo: 'plantillas', nombre: 'Plantillas de cotización', permisos: [
       { clave: 'plantillas.gestionar', nombre: 'Crear, editar y eliminar' },
+    ] },
+    { modulo: 'proyectos', nombre: 'Proyectos', permisos: [
+      { clave: 'proyectos.ver', nombre: 'Ver' },
+      { clave: 'proyectos.gestionar', nombre: 'Crear y editar' },
+    ] },
+    { modulo: 'traslados', nombre: 'Traslados', permisos: [
+      { clave: 'traslados.ver', nombre: 'Ver la lista y cotizar traslados' },
+      { clave: 'traslados.gestionar', nombre: 'Editar comunas, bases y tarifa' },
     ] },
   ] },
   { area: 'Operación', modulos: [
@@ -95,6 +103,10 @@ export const CATALOGO: AreaDef[] = [
     { modulo: 'roles', nombre: 'Roles', permisos: [
       { clave: 'roles.gestionar', nombre: 'Crear y editar roles' },
     ] },
+    { modulo: 'personas', nombre: 'Personas', permisos: [
+      { clave: 'personas.ver', nombre: 'Ver competencias y organigrama' },
+      { clave: 'personas.gestionar', nombre: 'Editar competencias, certificaciones y organigrama' },
+    ] },
     { modulo: 'auditoria', nombre: 'Auditoría', permisos: [
       { clave: 'auditoria.ver', nombre: 'Ver quién hizo qué' },
     ] },
@@ -109,16 +121,17 @@ export const PLANTILLAS_BASE: Record<string, string[]> = {
   comercial: ['solicitudes.ver', 'solicitudes.crear', 'cotizaciones.ver', 'cotizaciones.crear', 'cotizaciones.aprobar',
     'cotizaciones.ver_costos', 'clientes.ver', 'clientes.crear', 'plantillas.gestionar', 'agenda.ver',
     'agenda.gestionar', 'levantamientos.ver', 'dashboard.ver', 'biblioteca.ver', 'ia.usar',
-    'ot.ver', 'ot.crear', 'facturacion.ver', 'tareas.ver', 'tareas.gestionar'],
+    'ot.ver', 'ot.crear', 'facturacion.ver', 'tareas.ver', 'tareas.gestionar', 'proyectos.ver', 'proyectos.gestionar', 'traslados.ver'],
   administrativo: ['solicitudes.ver', 'solicitudes.crear', 'cotizaciones.ver', 'cotizaciones.crear', 'cotizaciones.aprobar',
     'cotizaciones.ver_costos', 'clientes.ver', 'clientes.crear', 'agenda.ver', 'dashboard.ver',
     'biblioteca.ver', 'biblioteca.editar', 'plantillas.gestionar', 'ia.usar',
     'ot.ver', 'ot.crear', 'ot.cerrar', 'facturacion.ver', 'facturacion.gestionar', 'bodega.ver', 'bodega.mover',
-    'bodega.ajustar', 'gastos.crear', 'gastos.ver_todos', 'gastos.aprobar', 'tareas.ver', 'tareas.gestionar'],
+    'bodega.ajustar', 'gastos.crear', 'gastos.ver_todos', 'gastos.aprobar', 'tareas.ver', 'tareas.gestionar',
+    'proyectos.ver', 'proyectos.gestionar', 'personas.ver', 'personas.gestionar', 'traslados.ver', 'traslados.gestionar'],
   tecnico: ['solicitudes.ver', 'cotizaciones.ver', 'clientes.ver', 'agenda.ver', 'agenda.gestionar',
-    'levantamientos.ver', 'levantamientos.crear', 'biblioteca.ver', 'ot.ejecutar', 'bodega.ver', 'bodega.mover', 'gastos.crear'],
+    'levantamientos.ver', 'levantamientos.crear', 'biblioteca.ver', 'ot.ejecutar', 'bodega.ver', 'bodega.mover', 'gastos.crear', 'traslados.ver'],
   solo_lectura: ['solicitudes.ver', 'cotizaciones.ver', 'clientes.ver', 'agenda.ver', 'levantamientos.ver',
-    'biblioteca.ver', 'dashboard.ver', 'ot.ver', 'facturacion.ver', 'bodega.ver', 'tareas.ver'],
+    'biblioteca.ver', 'dashboard.ver', 'ot.ver', 'facturacion.ver', 'bodega.ver', 'tareas.ver', 'proyectos.ver', 'personas.ver', 'traslados.ver'],
 };
 
 /** ¿La lista de permisos incluye la clave? ('*' = todos). */
@@ -153,6 +166,9 @@ export const PERMISO_DE_RUTA: { prefijo: string; permisos: string[] }[] = [
   { prefijo: '/usuarios', permisos: ['usuarios.ver', 'usuarios.gestionar'] },
   { prefijo: '/roles', permisos: ['roles.gestionar', 'usuarios.gestionar'] },
   { prefijo: '/auditoria', permisos: ['auditoria.ver'] },
+  { prefijo: '/proyectos', permisos: ['proyectos.ver', 'proyectos.gestionar'] },
+  { prefijo: '/personas', permisos: ['personas.ver', 'personas.gestionar'] },
+  { prefijo: '/traslados', permisos: ['traslados.ver', 'traslados.gestionar'] },
 ];
 
 export function permisosDeRuta(pathname: string): string[] | null {

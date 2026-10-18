@@ -26,7 +26,7 @@ export const folioOT = (n?: number | null) => `OT-${String(n ?? 0).padStart(4, '
 
 export interface OrdenTrabajo {
   id: string; folio: number; cotizacion_id: string | null; cliente_id: string | null; solicitud_id: string | null;
-  sucursal_id?: string | null; titulo: string; descripcion: string | null; direccion: string | null; estado: EstadoOT;
+  sucursal_id?: string | null; proyecto_id?: string | null; tipo_servicio?: string | null; etiquetas?: string[]; titulo: string; descripcion: string | null; direccion: string | null; estado: EstadoOT;
   prioridad: 'Baja' | 'Media' | 'Alta' | 'Urgente'; fecha_programada: string | null; hora_programada: string | null;
   tecnicos: string[]; motivo: string | null; creado_por: string | null; ejecutada_at: string | null; cerrada_at: string | null;
   created_at: string; updated_at: string;
@@ -50,7 +50,7 @@ export const RESULTADOS: { clave: NonNullable<InformeOT['resultado']>; nombre: s
   { clave: 'no_solucionado', nombre: 'No solucionado' },
   { clave: 'segunda_visita', nombre: 'Requiere segunda visita' },
 ];
-export interface NotaOT { id: string; ot_id: string; texto: string; usuario_id: string | null; created_at: string }
+export interface NotaOT { id: string; ot_id: string; texto: string; usuario_id: string | null; created_at: string; tipo?: 'nota' | 'sistema' }
 
 export type EtapaCobro = 'por_revisar' | 'esperando_oc' | 'esperando_hes' | 'listo' | 'facturado' | 'sin_cobro';
 export const ETAPAS_COBRO: { clave: EtapaCobro; nombre: string; color: string }[] = [
@@ -70,7 +70,7 @@ export interface PorFacturar {
   ordenes_trabajo?: { folio: number } | null;
 }
 
-export interface Bodega { id: string; nombre: string; descripcion: string | null; activo: boolean }
+export interface Bodega { id: string; nombre: string; descripcion: string | null; activo: boolean; responsable_id?: string | null }
 export interface Movimiento {
   id: number; tipo: 'entrada' | 'salida' | 'ajuste'; articulo_id: string; bodega_id: string; cantidad: number;
   costo_unitario: number | null; serie: string | null; ot_id: string | null; nota: string | null;
@@ -93,6 +93,7 @@ export interface Gasto {
   id: string; fecha: string; monto: number; categoria: CategoriaGasto; descripcion: string | null; ot_id: string | null;
   usuario_id: string; boleta_path: string | null; estado: 'pendiente' | 'aprobado' | 'rechazado' | 'reembolsado';
   revisado_por: string | null; revisado_at: string | null; motivo_rechazo: string | null; created_at: string;
+  anticipo_id?: string | null;
   ordenes_trabajo?: { folio: number } | null;
 }
 
@@ -213,6 +214,7 @@ export const bodegaService = {
     const { data, error } = await supabase.from('bodegas').select('*').order('nombre'); lanzar(error); return (data || []) as Bodega[];
   },
   async crearBodega(nombre: string) { const { error } = await supabase.from('bodegas').insert({ nombre }); lanzar(error); },
+  async actualizarBodega(id: string, patch: Partial<Bodega>) { const { error } = await supabase.from('bodegas').update(patch).eq('id', id); lanzar(error); },
   async stock(): Promise<StockFila[]> {
     const { data, error } = await supabase.from('stock_bodega').select('*'); lanzar(error); return (data || []) as StockFila[];
   },

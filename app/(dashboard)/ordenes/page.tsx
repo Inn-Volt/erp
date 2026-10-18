@@ -13,6 +13,7 @@ import { ClipboardList, Plus, Search, Loader2, X, CalendarDays, User, MapPin } f
 import PageHeader from '@/components/PageHeader';
 import FaltaSQL from '@/components/FaltaSQL';
 import ChipEstadoOT from '@/components/ChipEstadoOT';
+import PlantillasInforme from '@/components/ot/PlantillasInforme';
 import { otService, sucursalesService, ESTADOS_OT, folioOT, faltaFase2, type OrdenTrabajo, type EstadoOT, type Sucursal } from '@/services/operacion';
 import { clientesService } from '@/services/clientes';
 import { vendedoresService } from '@/services/vendedores';
@@ -107,6 +108,7 @@ export default function OrdenesPage() {
   const [mias, setMias] = useState(false);
   const [busca, setBusca] = useState('');
   const [nueva, setNueva] = useState(false);
+  const [plantillas, setPlantillas] = useState(false);
 
   const cargar = useCallback(async () => {
     try {
@@ -135,7 +137,10 @@ export default function OrdenesPage() {
       {nueva && <NuevaOT clientes={clientes} equipo={Object.values(equipo)} onClose={() => setNueva(false)} onCreada={id => router.push(`/ordenes/${id}`)} />}
       <PageHeader eyebrow="Operación" title="Órdenes de trabajo"
         subtitle="Lo que hay que ejecutar. Cada cotización aceptada crea su OT sola."
-        actions={puede('ot.crear') ? <button className="btn btn-primary" onClick={() => setNueva(true)}><Plus size={14} /> Nueva OT</button> : null} />
+        actions={puede('ot.crear') ? <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+          <button className="btn btn-ghost" onClick={() => setPlantillas(true)}>Plantillas de informe</button>
+          <button className="btn btn-primary" onClick={() => setNueva(true)}><Plus size={14} /> Nueva OT</button></div> : null} />
+      {plantillas && <PlantillasInforme onCerrar={() => setPlantillas(false)} />}
 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: 8, marginBottom: 12 }}>
         {ESTADOS_OT.filter(e => ABIERTAS.includes(e.clave)).map(e => (

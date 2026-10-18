@@ -92,6 +92,7 @@ export interface CotizacionDoc {
   solicitud_id?: string | null;
   levantamiento_id?: string | null;
   incluir_fotos?: boolean;
+  proyecto_id?: string | null;
   plantilla_id?: string | null;
   plantilla_version?: number | null;
   origen_id?: string | null;

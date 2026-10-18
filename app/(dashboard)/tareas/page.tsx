@@ -12,6 +12,7 @@ import PageHeader from '@/components/PageHeader';
 import FaltaSQL from '@/components/FaltaSQL';
 import { faltaFase2, folioOT, otService, tareasService, type OrdenTrabajo, type Tarea } from '@/services/operacion';
 import { vendedoresService } from '@/services/vendedores';
+import AvancesTarea from '@/components/AvancesTarea';
 import { usePermisos } from '@/hooks/usePermisos';
 import { useToast } from '@/hooks/useToast';
 import { fechaLocal, formatDate } from '@/utils';
@@ -81,6 +82,7 @@ export default function TareasPage() {
   const [vista, setVista] = useState<'mias' | 'asignadas' | 'todas'>('mias');
   const [verHechas, setVerHechas] = useState(false);
   const [nueva, setNueva] = useState(false);
+  const [abierta, setAbierta] = useState<string | null>(null);
 
   const cargar = useCallback(async () => {
     try {
@@ -153,7 +155,10 @@ export default function TareasPage() {
                     {t.creado_por && t.creado_por !== t.asignado_id && t.asignado_id === perfil?.id && <span>De: {equipo[t.creado_por]?.nombre || '—'}</span>}
                     {t.ot_id && <Link href={`/ordenes/${t.ot_id}`}>{folioOT(t.ordenes_trabajo?.folio)}</Link>}
                     {t.clientes?.nombre_cliente && <span>{t.clientes.nombre_cliente}</span>}
+                    <button type="button" onClick={() => setAbierta(abierta === t.id ? null : t.id)} style={{ background: 'none', border: 'none', color: 'var(--y)', cursor: 'pointer', fontSize: '0.76rem', padding: 0 }}>
+                      {abierta === t.id ? 'Ocultar avances' : 'Avances'}</button>
                   </span>
+                  {abierta === t.id && <AvancesTarea tareaId={t.id} equipo={equipo} />}
                 </span>
               </div>
             );
