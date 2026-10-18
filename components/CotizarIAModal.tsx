@@ -135,7 +135,7 @@ export default function CotizarIAModal({
   );
 
   return (
-    <div className="modal-overlay" onClick={e => { if (e.target === e.currentTarget) onClose(); }}>
+    <div className="modal-overlay">
       <div className="modal-box" style={{ maxWidth: 720, width: '94%', margin: '0 auto', maxHeight: '90vh', display: 'flex', flexDirection: 'column' }}>
 
         {/* Encabezado */}

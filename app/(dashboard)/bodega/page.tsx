@@ -82,7 +82,7 @@ function Registrar({ bodegas, catalogo, ots, tipoInicial, puedeAjustar, onClose,
   };
 
   return (
-    <div className="modal-overlay" onClick={e => { if (e.target === e.currentTarget) onClose(); }}>
+    <div className="modal-overlay">
       {escaneando && <LectorDeCodigo titulo="Escanear código del artículo" onCerrar={() => setEscaneando(false)} onLeido={codigo => {
         const c = catalogo.find(x => x.codigo && x.codigo.toLowerCase() === codigo.toLowerCase());
         if (c) { elegir(c); setEscaneando(false); return { ok: true, mensaje: c.descripcion }; }

@@ -171,7 +171,7 @@ export default function PersonasPage() {
       )}
 
       {editando && (
-        <div className="modal-overlay" onClick={e => { if (e.target === e.currentTarget) setEditando(null); }}>
+        <div className="modal-overlay">
           <div className="modal-box" style={{ maxWidth: 440, width: '95%', padding: '1.1rem 1.25rem', display: 'flex', flexDirection: 'column', gap: 10 }}>
             <div style={{ display: 'flex', justifyContent: 'space-between' }}>
               <p className="section-label" style={{ margin: 0 }}>{editando.usuario.nombre}</p>

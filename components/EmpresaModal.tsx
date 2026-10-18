@@ -218,7 +218,6 @@ export default function EmpresaModal({ empresa, onSave, onClose }: Props) {
   return (
     <div
       className="modal-overlay"
-      onClick={e => { if (e.target === e.currentTarget) onClose(); }}
       style={{ zIndex: 200 }}
     >
       <div

@@ -106,7 +106,7 @@ export function Modal({ titulo, onCerrar, children, pie, ancho = 520 }: {
   titulo: React.ReactNode; onCerrar: () => void; children: React.ReactNode; pie?: React.ReactNode; ancho?: number;
 }) {
   return (
-    <div className="modal-overlay" onClick={e => { if (e.target === e.currentTarget) onCerrar(); }} style={{ zIndex: 220 }}>
+    <div className="modal-overlay" style={{ zIndex: 220 }}>
       <div className="modal-box" style={{ maxWidth: ancho, width: '95%', display: 'flex', flexDirection: 'column', maxHeight: '92vh' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '1rem 1.25rem', borderBottom: '1px solid var(--border2)', gap: 8 }}>
           <p className="section-label" style={{ margin: 0 }}>{titulo}</p>

@@ -55,7 +55,7 @@ function NuevaOT({ clientes, equipo, inicial, onClose, onCreada }: { clientes: C
     finally { setGuardando(false); }
   };
   return (
-    <div className="modal-overlay" onClick={e => { if (e.target === e.currentTarget) onClose(); }}>
+    <div className="modal-overlay">
       <form onSubmit={enviar} className="modal-box" style={{ maxWidth: 560, display: 'flex', flexDirection: 'column', maxHeight: '92vh' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '1rem 1.25rem', borderBottom: '1px solid var(--border2)' }}>
           <p className="section-label" style={{ margin: 0 }}><ClipboardList size={16} /> {inicial?.solicitud_id ? 'OT de visita técnica (desde la solicitud)' : 'Nueva orden de trabajo'}</p>

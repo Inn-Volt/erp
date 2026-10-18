@@ -73,7 +73,7 @@ function InvitarModal({ roles, onClose, onListo }: { roles: Rol[]; onClose: () =
   };
 
   return (
-    <div className="modal-overlay" onClick={e => { if (e.target === e.currentTarget) onClose(); }}>
+    <div className="modal-overlay">
       <div className="modal-box" style={{ maxWidth: 520, display: 'flex', flexDirection: 'column', maxHeight: '92vh' }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '1rem 1.25rem', borderBottom: '1px solid var(--border2)' }}>
           <p className="section-label" style={{ margin: 0 }}><UserPlus size={16} /> Invitar usuario</p>

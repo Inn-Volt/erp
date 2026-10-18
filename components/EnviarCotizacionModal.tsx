@@ -87,7 +87,7 @@ export default function EnviarCotizacionModal({ cot, empresaNombre, vendedor, on
   const btn: React.CSSProperties = { display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.45rem', width: '100%', height: 42, borderRadius: 'var(--r)', border: '1px solid var(--border2)', background: 'var(--bg3)', color: 'var(--text)', cursor: 'pointer', fontSize: '0.82rem', fontWeight: 600, textDecoration: 'none' };
 
   return (
-    <div className="modal-overlay" onClick={e => { if (e.target === e.currentTarget) onClose(); }}>
+    <div className="modal-overlay">
       <div className="modal-box" style={{ maxWidth: 440, width: '92%' }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '1.1rem 1.4rem', borderBottom: '1px solid var(--border2)' }}>
           <p className="section-label" style={{ margin: 0 }}><Send size={13} /> {esSeguimiento ? 'Seguimiento' : 'Enviar al cliente'} · {folio}</p>

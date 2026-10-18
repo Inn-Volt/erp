@@ -198,7 +198,7 @@ export default function BuscadorBiblioteca({ supuestos, onInsertar, onInsertarRe
   });
 
   return (
-    <div className="modal-overlay" onClick={e => { if (e.target === e.currentTarget) onClose(); }} style={{ zIndex: 200 }}>
+    <div className="modal-overlay" style={{ zIndex: 200 }}>
       {escaneando && (
         <LectorDeCodigo titulo="Escanear material" onLeido={alLeerCodigo} onCerrar={() => setEscaneando(false)} />
       )}

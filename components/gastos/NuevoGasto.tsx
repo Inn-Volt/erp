@@ -41,7 +41,7 @@ export default function NuevoGasto({ ots, otInicial, anticipos, onClose, onListo
   };
 
   return (
-    <div className="modal-overlay" onClick={e => { if (e.target === e.currentTarget) onClose(); }} style={{ zIndex: 260 }}>
+    <div className="modal-overlay" style={{ zIndex: 260 }}>
       <div className="modal-box" style={{ maxWidth: 480, display: 'flex', flexDirection: 'column', maxHeight: '92vh' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '1rem 1.25rem', borderBottom: '1px solid var(--border2)' }}>
           <p className="section-label" style={{ margin: 0 }}><Receipt size={16} /> Rendir un gasto</p>

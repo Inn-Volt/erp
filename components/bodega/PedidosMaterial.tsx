@@ -62,7 +62,7 @@ export function PedirMaterial({ otId, onCerrar, onListo }: { otId?: string | nul
   };
 
   return (
-    <div className="modal-overlay" onClick={e => { if (e.target === e.currentTarget) onCerrar(); }} style={{ zIndex: 220 }}>
+    <div className="modal-overlay" style={{ zIndex: 220 }}>
       <div className="modal-box" style={{ maxWidth: 560, width: '95%', display: 'flex', flexDirection: 'column', maxHeight: '92vh' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '1rem 1.25rem', borderBottom: '1px solid var(--border2)' }}>
           <p className="section-label" style={{ margin: 0 }}><Send size={15} /> Pedir material</p>
@@ -128,7 +128,7 @@ function Despachar({ pedido, bodegas, stock, onCerrar, onListo }: { pedido: Pedi
     finally { setOcupado(false); }
   };
   return (
-    <div className="modal-overlay" onClick={e => { if (e.target === e.currentTarget) onCerrar(); }} style={{ zIndex: 220 }}>
+    <div className="modal-overlay" style={{ zIndex: 220 }}>
       <div className="modal-box" style={{ maxWidth: 520, width: '95%', padding: '1.1rem 1.25rem', display: 'flex', flexDirection: 'column', gap: 10 }}>
         <p className="section-label" style={{ margin: 0 }}><PackageCheck size={15} /> Despachar {folioPedido(pedido.folio)}</p>
         <label><span className="label-muted">Sale de</span>

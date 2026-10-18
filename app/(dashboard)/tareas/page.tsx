@@ -41,7 +41,7 @@ function NuevaTarea({ equipo, ots, yo, asignaOtros, onClose, onListo }: {
     finally { setGuardando(false); }
   };
   return (
-    <div className="modal-overlay" onClick={e => { if (e.target === e.currentTarget) onClose(); }}>
+    <div className="modal-overlay">
       <form onSubmit={guardar} className="modal-box" style={{ maxWidth: 480, display: 'flex', flexDirection: 'column', maxHeight: '92vh' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '1rem 1.25rem', borderBottom: '1px solid var(--border2)' }}>
           <p className="section-label" style={{ margin: 0 }}><ListTodo size={16} /> Nueva tarea</p>

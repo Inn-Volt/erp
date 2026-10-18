@@ -26,7 +26,7 @@ export default function NuevoProyecto({ inicial, onCerrar, onListo }: { inicial?
     finally { setOcupado(false); }
   };
   return (
-    <div className="modal-overlay" onClick={e => { if (e.target === e.currentTarget) onCerrar(); }}>
+    <div className="modal-overlay">
       <div className="modal-box" style={{ maxWidth: 560, width: '95%', display: 'flex', flexDirection: 'column', maxHeight: '92vh' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '1rem 1.25rem', borderBottom: '1px solid var(--border2)' }}>
           <p className="section-label" style={{ margin: 0 }}><FolderKanban size={15} /> {f.id ? 'Editar proyecto' : 'Nuevo proyecto'}</p>

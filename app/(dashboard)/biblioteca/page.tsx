@@ -100,7 +100,7 @@ function ItemModal({ item, familias, manosDeObra, conFase4, onClose, onSaved }: 
   };
 
   return (
-    <div className="modal-overlay" onClick={e => { if (e.target === e.currentTarget) onClose(); }} style={{ zIndex: 200 }}>
+    <div className="modal-overlay" style={{ zIndex: 200 }}>
       <div className="modal-box" style={{ maxWidth: 560, maxHeight: '90vh', overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
         <div style={{ flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '1.1rem 1.4rem', borderBottom: '1px solid var(--border2)' }}>
           <span className="section-label" style={{ margin: 0, paddingTop: 0 }}><Package size={13} /> {item?.id ? 'Editar ítem' : 'Nuevo ítem'}</span>

@@ -270,7 +270,7 @@ export default function DetalleOTPage() {
       {rindiendo && <NuevoGasto ots={[ot]} otInicial={ot.id} anticipos={misAnticipos} onClose={() => setRindiendo(false)}
         onListo={() => { setRindiendo(false); cargar(); }} />}
       {motivoPara && (
-        <div className="modal-overlay" onClick={e => { if (e.target === e.currentTarget) setMotivoPara(null); }}>
+        <div className="modal-overlay">
           <div className="modal-box" style={{ maxWidth: 440, padding: '1.25rem', display: 'flex', flexDirection: 'column', gap: 10 }}>
             <p className="section-label" style={{ margin: 0 }}>{motivoPara === 'en_pausa' ? 'Pausar la OT' : 'Anular la OT'}</p>
             <label className="label-muted">Motivo *</label>
