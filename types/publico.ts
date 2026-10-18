@@ -25,6 +25,8 @@ export interface CotizacionPublica {
   secciones: Seccion[];
   /** Fase 7: forma de pago (cobros por hitos). */
   plan_cobro: HitoCobro[] | null;
+  /** Fase 8: diseño del PDF. */
+  pdf_diseno: Record<string, unknown> | null;
   /** Ajustes: si el cliente puede responder en línea, «Importante» y el correo de «Cómo aceptar». */
   responde_en_linea: boolean;
   importante: string | null;

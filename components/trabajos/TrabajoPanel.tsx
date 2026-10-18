@@ -6,6 +6,8 @@
  * los gastos reales y el resultado: margen real vs. el cotizado.
  */
 
+import { entregasService, folioActa, informeDesde, plantillasInformeServicio, type EntregaTrabajo } from '@/services/informes';
+import ActaEntrega from '@/components/trabajos/ActaEntrega';
 import { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
 import { Check, ClipboardCheck, Loader2, Play, Plus, Receipt, RotateCcw } from 'lucide-react';
@@ -27,10 +29,13 @@ export function ChipTrabajo({ estado }: { estado?: string | null }) {
 export const margenPct = (venta: number, costo: number) => (venta > 0 ? ((venta - costo) / venta) * 100 : null);
 const pct = (v: number | null) => (v === null ? '—' : `${v.toFixed(1).replace('.', ',')} %`);
 
-export default function TrabajoPanel({ cot, plan, onCambio }: {
+export default function TrabajoPanel({ cot, plan, onCambio, cliente, responsable }: {
   cot: { id: string; folio: number; titulo: string; total: number; trabajo_estado?: EstadoTrabajo | null; trabajo_inicio?: string | null; trabajo_termino?: string | null };
   plan: HitoCobro[];
   onCambio: () => void;
+  /** Para el acta de entrega y su PDF. */
+  cliente?: { nombre: string; rut?: string | null; direccion?: string | null };
+  responsable?: string | null;
 }) {
   const { perfil, puede } = usePermisos();
   const { success, error: toastError } = useToast();
@@ -44,10 +49,20 @@ export default function TrabajoPanel({ cot, plan, onCambio }: {
   const mueve = puede('cotizaciones.crear');
   const estado = cot.trabajo_estado || 'por_iniciar';
 
+  // Fase 8: actas de entrega (al firmar una, el trabajo queda terminado).
+  const [actas, setActas] = useState<EntregaTrabajo[]>([]);
+  const [actaAbierta, setActaAbierta] = useState<EntregaTrabajo | null>(null);
+  const nuevaActa = async () => {
+    try {
+      const plantillas = await plantillasInformeServicio.listar({ tipo: 'entrega' }).catch(() => []);
+      setActaAbierta(await entregasService.crear(cot.id, informeDesde(plantillas.length === 1 ? plantillas[0] : null)));
+    } catch (e) { toastError(e instanceof Error ? e.message : 'No se pudo crear el acta'); }
+  };
   const cargar = useCallback(() => {
     trabajosService.cobros(cot.id).then(setCobros);
     trabajosService.gastos({ cotizacionId: cot.id }).then(setGastos);
     trabajosService.resultado(cot.id).then(setRes);
+    entregasService.deCotizacion(cot.id).then(setActas);
   }, [cot.id]);
   useEffect(() => { cargar(); }, [cargar]);
 
@@ -66,6 +81,8 @@ export default function TrabajoPanel({ cot, plan, onCambio }: {
 
   return (
     <section className="panel-y" style={{ padding: '1rem', display: 'flex', flexDirection: 'column', gap: 14, marginBottom: 14, borderLeft: `4px solid ${estadoTrabajo(estado).color}` }}>
+      {actaAbierta && <ActaEntrega cot={{ id: cot.id, folio: cot.folio, titulo: cot.titulo, cliente }} acta={actaAbierta} responsable={responsable || null}
+        onCerrar={() => setActaAbierta(null)} onCambio={() => { cargar(); onCambio(); }} />}
       {rindiendo && <NuevoGasto destinos={[{ valor: `cot:${cot.id}`, etiqueta: `IV-${String(cot.folio).padStart(4, '0')} · ${cot.titulo}`, grupo: 'Trabajos' }]}
         destinoInicial={`cot:${cot.id}`} anticipos={misAnticipos} onClose={() => setRindiendo(false)} onListo={() => { setRindiendo(false); cargar(); }} />}
 
@@ -122,6 +139,25 @@ export default function TrabajoPanel({ cot, plan, onCambio }: {
               </div>
             ))}
         </div>
+      </div>
+
+      {/* Actas de entrega */}
+      <div>
+        <div style={{ display: 'flex', alignItems: 'center', marginBottom: 6, gap: 8 }}>
+          <p className="label-muted" style={{ margin: 0, flex: 1 }}>Acta de entrega (recepción conforme del cliente)</p>
+          {mueve && estado !== 'por_iniciar' && <button className="btn btn-ghost btn-xs" onClick={nuevaActa}><Plus size={12} /> Nueva acta</button>}
+        </div>
+        {actas.length === 0
+          ? <p style={{ margin: 0, fontSize: '0.84rem', color: 'var(--muted)' }}>{estado === 'por_iniciar' ? 'Al iniciar el trabajo podrás hacer el acta.' : 'Al terminar, haz el acta con la firma del cliente: el trabajo queda terminado solo.'}</p>
+          : actas.map(a => (
+            <button key={a.id} type="button" onClick={() => setActaAbierta(a)}
+              style={{ display: 'flex', width: '100%', gap: 8, alignItems: 'center', padding: '0.4rem 0', background: 'none', border: 'none', borderBottom: '1px solid var(--border2)', cursor: 'pointer', textAlign: 'left', fontSize: '0.86rem', color: 'var(--text)' }}>
+              <b>{folioActa(a.folio)}</b>
+              <span style={{ flex: 1, color: 'var(--muted)' }}>{a.plantilla_nombre || 'Sin plantilla'}{a.trabajos ? ` · ${a.trabajos.slice(0, 60)}` : ''}</span>
+              <span className="badge" style={{ background: a.estado === 'firmado' ? 'var(--success-soft)' : 'var(--y-soft)', color: a.estado === 'firmado' ? 'var(--success)' : 'var(--text)', fontSize: '0.7rem' }}>
+                {a.estado === 'firmado' ? `Firmada ${formatDate(a.firmado_at)}` : 'Borrador'}</span>
+            </button>
+          ))}
       </div>
 
       {/* Resultado */}

@@ -116,9 +116,9 @@ async function ajustesPublicos() {
   try {
     const { data } = await getSupabaseAdmin().from('ajustes_cotizacion').select('*').eq('id', 1).maybeSingle();
     return { responde_en_linea: data ? !!data.responde_en_linea : true, importante: data?.importante ?? null, correo_aceptar: data?.correo_aceptar ?? null,
-             plan_base: (data?.plan_cobro ?? null) as HitoCobro[] | null };
+             plan_base: (data?.plan_cobro ?? null) as HitoCobro[] | null, pdf_diseno: (data?.pdf_diseno ?? null) as Record<string, unknown> | null };
   } catch {
-    return { responde_en_linea: true, importante: null, correo_aceptar: null, plan_base: null as HitoCobro[] | null };
+    return { responde_en_linea: true, importante: null, correo_aceptar: null, plan_base: null as HitoCobro[] | null, pdf_diseno: null as Record<string, unknown> | null };
   }
 }
 
@@ -207,7 +207,7 @@ export async function aPublica(cot: FilaCotizacion): Promise<CotizacionPublica> 
     aclaraciones: cot.aclaraciones ?? [cot.condiciones_servicio, cot.condiciones_comerciales].filter(Boolean).join('\n\n'),
     secciones: cot.secciones || [],
     plan_cobro: (cot.plan_cobro && cot.plan_cobro.length ? cot.plan_cobro : ajustes.plan_base) || null,
-    responde_en_linea: ajustes.responde_en_linea, importante: ajustes.importante, correo_aceptar: ajustes.correo_aceptar,
+    responde_en_linea: ajustes.responde_en_linea, importante: ajustes.importante, correo_aceptar: ajustes.correo_aceptar, pdf_diseno: ajustes.pdf_diseno,
     ...lugar,
     moneda: (cot.moneda as Moneda) || 'CLP',
     valor_uf: cot.valor_uf,

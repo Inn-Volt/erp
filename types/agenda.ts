@@ -31,6 +31,8 @@ export interface Agendamiento {
   /** Fase 7: lo que se vio en la visita y sus fotos (pasan a la cotización). */
   notas_visita?: string | null;
   fotos?: { path: string; caption: string }[];
+  /** Fase 8: el informe de la visita, llenado con una plantilla. */
+  informe?: import('@/services/informes').InformeLleno | null;
   created_by: string | null;
   created_at: string;
   updated_at: string;

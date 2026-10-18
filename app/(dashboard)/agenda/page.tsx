@@ -1,5 +1,9 @@
 'use client';
 
+import type { EmpresaInfo } from '@/components/pdf/PresupuestoPDF';
+import { supabase } from '@/lib/supabase';
+import { informeDesde, plantillasInformeServicio, type InformeLleno, type PlantillaInformeCompleta } from '@/services/informes';
+import FormularioInforme from '@/components/informes/FormularioInforme';
 import { fotosService } from '@/services/fotos';
 import { useState, useEffect, useCallback, useRef, Suspense } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
@@ -88,6 +92,41 @@ function AgendaModal({ cita, clientes, createdBy, prefill, onClose, onSaved, onD
   const [urlsFotos, setUrlsFotos] = useState<Record<string, string>>({});
   const [subiendo, setSubiendo] = useState(false);
   const router = useRouter();
+  // Fase 8: el informe de la visita con una plantilla (preguntas y checklist) y su PDF.
+  const conInforme = !!cita && 'informe' in cita;
+  const [informe, setInforme] = useState<InformeLleno | null>(cita?.informe || null);
+  const [plantillas, setPlantillas] = useState<PlantillaInformeCompleta[]>([]);
+  const [generando, setGenerando] = useState(false);
+  useEffect(() => {
+    if (conInforme) plantillasInformeServicio.listar({ tipo: 'visita' }).then(setPlantillas).catch(() => setPlantillas([]));
+  }, [conInforme]);
+  const elegirPlantilla = (pid: string) => {
+    if (informe && Object.keys(informe.respuestas || {}).length && !confirm('Cambiar de plantilla borra lo respondido. ¿Seguir?')) return;
+    setInforme(pid ? informeDesde(plantillas.find(p => p.id === pid) || null) : null);
+  };
+  const pdfVisita = async () => {
+    if (!cita) return;
+    setGenerando(true);
+    try {
+      const [{ pdf }, { default: InformeGeneralPDF }, { saveAs }] = await Promise.all([
+        import('@react-pdf/renderer'), import('@/components/pdf/InformeGeneralPDF'), import('file-saver'),
+      ]);
+      const { data: emps } = await supabase.from('empresas').select('*').limit(1);
+      const empresa = (emps || [])[0] as EmpresaInfo | undefined;
+      if (!empresa) { toastError('Falta configurar la empresa'); return; }
+      const urls = await fotosService.urls(fotos.map(f => f.path));
+      const cli = clientes.find(c => c.id === clienteId);
+      const blob = await pdf(
+        <InformeGeneralPDF empresa={empresa} tipo="visita" folio={`VT-${String(cita.folio).padStart(4, '0')}`} fecha={fecha}
+          cliente={{ nombre: cli?.nombre_cliente || 'Sin cliente', rut: cli?.rut, direccion: direccion || cli?.direccion }}
+          referencia={titulo} responsable={RESPONSABLE_LABEL[responsable]}
+          informe={{ ...(informe || { campos: [], respuestas: {}, checklist: [] }) }}
+          observaciones={notasVisita} fotos={fotos.filter(f => urls[f.path]).map(f => ({ url: urls[f.path], caption: f.caption }))} />,
+      ).toBlob();
+      saveAs(blob, `Informe_visita_VT-${String(cita.folio).padStart(4, '0')}.pdf`);
+    } catch { toastError('No se pudo generar el PDF'); }
+    finally { setGenerando(false); }
+  };
   useEffect(() => {
     if (fotos.length) fotosService.urls(fotos.map(f => f.path)).then(u => setUrlsFotos(x => ({ ...x, ...u }))).catch(() => {});
   }, [fotos]);
@@ -146,6 +185,7 @@ function AgendaModal({ cita, clientes, createdBy, prefill, onClose, onSaved, onD
         notas: notas.trim() || null,
         created_by: cita?.created_by || createdBy,
         ...(conVisita ? { notas_visita: notasVisita.trim() || null, fotos } : {}),
+        ...(conInforme ? { informe } : {}),
       };
       if (cita) { await agendaService.update(cita.id, payload); success('Cita actualizada'); }
       else { await agendaService.create(payload); success('Cita agendada'); }
@@ -269,6 +309,15 @@ function AgendaModal({ cita, clientes, createdBy, prefill, onClose, onSaved, onD
             {conVisita && (
               <div style={{ borderTop: '1px dashed var(--border2)', paddingTop: '0.9rem', display: 'flex', flexDirection: 'column', gap: 8 }}>
                 <p className="label-muted" style={{ margin: 0 }}>Lo que se vio en la visita (pasa a la cotización; las fotos, al PDF si quieres)</p>
+                {conInforme && (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                    <select className="input" value={informe?.plantilla_id || ''} onChange={e => elegirPlantilla(e.target.value)}>
+                      <option value="">{plantillas.length ? 'Informe con plantilla (opcional)…' : 'Sin plantillas de visita: créalas en Mi empresa → Plantillas de informe'}</option>
+                      {plantillas.map(p => <option key={p.id} value={p.id}>{p.nombre}</option>)}
+                    </select>
+                    {informe && <FormularioInforme informe={informe} onCambiar={setInforme} />}
+                  </div>
+                )}
                 <textarea className="input" rows={3} value={notasVisita} onChange={e => setNotasVisita(e.target.value)}
                   placeholder="Estado del tablero, distancias, qué hay que cambiar, qué pidió el cliente…" style={{ resize: 'vertical' }} />
                 {fotos.length > 0 && (
@@ -290,6 +339,8 @@ function AgendaModal({ cita, clientes, createdBy, prefill, onClose, onSaved, onD
                     {subiendo ? <Loader2 size={13} className="iv-spin" /> : <Camera size={13} />} Agregar fotos
                     <input type="file" accept="image/*" capture="environment" multiple hidden onChange={e => { subirFotos(e.target.files); e.target.value = ''; }} />
                   </label>
+                  <button type="button" className="btn btn-ghost btn-sm" onClick={pdfVisita} disabled={generando} title="El informe de la visita en PDF (para el cliente o para el archivo)">
+                    {generando ? <Loader2 size={13} className="iv-spin" /> : <Download size={13} />} PDF de la visita</button>
                   <button type="submit" className="btn btn-primary btn-sm" disabled={saving || !clienteId} title={clienteId ? 'Guarda la visita como realizada y abre una cotización con lo que se vio' : 'Elige el cliente primero'}
                     onClick={() => { cotizarDespues.current = true; }}>
                     <FileText size={13} /> Guardar y cotizar con esta visita</button>
