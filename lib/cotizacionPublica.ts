@@ -8,7 +8,8 @@
 
 import { getSupabaseAdmin } from '@/lib/supabaseAdmin';
 import { diasValidez, sumarDias } from '@/utils';
-import type { CotizacionItem, Partida, Moneda, EstadoCotizacion } from '@/types';
+import type { CotizacionItem, Partida, Moneda } from '@/types';
+import { normalizarEstado, type Seccion } from '@/lib/cotizador/tipos';
 import type { CotizacionPublica, FotoPublica } from '@/types/publico';
 import type { EmpresaInfo } from '@/components/pdf/PresupuestoPDF';
 
@@ -21,8 +22,19 @@ export const esTokenValido = (t: string) =>
 export interface FilaCotizacion {
   id: string;
   folio: number;
-  estado: EstadoCotizacion;
+  estado: string;
   created_at: string;
+  enviada_at?: string | null;
+  titulo?: string | null;
+  fecha_emision?: string | null;
+  valida_hasta?: string | null;
+  fecha_valor_uf?: string | null;
+  que_ve_cliente?: string | null;
+  titulo_valorizacion?: string | null;
+  aclaraciones?: string | null;
+  secciones?: Seccion[] | null;
+  sucursal_id?: string | null;
+  contacto_id?: string | null;
   items: CotizacionItem[] | null;
   partidas: Partida[] | null;
   moneda: Moneda | null;
@@ -70,26 +82,48 @@ const fechaChile = (d: Date) =>
   new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Santiago', year: 'numeric', month: '2-digit', day: '2-digit' }).format(d);
 
 /** Fecha de vencimiento y si sigue vigente hoy (ambas en hora de Chile). */
-export function vigencia(cot: Pick<FilaCotizacion, 'created_at' | 'condiciones_comerciales'>) {
+export function vigencia(cot: Pick<FilaCotizacion, 'created_at' | 'condiciones_comerciales' | 'valida_hasta'>) {
   const emision = fechaChile(new Date(cot.created_at));
-  const vence = sumarDias(emision, diasValidez(cot.condiciones_comerciales));
+  // Fase 4: la cotización guarda su «válida hasta» (se fija al enviarla).
+  const vence = cot.valida_hasta || sumarDias(emision, diasValidez(cot.condiciones_comerciales));
   return { vence, vigente: fechaChile(new Date()) <= vence };
 }
 
 /** Quita todo dato interno de un ítem (costos, márgenes, imprevistos). */
-function itemPublico(i: CotizacionItem): CotizacionItem {
+function itemPublico(i: CotizacionItem & { ligadoA?: string | null; porUnidad?: number }): CotizacionItem & { ligadoA?: string | null; porUnidad?: number; itemId?: string } {
   return {
     id: i.id, descripcion: i.descripcion, categoria: i.categoria,
     cantidad: i.cantidad, unidad: i.unidad, precio: i.precio,
     iva: typeof i.iva === 'number' ? i.iva : (i.iva_incluido === false ? 0 : 19),
     descuento: i.descuento || 0,
-    partidaId: i.partidaId, cantidadPorUnidad: i.cantidadPorUnidad,
+    partidaId: i.partidaId, ligadoA: i.ligadoA || null, porUnidad: i.porUnidad,
+    // El precio va congelado: se marca como del catálogo para que nadie lo recalcule.
+    itemId: 'publico',
     costo: 0, imprevistos: 0, margen: 0,
   };
 }
 
-function partidaPublica(p: Partida): Partida {
-  return { id: p.id, nombre: p.nombre, descripcion: p.descripcion, cantidad: p.cantidad, unidad: p.unidad };
+function partidaPublica(p: Partida & { tipo?: string }): Partida & { tipo?: string } {
+  return { id: p.id, nombre: p.nombre, descripcion: p.descripcion, cantidad: p.cantidad, unidad: p.unidad, tipo: p.tipo || 'instalacion' };
+}
+
+/** Ajustes de cotización que ve el cliente (sin la fase 4: valores de siempre). */
+async function ajustesPublicos() {
+  try {
+    const { data } = await getSupabaseAdmin().from('ajustes_cotizacion').select('responde_en_linea, importante, correo_aceptar').eq('id', 1).maybeSingle();
+    return { responde_en_linea: data ? !!data.responde_en_linea : true, importante: data?.importante ?? null, correo_aceptar: data?.correo_aceptar ?? null };
+  } catch {
+    return { responde_en_linea: true, importante: null, correo_aceptar: null };
+  }
+}
+
+async function lugarDe(sucursalId?: string | null, contactoId?: string | null) {
+  const admin = getSupabaseAdmin();
+  const [s, c] = await Promise.all([
+    sucursalId ? admin.from('cliente_sucursales').select('nombre, direccion, comuna').eq('id', sucursalId).maybeSingle() : Promise.resolve({ data: null }),
+    contactoId ? admin.from('cliente_contactos').select('nombre, email, telefono').eq('id', contactoId).maybeSingle() : Promise.resolve({ data: null }),
+  ]);
+  return { sucursal: (s.data || null) as CotizacionPublica['sucursal'], contacto: (c.data || null) as CotizacionPublica['contacto'] };
 }
 
 async function empresaDe(empresaId: string | null): Promise<EmpresaInfo> {
@@ -132,14 +166,26 @@ async function vendedorDe(id: string | null | undefined): Promise<CotizacionPubl
 
 export async function aPublica(cot: FilaCotizacion): Promise<CotizacionPublica> {
   const { vence, vigente } = vigencia(cot);
-  const [empresa, fotos, vendedor] = await Promise.all([
+  const [empresa, fotos, vendedor, ajustes, lugar] = await Promise.all([
     empresaDe(cot.empresa_id), fotosDe(cot.levantamiento_id, cot.incluir_fotos), vendedorDe(cot.vendedor_id),
+    ajustesPublicos(), lugarDe(cot.sucursal_id, cot.contacto_id),
   ]);
+  const estado = normalizarEstado(cot.estado, !!cot.enviada_at || !!cot.vista_at);
   const c = cot.clientes;
   return {
     folio: cot.folio,
-    estado: cot.estado,
+    estado,
     created_at: cot.created_at,
+    titulo: cot.titulo || 'Cotización',
+    fecha_emision: cot.fecha_emision || null,
+    valida_hasta: cot.valida_hasta || null,
+    fecha_valor_uf: cot.fecha_valor_uf || null,
+    que_ve_cliente: (cot.que_ve_cliente as CotizacionPublica['que_ve_cliente']) || (cot.mostrar_detalle ? 'detalle' : 'partidas'),
+    titulo_valorizacion: cot.titulo_valorizacion || null,
+    aclaraciones: cot.aclaraciones ?? [cot.condiciones_servicio, cot.condiciones_comerciales].filter(Boolean).join('\n\n'),
+    secciones: cot.secciones || [],
+    ...ajustes,
+    ...lugar,
     moneda: (cot.moneda as Moneda) || 'CLP',
     valor_uf: cot.valor_uf,
     descuento_global: cot.descuento_global || 0,
@@ -163,7 +209,7 @@ export async function aPublica(cot: FilaCotizacion): Promise<CotizacionPublica> 
     respondida_at: cot.respondida_at,
     respondida_por: cot.respondida_por,
     respondida_rut: cot.respondida_rut ?? null,
-    respuesta_firma: ['Aceptado', 'Realizado', 'Entregado'].includes(cot.estado) ? (cot.respuesta_firma ?? null) : null,
+    respuesta_firma: estado === 'Aprobada' ? (cot.respuesta_firma ?? null) : null,
     vendedor,
     fotos,
   };

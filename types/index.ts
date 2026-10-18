@@ -172,7 +172,9 @@ export interface RecetaIA {
   componentes: ComponenteRecetaIA[];
 }
 
-export type EstadoCotizacion = 'Pendiente' | 'Aceptado' | 'Realizado' | 'Rechazado' | 'Entregado';
+/** Los de TecApp (fase 4). Los de antes quedan solo para leer datos que no se han convertido. */
+export type EstadoCotizacion = 'Borrador' | 'Enviada' | 'Aprobada' | 'Rechazada' | 'Anulada'
+  | 'Pendiente' | 'Aceptado' | 'Realizado' | 'Rechazado' | 'Entregado';
 
 /** Por qué se pierde una venta: alimenta el análisis del dashboard. */
 export const MOTIVOS_PERDIDA = [
@@ -361,18 +363,21 @@ export interface ToastMessage {
   message: string;
 }
 
-export const ESTADOS_ACTIVOS: EstadoCotizacion[] = ['Aceptado', 'Realizado', 'Entregado'];
-export const ESTADOS_PIPELINE: EstadoCotizacion[] = ['Pendiente'];
-export const ESTADOS_TODOS: EstadoCotizacion[] = ['Pendiente', 'Aceptado', 'Realizado', 'Rechazado', 'Entregado'];
+export const ESTADOS_ACTIVOS: EstadoCotizacion[] = ['Aprobada', 'Aceptado', 'Realizado', 'Entregado'];
+export const ESTADOS_PIPELINE: EstadoCotizacion[] = ['Enviada', 'Pendiente'];
+export const ESTADOS_TODOS: EstadoCotizacion[] = ['Borrador', 'Enviada', 'Aprobada', 'Rechazada', 'Anulada'];
 
-// Los colores son tokens CSS: cambian solos entre tema claro y oscuro
-// manteniendo contraste legible sobre cada fondo (ver app/globals.css).
 export const ESTADO_COLORS: Record<EstadoCotizacion, { color: string; bg: string }> = {
-  Realizado: { color: 'var(--success)', bg: 'var(--success-soft)' },
-  Aceptado:  { color: 'var(--info)',    bg: 'var(--info-soft)'    },
-  Entregado: { color: 'var(--purple)',  bg: 'var(--purple-soft)'  },
+  Borrador:  { color: 'var(--muted)',   bg: 'var(--bg3)'          },
+  Enviada:   { color: 'var(--info)',    bg: 'var(--info-soft)'    },
+  Aprobada:  { color: 'var(--success)', bg: 'var(--success-soft)' },
+  Rechazada: { color: 'var(--danger)',  bg: 'var(--danger-soft)'  },
+  Anulada:   { color: 'var(--muted)',   bg: 'var(--bg3)'          },
   Pendiente: { color: 'var(--y)',       bg: 'var(--y-soft)'       },
+  Aceptado:  { color: 'var(--success)', bg: 'var(--success-soft)' },
+  Realizado: { color: 'var(--success)', bg: 'var(--success-soft)' },
   Rechazado: { color: 'var(--danger)',  bg: 'var(--danger-soft)'  },
+  Entregado: { color: 'var(--success)', bg: 'var(--success-soft)' },
 };
 
 export const CATEGORIA_LABELS: Record<CategoriaItem, string> = {

@@ -3,20 +3,25 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import {
   Plus, Search, Trash2, Edit3, X, Loader2, Package, Layers, Save,
-  FileUp, FileDown, ExternalLink, RefreshCw, Sparkles, Wand2,
+  FileUp, FileDown, ExternalLink, RefreshCw, Percent,
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { catalogoService, recetasService } from '@/services/catalogo';
 import NumeroInput from '@/components/NumeroInput';
 import { useToast } from '@/hooks/useToast';
-import { formatCLP, cleanNumber, costoReceta, parseCategoria, mejorMatchCatalogo } from '@/utils';
+import { formatCLP, cleanNumber, costoReceta, parseCategoria } from '@/utils';
 import type {
-  CatalogoItem, RecetaComponente, RecetaConComponentes, CategoriaItem, RecetaIA,
+  CatalogoItem, RecetaConComponentes, CategoriaItem,
 } from '@/types';
 import {
   CATEGORIA_LABELS, CATEGORIAS_ORDEN, CATEGORIA_COLORS, UNIDADES,
 } from '@/types';
 import { fetchConSesion } from '@/lib/fetchConSesion';
+import EditorReceta from '@/components/cotizador/EditorReceta';
+import { catalogoCotService, familiasService, recetasCotService } from '@/services/cotizador';
+import { precioCatalogo } from '@/lib/cotizador/calculo';
+import type { ArticuloCatalogo, Familia } from '@/lib/cotizador/tipos';
+import type { RecetaCompleta } from '@/lib/cotizador/recetas';
 import PageHeader from '@/components/PageHeader';
 import { usePermisos } from '@/hooks/usePermisos';
 
@@ -32,26 +37,42 @@ const fieldLabel: React.CSSProperties = {
 };
 
 // ══════════════════════════════════════════════════════════════════════════════
-// MODAL: Ítem de catálogo
+// MODAL: Ítem de catálogo (con familia de precio, ganancia propia y mano de obra ligada)
 // ══════════════════════════════════════════════════════════════════════════════
-function ItemModal({ item, onClose, onSaved }: {
-  item: Partial<CatalogoItem> | null;
+type ItemEdit = Partial<CatalogoItem> & {
+  familia_precio_id?: string | null; ganancia_propia?: number | null; marca?: string | null; modelo?: string | null;
+  garantia?: string | null; mano_obra_id?: string | null; mano_obra_por_unidad?: number | null; ultimo_motivo?: string | null;
+};
+
+function ItemModal({ item, familias, manosDeObra, conFase4, onClose, onSaved }: {
+  item: ItemEdit | null;
+  familias: Familia[];
+  manosDeObra: CatalogoItem[];
+  conFase4: boolean;
   onClose: () => void;
   onSaved: () => void;
 }) {
   const { success, error } = useToast();
-  const [form, setForm] = useState<Partial<CatalogoItem>>({
+  const [form, setForm] = useState<ItemEdit>({
     descripcion: '', categoria: 'material', unidad: 'un', costo: 0, codigo: '', proveedor: '', link: '', ...item,
   });
   const [saving, setSaving] = useState(false);
-
-  const set = (k: keyof CatalogoItem, v: string | number) => setForm(p => ({ ...p, [k]: v }));
+  const set = (k: keyof ItemEdit, v: unknown) => setForm(p => ({ ...p, [k]: v }));
+  const catalogoDe = form.categoria === 'material' ? 'bodega' : 'servicios';
+  const familia = familias.find(f => f.id === form.familia_precio_id) || null;
+  const ganancia = form.ganancia_propia ?? familia?.ganancia ?? null;
+  const precio = precioCatalogo(cleanNumber(form.costo), ganancia, familia?.redondeo || 1);
 
   const guardar = async () => {
     if (!form.descripcion?.trim()) { error('La descripción es obligatoria'); return; }
+    let motivo: string | null = null;
+    if (conFase4 && (item?.ganancia_propia ?? null) !== (form.ganancia_propia ?? null) && item?.id) {
+      motivo = prompt('¿Por qué cambias la ganancia propia de este producto?')?.trim() || null;
+      if (!motivo) return;
+    }
     setSaving(true);
     try {
-      const payload = {
+      const payload: Record<string, unknown> = {
         codigo: form.codigo?.trim() || undefined,
         descripcion: form.descripcion.trim(),
         categoria: (form.categoria || 'material') as CategoriaItem,
@@ -60,8 +81,15 @@ function ItemModal({ item, onClose, onSaved }: {
         proveedor: form.proveedor?.trim() || undefined,
         link: form.link?.trim() || undefined,
       };
-      if (item?.id) await catalogoService.update(item.id, payload);
-      else await catalogoService.create(payload);
+      if (conFase4) Object.assign(payload, {
+        familia_precio_id: form.familia_precio_id || null, ganancia_propia: form.ganancia_propia ?? null,
+        marca: form.marca?.trim() || null, modelo: form.modelo?.trim() || null, garantia: form.garantia?.trim() || null,
+        mano_obra_id: form.categoria === 'material' ? form.mano_obra_id || null : null,
+        mano_obra_por_unidad: Number(form.mano_obra_por_unidad) || 1,
+        ...(motivo ? { ultimo_motivo: motivo } : {}),
+      });
+      if (item?.id) await catalogoService.update(item.id, payload as Partial<CatalogoItem>);
+      else await catalogoService.create(payload as Omit<CatalogoItem, 'id' | 'created_at' | 'updated_at'>);
       success(item?.id ? 'Ítem actualizado' : 'Ítem agregado al catálogo');
       onSaved();
     } catch (e) {
@@ -73,7 +101,7 @@ function ItemModal({ item, onClose, onSaved }: {
 
   return (
     <div className="modal-overlay" onClick={e => { if (e.target === e.currentTarget) onClose(); }} style={{ zIndex: 200 }}>
-      <div className="modal-box" style={{ maxWidth: 460, maxHeight: '90vh', overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
+      <div className="modal-box" style={{ maxWidth: 560, maxHeight: '90vh', overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
         <div style={{ flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '1.1rem 1.4rem', borderBottom: '1px solid var(--border2)' }}>
           <span className="section-label" style={{ margin: 0, paddingTop: 0 }}><Package size={13} /> {item?.id ? 'Editar ítem' : 'Nuevo ítem'}</span>
           <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--muted)' }}><X size={16} /></button>
@@ -86,7 +114,7 @@ function ItemModal({ item, onClose, onSaved }: {
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.6rem' }}>
             <div>
               <span style={fieldLabel}>Categoría</span>
-              <select style={field} value={form.categoria} onChange={e => set('categoria', e.target.value)}>
+              <select style={field} value={form.categoria} onChange={e => { set('categoria', e.target.value); set('familia_precio_id', null); }}>
                 {CATEGORIAS_ORDEN.map(c => <option key={c} value={c}>{CATEGORIA_LABELS[c]}</option>)}
               </select>
             </div>
@@ -107,6 +135,47 @@ function ItemModal({ item, onClose, onSaved }: {
               <input style={field} value={form.codigo || ''} onChange={e => set('codigo', e.target.value)} placeholder="MAT-001" />
             </div>
           </div>
+          {conFase4 && (<>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.6rem' }}>
+              <div>
+                <span style={fieldLabel}>Familia de precio</span>
+                <select style={field} value={form.familia_precio_id || ''} onChange={e => set('familia_precio_id', e.target.value || null)}>
+                  <option value="">Sin familia (sin precio)</option>
+                  {familias.filter(f => f.catalogo === catalogoDe && (f.activo || f.id === form.familia_precio_id)).map(f => <option key={f.id} value={f.id}>{f.nombre} · {f.ganancia} %</option>)}
+                </select>
+              </div>
+              <div>
+                <span style={fieldLabel}>Ganancia propia % (opcional)</span>
+                <input style={field} type="number" min={0} step="any" value={form.ganancia_propia ?? ''} placeholder={familia ? `La de la familia: ${familia.ganancia} %` : ''}
+                  onChange={e => set('ganancia_propia', e.target.value.trim() === '' ? null : Number(e.target.value))} />
+              </div>
+            </div>
+            <div style={{ background: 'var(--bg3)', borderRadius: 8, padding: '0.55rem 0.75rem', fontSize: '0.84rem', color: 'var(--text)' }}>
+              Precio de venta: <b>{precio === null ? 'sin precio (ponle familia o ganancia)' : formatCLP(precio)}</b>
+              {precio !== null && <span style={{ color: 'var(--muted)' }}> = {formatCLP(cleanNumber(form.costo))} × (1 + {ganancia} %), hacia arriba a {familia?.redondeo === 1000 ? 'mil' : familia?.redondeo === 100 ? 'la centena' : familia?.redondeo === 10 ? 'la decena' : 'el peso'}</span>}
+            </div>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '0.6rem' }}>
+              <div><span style={fieldLabel}>Marca</span><input style={field} value={form.marca || ''} onChange={e => set('marca', e.target.value)} /></div>
+              <div><span style={fieldLabel}>Modelo</span><input style={field} value={form.modelo || ''} onChange={e => set('modelo', e.target.value)} /></div>
+              <div><span style={fieldLabel}>Garantía</span><input style={field} value={form.garantia || ''} onChange={e => set('garantia', e.target.value)} placeholder="12 meses" /></div>
+            </div>
+            {form.categoria === 'material' && (
+              <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: '0.6rem' }}>
+                <div>
+                  <span style={fieldLabel}>Si se instala, la mano de obra que necesita</span>
+                  <select style={field} value={form.mano_obra_id || ''} onChange={e => set('mano_obra_id', e.target.value || null)}>
+                    <option value="">No trae mano de obra</option>
+                    {manosDeObra.map(m => <option key={m.id} value={m.id}>{m.descripcion}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <span style={fieldLabel}>Por cada unidad</span>
+                  <input style={field} type="number" min={0} step="any" value={form.mano_obra_por_unidad ?? 1} disabled={!form.mano_obra_id}
+                    onChange={e => set('mano_obra_por_unidad', Number(e.target.value) || 1)} />
+                </div>
+              </div>
+            )}
+          </>)}
           <div>
             <span style={fieldLabel}>Proveedor (opcional)</span>
             <input style={field} value={form.proveedor || ''} onChange={e => set('proveedor', e.target.value)} placeholder="Ej. Sodimac, Dartel…" />
@@ -115,9 +184,7 @@ function ItemModal({ item, onClose, onSaved }: {
             <span style={fieldLabel}>Link del producto (opcional)</span>
             <input style={field} value={form.link || ''} onChange={e => set('link', e.target.value)} placeholder="https://…" />
           </div>
-        </div>{/* /cuerpo con scroll */}
-
-        {/* Pie fijo con acciones (siempre visible) */}
+        </div>
         <div style={{ flexShrink: 0, display: 'flex', gap: '0.5rem', justifyContent: 'flex-end', padding: '0.9rem 1.4rem', borderTop: '1px solid var(--border2)' }}>
           <button onClick={onClose} className="btn btn-ghost">Cancelar</button>
           <button onClick={guardar} disabled={saving} className="btn btn-primary">
@@ -130,239 +197,72 @@ function ItemModal({ item, onClose, onSaved }: {
 }
 
 // ══════════════════════════════════════════════════════════════════════════════
-// MODAL: Editor de receta
+// Familias de precio: % de ganancia (sobre el costo, incluye imprevistos) y redondeo
 // ══════════════════════════════════════════════════════════════════════════════
-type CompEdit = Omit<RecetaComponente, 'id' | 'receta_id'>;
-
-function RecetaModal({ receta, catalogo, onClose, onSaved }: {
-  receta: RecetaConComponentes | null;
-  catalogo: CatalogoItem[];
-  onClose: () => void;
-  onSaved: () => void;
-}) {
-  const { success, error, warning } = useToast();
-  const [nombre, setNombre] = useState(receta?.nombre || '');
-  const [unidad, setUnidad] = useState(receta?.unidad || 'un');
-  const [descripcion, setDescripcion] = useState(receta?.descripcion || '');
-  const [comps, setComps] = useState<CompEdit[]>(
-    (receta?.componentes || []).map(c => ({
-      item_id: c.item_id, descripcion: c.descripcion, categoria: c.categoria,
-      unidad: c.unidad, costo: c.costo, cantidad: c.cantidad, orden: c.orden, pregunta: c.pregunta ?? null,
-    })),
-  );
-  const [busca, setBusca] = useState('');
-  const [saving, setSaving] = useState(false);
-
-  // ── Generación con IA ──
-  const [iaDesc, setIaDesc] = useState('');
-  const [iaCargando, setIaCargando] = useState(false);
-  const [iaError, setIaError] = useState<string | null>(null);
-
-  const generarConIA = async () => {
-    if (iaDesc.trim().length < 4) { setIaError('Describe la receta (ej. "punto de enchufe simple").'); return; }
-    setIaCargando(true);
-    setIaError(null);
-    try {
-      const res = await fetchConSesion('/api/receta-ia', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ descripcion: iaDesc.trim() }),
-      });
-      const data = await res.json();
-      if (!res.ok) { setIaError(data?.error || 'No se pudo generar la receta.'); return; }
-      const r = data.receta as RecetaIA;
-      // Enlaza cada componente con el catálogo (precio/código vivos) si hay match confiable.
-      const nuevos: CompEdit[] = r.componentes.map(c => {
-        const m = mejorMatchCatalogo(c.descripcion, c.categoria, catalogo);
-        return m
-          ? { item_id: m.id, descripcion: m.descripcion, categoria: m.categoria, unidad: m.unidad, costo: m.costo, cantidad: c.cantidad, orden: 0 }
-          : { item_id: null, descripcion: c.descripcion, categoria: c.categoria, unidad: c.unidad, costo: c.costoEstimado, cantidad: c.cantidad, orden: 0 };
-      });
-      if (!nombre.trim()) setNombre(r.nombre || '');
-      if (r.unidad) setUnidad(r.unidad);
-      if (!descripcion.trim() && r.descripcion) setDescripcion(r.descripcion);
-      setComps(prev => [...prev, ...nuevos.map((c, i) => ({ ...c, orden: prev.length + i }))]);
-      const enlazados = nuevos.filter(c => c.item_id).length;
-      success(`IA: ${nuevos.length} componentes (${enlazados} del catálogo)`);
-      setIaDesc('');
-    } catch {
-      setIaError('Error de conexión al generar la receta.');
-    } finally {
-      setIaCargando(false);
-    }
+function FamiliasPrecio({ familias, items, editable, onCambio }: { familias: Familia[]; items: CatalogoItem[]; editable: boolean; onCambio: () => void }) {
+  const { success, error } = useToast();
+  const [nueva, setNueva] = useState<{ catalogo: 'bodega' | 'servicios'; nombre: string; ganancia: string; redondeo: number }>({ catalogo: 'bodega', nombre: '', ganancia: '30', redondeo: 10 });
+  const usos = useMemo(() => {
+    const m: Record<string, number> = {};
+    for (const it of items as (CatalogoItem & { familia_precio_id?: string | null })[]) if (it.familia_precio_id) m[it.familia_precio_id] = (m[it.familia_precio_id] || 0) + 1;
+    return m;
+  }, [items]);
+  const guardar = async (f: Partial<Familia> & { ultimo_motivo?: string | null }, ok: string) => {
+    try { await familiasService.guardar(f); success(ok); onCambio(); }
+    catch (e) { error(e instanceof Error ? e.message : 'No se pudo guardar'); }
   };
-
-  const sugerencias = useMemo(() => {
-    const q = busca.trim().toLowerCase();
-    if (!q) return [];
-    return catalogo.filter(i => i.descripcion.toLowerCase().includes(q) || (i.codigo || '').toLowerCase().includes(q)).slice(0, 6);
-  }, [busca, catalogo]);
-
-  const agregar = (it: CatalogoItem) => {
-    setComps(prev => [...prev, {
-      item_id: it.id, descripcion: it.descripcion, categoria: it.categoria,
-      unidad: it.unidad, costo: it.costo, cantidad: 1, orden: prev.length,
-    }]);
-    setBusca('');
+  const cambiarGanancia = (f: Familia, v: string) => {
+    const g = Number(v);
+    if (!(g >= 0) || g === f.ganancia) return;
+    const motivo = prompt(`Cambiar la ganancia de «${f.nombre}» de ${f.ganancia} % a ${g} % cambia al instante el precio de sus ${usos[f.id] || 0} productos (las cotizaciones guardadas no cambian). ¿Por qué?`);
+    if (!motivo?.trim()) { onCambio(); return; }
+    guardar({ id: f.id, ganancia: g, ultimo_motivo: motivo.trim() }, 'Ganancia cambiada');
   };
-  const quitar = (i: number) => setComps(prev => prev.filter((_, idx) => idx !== i));
-  const setCant = (i: number, v: string) => setComps(prev => prev.map((c, idx) => idx === i ? { ...c, cantidad: cleanNumber(v) } : c));
-  const setPregunta = (i: number, v: string | null) => setComps(prev => prev.map((c, idx) => idx === i ? { ...c, pregunta: v } : c));
-
-  const costoTotal = comps.reduce((s, c) => s + c.costo * c.cantidad, 0);
-
-  const guardar = async () => {
-    if (!nombre.trim()) { error('El nombre de la receta es obligatorio'); return; }
-    if (comps.length === 0) { warning('Agrega al menos un componente'); return; }
-    setSaving(true);
-    try {
-      let recetaId = receta?.id;
-      if (recetaId) {
-        await recetasService.update(recetaId, { nombre: nombre.trim(), unidad, descripcion: descripcion.trim() || undefined });
-      } else {
-        const nueva = await recetasService.create({ nombre: nombre.trim(), unidad, descripcion: descripcion.trim() || undefined });
-        recetaId = nueva.id;
-      }
-      await recetasService.setComponentes(recetaId!, comps);
-      success(receta?.id ? 'Receta actualizada' : 'Receta creada');
-      onSaved();
-    } catch (e) {
-      error('Error al guardar: ' + (e instanceof Error ? e.message : 'Error'));
-    } finally {
-      setSaving(false);
-    }
-  };
-
+  const REDONDEOS: [number, string][] = [[1, 'al peso'], [10, 'a la decena'], [100, 'a la centena'], [1000, 'al mil']];
   return (
-    <div className="modal-overlay" onClick={e => { if (e.target === e.currentTarget) onClose(); }} style={{ zIndex: 200 }}>
-      <div className="modal-box" style={{ maxWidth: 620, width: '95%', maxHeight: '90vh', overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
-        <div style={{ flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '1.1rem 1.4rem', borderBottom: '1px solid var(--border2)' }}>
-          <span className="section-label" style={{ margin: 0, paddingTop: 0 }}><Layers size={13} /> {receta?.id ? 'Editar receta' : 'Nueva receta'}</span>
-          <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--muted)' }}><X size={16} /></button>
-        </div>
-
-        <div style={{ padding: '1.25rem 1.4rem', display: 'flex', flexDirection: 'column', gap: '1rem', flex: 1, overflowY: 'auto', minHeight: 0 }}>
-          {/* Generar con IA */}
-          <div style={{ background: 'var(--y-soft)', border: '1px solid var(--border)', borderRadius: 'var(--r-sm)', padding: '0.75rem 0.85rem' }}>
-            <span style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', fontFamily: 'var(--font-display)', fontWeight: 700, fontSize: '0.76rem', color: 'var(--y)', marginBottom: '0.45rem' }}>
-              <Sparkles size={12} /> Generar con IA
-            </span>
-            <div style={{ display: 'flex', gap: '0.4rem', flexWrap: 'wrap' }}>
-              <input value={iaDesc} onChange={e => setIaDesc(e.target.value)}
-                onKeyDown={e => { if (e.key === 'Enter' && !iaCargando) generarConIA(); }}
-                placeholder='Describe la receta (ej. "punto de enchufe embutido en tabique")'
-                style={{ ...field, flex: 1, minWidth: 180 }} />
-              <button onClick={generarConIA} disabled={iaCargando} className="btn btn-primary" style={{ whiteSpace: 'nowrap' }}>
-                {iaCargando ? <Loader2 size={13} className="iv-spin" /> : <Wand2 size={13} />} Generar
-              </button>
-            </div>
-            {iaError && <p style={{ fontSize: '0.72rem', color: 'var(--danger)', margin: '0.45rem 0 0' }}>{iaError}</p>}
-            <p style={{ fontSize: '0.66rem', color: 'var(--muted)', margin: '0.45rem 0 0', lineHeight: 1.4 }}>
-              Enlaza los componentes con el catálogo (precio real) cuando hay coincidencia; el resto queda con costo estimado. Revisa y ajusta antes de guardar.
-            </p>
-          </div>
-
-          {/* Datos receta */}
-          <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: '0.6rem' }}>
-            <div>
-              <span style={fieldLabel}>Nombre de la receta *</span>
-              <input style={field} value={nombre} onChange={e => setNombre(e.target.value)} placeholder="Ej. Punto eléctrico enchufe" autoFocus />
-            </div>
-            <div>
-              <span style={fieldLabel}>Unidad</span>
-              <select style={field} value={unidad} onChange={e => setUnidad(e.target.value)}>
-                {UNIDADES.map(u => <option key={u} value={u}>{u}</option>)}
+    <div className="panel-y">
+      <p style={{ padding: '0.8rem 1rem 0', margin: 0, fontSize: '0.8rem', color: 'var(--muted)' }}>
+        Precio de venta = costo × (1 + ganancia %), siempre hacia arriba al redondeo de su familia. Un producto puede tener su propia ganancia.
+      </p>
+      {(['bodega', 'servicios'] as const).map(cat => (
+        <div key={cat} style={{ padding: '0.8rem 1rem' }}>
+          <p className="section-label" style={{ margin: '0 0 6px' }}>{cat === 'bodega' ? 'Materiales y equipos' : 'Servicios, mano de obra y operación'}</p>
+          {familias.filter(f => f.catalogo === cat).map(f => (
+            <div key={f.id} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '0.35rem 0', borderBottom: '1px solid var(--border-soft)', opacity: f.activo ? 1 : 0.55, flexWrap: 'wrap' }}>
+              <span style={{ flex: 1, minWidth: 160, fontSize: '0.88rem', color: 'var(--text)' }}>{f.nombre} <span style={{ fontSize: '0.72rem', color: 'var(--muted)' }}>· {usos[f.id] || 0} productos</span></span>
+              <input className="input" type="number" min={0} step="any" defaultValue={f.ganancia} disabled={!editable} key={`${f.id}-${f.ganancia}`}
+                onBlur={e => cambiarGanancia(f, e.target.value)} style={{ width: 90, textAlign: 'right' }} /> %
+              <select className="input" style={{ width: 140 }} disabled={!editable} value={f.redondeo} onChange={e => guardar({ id: f.id, redondeo: Number(e.target.value) }, 'Redondeo cambiado')}>
+                {REDONDEOS.map(([v, t]) => <option key={v} value={v}>{t}</option>)}
               </select>
+              {editable && <button className="btn btn-ghost btn-xs" disabled={f.activo && (usos[f.id] || 0) > 0} title={f.activo && usos[f.id] ? 'Solo se quita si nadie la usa' : undefined}
+                onClick={() => { const m = prompt(f.activo ? '¿Por qué se quita esta familia?' : '¿Por qué se reactiva?'); if (m?.trim()) guardar({ id: f.id, activo: !f.activo, ultimo_motivo: m.trim() }, f.activo ? 'Familia quitada' : 'Familia reactivada'); }}>
+                {f.activo ? 'Quitar' : 'Reactivar'}</button>}
             </div>
-          </div>
-
-          <div>
-            <span style={fieldLabel}>Descripción (opcional)</span>
-            <input style={field} value={descripcion} onChange={e => setDescripcion(e.target.value)} placeholder="Notas de la receta…" />
-          </div>
-
-          {/* Buscador de componentes */}
-          <div>
-            <span style={fieldLabel}>Agregar componentes desde el catálogo</span>
-            <div style={{ position: 'relative' }}>
-              <Search size={13} style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)', color: 'var(--muted)' }} />
-              <input style={{ ...field, paddingLeft: '2rem' }} value={busca} onChange={e => setBusca(e.target.value)} placeholder="Buscar material, mano de obra…" />
-              {sugerencias.length > 0 && (
-                <div className="dropdown" style={{ borderTop: '1px solid var(--border2)' }}>
-                  {sugerencias.map(it => (
-                    <div key={it.id} className="dropdown-item" onMouseDown={() => agregar(it)} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '0.5rem' }}>
-                      <span style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', minWidth: 0 }}>
-                        <span style={{ width: 6, height: 6, borderRadius: '50%', background: CATEGORIA_COLORS[it.categoria], flexShrink: 0 }} />
-                        <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{it.descripcion}</span>
-                      </span>
-                      <span style={{ color: 'var(--muted)', fontSize: '0.75rem', flexShrink: 0 }}>{formatCLP(it.costo)}/{it.unidad}</span>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-            {catalogo.length === 0 && (
-              <p style={{ fontSize: '0.72rem', color: 'var(--muted)', marginTop: '0.4rem' }}>
-                No hay ítems en el catálogo aún. Créalos primero en la pestaña Ítems.
-              </p>
-            )}
-          </div>
-
-          {/* Lista de componentes */}
-          <div style={{ border: '1px solid var(--border2)', borderRadius: 'var(--r-sm)', overflow: 'hidden' }}>
-            {comps.length === 0 ? (
-              <div style={{ padding: '1.5rem', textAlign: 'center', color: 'var(--muted)', fontSize: '0.8rem' }}>
-                Sin componentes — busca arriba para agregar
-              </div>
-            ) : comps.map((c, i) => (
-              <div key={i} style={{ borderBottom: '1px solid var(--border-soft)', borderLeft: `3px solid ${CATEGORIA_COLORS[c.categoria]}` }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', padding: '0.5rem 0.7rem' }}>
-                <span style={{ flex: 1, minWidth: 0, fontSize: '0.82rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{c.descripcion}</span>
-                <button type="button" onClick={() => setPregunta(i, c.pregunta == null ? `¿Incluye ${c.descripcion.toLowerCase().slice(0, 40)}?` : null)}
-                  title={c.pregunta == null ? 'Hacerlo opcional: se pregunta al insertar la receta' : 'Quitar la pregunta (vuelve a ser fijo)'}
-                  style={{ background: c.pregunta != null ? 'var(--y-soft)' : 'none', border: '1px solid var(--border2)', borderRadius: 6, cursor: 'pointer', color: c.pregunta != null ? 'var(--y)' : 'var(--muted)', fontSize: '0.7rem', padding: '0.15rem 0.4rem', fontWeight: 700 }}>?</button>
-                <input type="number" min="0" step="0.01" value={c.cantidad} onChange={e => setCant(i, e.target.value)} style={{ ...field, width: 70, textAlign: 'center', padding: '0.3rem' }} />
-                <span style={{ fontSize: '0.7rem', color: 'var(--muted)', width: 34 }}>{c.unidad}</span>
-                <span style={{ fontSize: '0.78rem', color: 'var(--text)', width: 90, textAlign: 'right', fontFamily: 'var(--font-display)', fontWeight: 700 }}>{formatCLP(c.costo * c.cantidad)}</span>
-                <button onClick={() => quitar(i)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--danger)' }}><Trash2 size={13} /></button>
-              </div>
-              {c.pregunta != null && (
-                <div style={{ padding: '0 0.7rem 0.5rem', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
-                  <span style={{ fontSize: '0.68rem', color: 'var(--muted)', whiteSpace: 'nowrap' }}>Pregunta:</span>
-                  <input style={{ ...field, padding: '0.3rem 0.5rem', fontSize: '0.78rem' }} value={c.pregunta} onChange={e => setPregunta(i, e.target.value)} placeholder="¿Incluye canalización?" />
-                </div>
-              )}
-              </div>
-            ))}
-          </div>
-
-          {/* Total */}
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '0.6rem 0.8rem', background: 'var(--bg3)', borderRadius: 'var(--r-sm)', borderTop: '2px solid var(--y-brand)' }}>
-            <span style={{ fontSize: '0.8rem', color: 'var(--muted)', fontFamily: 'var(--font-display)' }}>Costo interno por {unidad}</span>
-            <span style={{ fontFamily: 'var(--font-display)', fontWeight: 900, fontSize: '1.1rem', color: 'var(--y)' }}>{formatCLP(costoTotal)}</span>
-          </div>
-
-        </div>{/* /cuerpo con scroll */}
-
-        {/* Pie fijo con acciones (siempre visible) */}
-        <div style={{ flexShrink: 0, display: 'flex', gap: '0.5rem', justifyContent: 'flex-end', padding: '0.9rem 1.4rem', borderTop: '1px solid var(--border2)' }}>
-          <button onClick={onClose} className="btn btn-ghost">Cancelar</button>
-          <button onClick={guardar} disabled={saving} className="btn btn-primary">
-            {saving ? <Loader2 size={13} className="iv-spin" /> : <Save size={13} />} Guardar receta
-          </button>
+          ))}
         </div>
-      </div>
+      ))}
+      {editable && (
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', padding: '0.8rem 1rem', borderTop: '1px solid var(--border2)', alignItems: 'center' }}>
+          <select className="input" style={{ width: 170 }} value={nueva.catalogo} onChange={e => setNueva({ ...nueva, catalogo: e.target.value as 'bodega' | 'servicios' })}>
+            <option value="bodega">Materiales y equipos</option><option value="servicios">Servicios</option></select>
+          <input className="input" style={{ flex: 1, minWidth: 160 }} value={nueva.nombre} onChange={e => setNueva({ ...nueva, nombre: e.target.value })} placeholder="Nombre: Equipos 25 %" />
+          <input className="input" style={{ width: 90 }} type="number" min={0} value={nueva.ganancia} onChange={e => setNueva({ ...nueva, ganancia: e.target.value })} /> %
+          <select className="input" style={{ width: 130 }} value={nueva.redondeo} onChange={e => setNueva({ ...nueva, redondeo: Number(e.target.value) })}>
+            {REDONDEOS.map(([v, t]) => <option key={v} value={v}>{t}</option>)}</select>
+          <button className="btn btn-primary btn-sm" disabled={!nueva.nombre.trim()} onClick={() => { guardar({ catalogo: nueva.catalogo, nombre: nueva.nombre.trim(), ganancia: Number(nueva.ganancia) || 0, redondeo: nueva.redondeo }, 'Familia creada'); setNueva({ ...nueva, nombre: '' }); }}>
+            <Plus size={13} /> Agregar familia</button>
+        </div>
+      )}
     </div>
   );
 }
 
-// ══════════════════════════════════════════════════════════════════════════════
-// PÁGINA
-// ══════════════════════════════════════════════════════════════════════════════
 export default function BibliotecaPage() {
   const { success, error: toastError } = useToast();
   const { puede } = usePermisos();
   const puedeEditar = puede('biblioteca.editar');
-  const [tab, setTab] = useState<'items' | 'recetas'>('items');
+  const [tab, setTab] = useState<'items' | 'recetas' | 'familias'>('items');
 
   const [items, setItems] = useState<CatalogoItem[]>([]);
   const [recetas, setRecetas] = useState<RecetaConComponentes[]>([]);
@@ -371,7 +271,12 @@ export default function BibliotecaPage() {
   const [familiaSel, setFamiliaSel] = useState<string>('__todas__');
 
   const [itemModal, setItemModal] = useState<{ open: boolean; item: Partial<CatalogoItem> | null }>({ open: false, item: null });
-  const [recetaModal, setRecetaModal] = useState<{ open: boolean; receta: RecetaConComponentes | null }>({ open: false, receta: null });
+  const [recetaModal, setRecetaModal] = useState<{ open: boolean; receta: RecetaCompleta | null }>({ open: false, receta: null });
+  // Fase 4 (cotizador TecApp): precio de venta, familias de precio y recetas con preguntas.
+  const [conFase4, setConFase4] = useState(false);
+  const [familiasPrecio, setFamiliasPrecio] = useState<Familia[]>([]);
+  const [catPrecio, setCatPrecio] = useState<ArticuloCatalogo[]>([]);
+  const [recetasCompletas, setRecetasCompletas] = useState<RecetaCompleta[]>([]);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -382,6 +287,10 @@ export default function BibliotecaPage() {
       ]);
       setItems(its);
       setRecetas(recs);
+      try {
+        const [fams, cp, rc] = await Promise.all([familiasService.listar(), catalogoCotService.todos(), recetasCotService.listar(false)]);
+        setFamiliasPrecio(fams); setCatPrecio(cp); setRecetasCompletas(rc); setConFase4(true);
+      } catch { setConFase4(false); }
     } catch (e) {
       console.error(e);
       toastError('No se pudo cargar la biblioteca');
@@ -437,11 +346,19 @@ export default function BibliotecaPage() {
     try { await catalogoService.delete(id); success('Ítem eliminado'); load(); }
     catch (e) { toastError('Error: ' + (e instanceof Error ? e.message : 'Error')); }
   };
-  const eliminarReceta = async (id: string, nombre: string) => {
-    if (!confirm(`¿Eliminar la receta "${nombre}"?`)) return;
-    try { await recetasService.delete(id); success('Receta eliminada'); load(); }
+  // Las recetas no se borran: se desactivan y se reactivan (con motivo), como en TecApp.
+  const alternarReceta = async (id: string, nombre: string, activa: boolean) => {
+    const motivo = prompt(activa ? `¿Por qué se desactiva «${nombre}»?` : `¿Por qué se reactiva «${nombre}»?`);
+    if (!motivo?.trim()) return;
+    try { await recetasCotService.activar(id, !activa); success(activa ? 'Receta desactivada' : 'Receta reactivada'); load(); }
     catch (e) { toastError('Error: ' + (e instanceof Error ? e.message : 'Error')); }
   };
+  const precioDe = useMemo(() => new Map(catPrecio.map(a => [a.id, a])), [catPrecio]);
+  const recetaCompletaDe = (r: RecetaConComponentes): RecetaCompleta =>
+    recetasCompletas.find(x => x.id === r.id) || {
+      id: r.id, nombre: r.nombre, descripcion: r.descripcion, unidad: r.unidad, activo: r.activo, preguntas: [],
+      componentes: r.componentes.map(c => ({ id: c.id, item_id: c.item_id, descripcion: c.descripcion, categoria: c.categoria, unidad: c.unidad, costo: c.costo, cantidad: c.cantidad, orden: c.orden, regla: null })),
+    };
 
   // ── Excel: importar / exportar ──────────────────────────────────────────────
   const fileRef = useRef<HTMLInputElement>(null);
@@ -653,12 +570,14 @@ export default function BibliotecaPage() {
   return (
     <div className="anim-in">
       {itemModal.open && (
-        <ItemModal item={itemModal.item} onClose={() => setItemModal({ open: false, item: null })}
+        <ItemModal item={itemModal.item} familias={familiasPrecio} manosDeObra={items.filter(i => i.categoria === 'mano_obra')} conFase4={conFase4}
+          onClose={() => setItemModal({ open: false, item: null })}
           onSaved={() => { setItemModal({ open: false, item: null }); load(); }} />
       )}
       {recetaModal.open && (
-        <RecetaModal receta={recetaModal.receta} catalogo={items} onClose={() => setRecetaModal({ open: false, receta: null })}
-          onSaved={() => { setRecetaModal({ open: false, receta: null }); load(); }} />
+        <EditorReceta receta={recetaModal.receta} catalogo={catPrecio.length ? catPrecio : items.map(i => ({ ...i, precio_venta: null }) as ArticuloCatalogo)}
+          onCerrar={() => setRecetaModal({ open: false, receta: null })}
+          onGuardada={() => { setRecetaModal({ open: false, receta: null }); load(); }} />
       )}
 
       {/* Header */}
@@ -694,6 +613,7 @@ export default function BibliotecaPage() {
       <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '1rem', flexWrap: 'wrap', alignItems: 'center' }}>
         <button style={tabBtn(tab === 'items')} onClick={() => setTab('items')}><Package size={13} /> Ítems ({items.length})</button>
         <button style={tabBtn(tab === 'recetas')} onClick={() => setTab('recetas')}><Layers size={13} /> Recetas ({recetas.length})</button>
+        {conFase4 && <button style={tabBtn(tab === 'familias')} onClick={() => setTab('familias')}><Percent size={13} /> Familias de precio ({familiasPrecio.length})</button>}
         <div style={{ position: 'relative', flex: 1, minWidth: 200, marginLeft: 'auto' }}>
           <Search size={14} style={{ position: 'absolute', left: '0.7rem', top: '50%', transform: 'translateY(-50%)', color: 'var(--muted)' }} />
           <input className="input" value={search} onChange={e => setSearch(e.target.value)} placeholder={tab === 'items' ? 'Buscar en todo el catálogo…' : 'Buscar receta…'} style={{ paddingLeft: '2.1rem' }} />
@@ -715,6 +635,8 @@ export default function BibliotecaPage() {
         <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
           {Array.from({ length: 6 }).map((_, i) => <div key={i} className="skeleton" style={{ height: 52 }} />)}
         </div>
+      ) : tab === 'familias' ? (
+        <FamiliasPrecio familias={familiasPrecio} items={catPrecio as unknown as CatalogoItem[]} editable={puedeEditar} onCambio={load} />
       ) : tab === 'items' ? (
         /* ── ÍTEMS ── */
         <div className="panel-y">
@@ -735,11 +657,15 @@ export default function BibliotecaPage() {
                   </div>
                   <span style={{ fontFamily: 'var(--font-display)', fontWeight: 700, fontSize: '0.85rem', color: 'var(--text)', textAlign: 'right' }}>
                     {formatCLP(it.costo)}<span style={{ color: 'var(--muted)', fontWeight: 400, fontSize: '0.7rem' }}>/{it.unidad}</span>
+                    {conFase4 && <span style={{ display: 'block', fontSize: '0.7rem', fontWeight: 600, color: precioDe.get(it.id)?.precio_venta === null ? '#d97706' : 'var(--success)' }}>
+                      {precioDe.get(it.id)?.precio_venta === null || !precioDe.get(it.id) ? 'sin precio' : `venta ${formatCLP(precioDe.get(it.id)!.precio_venta!)}`}
+                      {precioDe.get(it.id)?.familia_precio_nombre ? <span style={{ color: 'var(--muted)', fontWeight: 400 }}> · {precioDe.get(it.id)!.familia_precio_nombre}</span> : null}
+                    </span>}
                   </span>
                   {it.link ? (
                     <a href={it.link} target="_blank" rel="noopener noreferrer" className="btn btn-ghost btn-xs" title="Abrir link del producto" onClick={e => e.stopPropagation()}><ExternalLink size={12} /></a>
                   ) : null}
-                  <button onClick={() => setItemModal({ open: true, item: it })} className="btn btn-ghost btn-xs" title="Editar"><Edit3 size={12} /></button>
+                  <button onClick={() => setItemModal({ open: true, item: { ...it, ...(precioDe.get(it.id) || {}) } as ItemEdit })} className="btn btn-ghost btn-xs" title="Editar"><Edit3 size={12} /></button>
                   {puedeEditar && <button onClick={() => eliminarItem(it.id, it.descripcion)} className="btn btn-danger btn-xs" title="Eliminar"><Trash2 size={12} /></button>}
                 </div>
               ))}
@@ -764,11 +690,14 @@ export default function BibliotecaPage() {
               <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '0.5rem' }}>
                 <div style={{ minWidth: 0 }}>
                   <p style={{ fontFamily: 'var(--font-display)', fontWeight: 900, fontSize: '0.95rem', color: 'var(--text)', lineHeight: 1.1 }}>{r.nombre}</p>
-                  <p style={{ fontSize: '0.7rem', color: 'var(--muted)' }}>{r.componentes.length} componente{r.componentes.length !== 1 ? 's' : ''} · por {r.unidad}</p>
+                  <p style={{ fontSize: '0.7rem', color: 'var(--muted)' }}>{r.componentes.length} componente{r.componentes.length !== 1 ? 's' : ''} · por {r.unidad}
+                    {(recetaCompletaDe(r).preguntas.length) ? ` · ${recetaCompletaDe(r).preguntas.length} pregunta${recetaCompletaDe(r).preguntas.length === 1 ? '' : 's'}` : ' · fija'}
+                    {r.activo === false ? ' · desactivada' : ''}</p>
                 </div>
                 <div style={{ display: 'flex', gap: '0.25rem', flexShrink: 0 }}>
-                  <button onClick={() => setRecetaModal({ open: true, receta: r })} className="btn btn-ghost btn-xs" title="Editar"><Edit3 size={12} /></button>
-                  {puedeEditar && <button onClick={() => eliminarReceta(r.id, r.nombre)} className="btn btn-danger btn-xs" title="Eliminar"><Trash2 size={12} /></button>}
+                  <button onClick={() => setRecetaModal({ open: true, receta: recetaCompletaDe(r) })} className="btn btn-ghost btn-xs" title="Editar"><Edit3 size={12} /></button>
+                  {puedeEditar && conFase4 && <button onClick={() => setRecetaModal({ open: true, receta: { ...recetaCompletaDe(r), id: '', nombre: `${r.nombre} (copia)` } })} className="btn btn-ghost btn-xs" title="Duplicar"><Layers size={12} /></button>}
+                  {puedeEditar && conFase4 && <button onClick={() => alternarReceta(r.id, r.nombre, r.activo !== false)} className="btn btn-ghost btn-xs" title={r.activo === false ? 'Reactivar' : 'Desactivar'}>{r.activo === false ? '↺' : <Trash2 size={12} />}</button>}
                 </div>
               </div>
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: '3px' }}>

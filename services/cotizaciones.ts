@@ -17,7 +17,7 @@ export function diasSinMovimiento(c: Pick<Cotizacion, 'seguimiento_at' | 'enviad
 
 /** Pendiente y sin movimiento hace DIAS_SEGUIMIENTO días o más → hay que llamar. */
 export function necesitaSeguimiento(c: Pick<Cotizacion, 'estado' | 'seguimiento_at' | 'enviada_at' | 'created_at'>): boolean {
-  return c.estado === 'Pendiente' && diasSinMovimiento(c) >= DIAS_SEGUIMIENTO;
+  return (c.estado === 'Enviada' || c.estado === 'Pendiente') && diasSinMovimiento(c) >= DIAS_SEGUIMIENTO;
 }
 
 /** Link público de la cotización para el cliente (/c/<token>). Se arma en el navegador. */
@@ -27,7 +27,9 @@ export function linkPublico(token: string): string {
 }
 
 /** Estados que significan venta concretada. */
-export const ESTADOS_VENTA: EstadoCotizacion[] = ['Aceptado', 'Realizado', 'Entregado'];
+export const ESTADOS_VENTA: EstadoCotizacion[] = ['Aprobada', 'Aceptado', 'Realizado', 'Entregado'];
+const ESTADOS_RECHAZO: EstadoCotizacion[] = ['Rechazada', 'Rechazado'];
+const ESTADOS_ESPERA: EstadoCotizacion[] = ['Enviada', 'Pendiente'];
 
 /**
  * Refleja en la solicitud de origen lo que pasó con su cotización:
@@ -47,7 +49,7 @@ async function sincronizarSolicitud(cotizacionId: string, estado: EstadoCotizaci
   if (ESTADOS_VENTA.includes(estado)) {
     if (sol.estado === 'CERRADA') return;
     await solicitudesService.updateEstado(sol.id, 'CERRADA', sol.historial, `Cotización ${folio} ${estado.toLowerCase()} — venta concretada.`);
-  } else if (estado === 'Rechazado') {
+  } else if (ESTADOS_RECHAZO.includes(estado)) {
     await solicitudesService.addHistorial(sol.id, `Cotización ${folio} rechazada por el cliente.`, sol.historial);
   }
 }
@@ -141,7 +143,7 @@ export const cotizacionesService = {
     const { data, error } = await supabase
       .from('cotizaciones')
       .select('*, clientes(*)')
-      .eq('estado', 'Pendiente')
+      .in('estado', ESTADOS_ESPERA)
       .order('created_at', { ascending: true });
     if (error) throw error;
     return data || [];
@@ -152,7 +154,7 @@ export const cotizacionesService = {
     const { data, error } = await supabase
       .from('cotizaciones')
       .select('motivo_perdida')
-      .eq('estado', 'Rechazado');
+      .in('estado', ESTADOS_RECHAZO);
     if (error) return {};
     const conteo: Record<string, number> = {};
     for (const r of data || []) {
@@ -179,12 +181,12 @@ export const cotizacionesService = {
    */
   async getKpis(): Promise<KpiData> {
     // Paginado: Supabase devuelve como máximo 1.000 filas por consulta.
-    type Fila = { total: number; total_clp: number | null; estado: EstadoCotizacion; created_at: string };
+    type Fila = { total: number; total_clp: number | null; estado: EstadoCotizacion; created_at: string; aceptada_at?: string | null };
     const all: Fila[] = [];
     for (let desde = 0; ; desde += 1000) {
       const { data, error } = await supabase
         .from('cotizaciones')
-        .select('total, total_clp, estado, created_at')
+        .select('*')
         .range(desde, desde + 999);
       if (error) throw error;
       all.push(...((data || []) as Fila[]));
@@ -192,8 +194,8 @@ export const cotizacionesService = {
     }
     const montoCLP = (r: { total?: number; total_clp?: number | null }) => r.total_clp ?? r.total ?? 0;
     const ventas = all.filter(r => ESTADOS_VENTA.includes(r.estado));
-    const pendientes = all.filter(r => r.estado === 'Pendiente');
-    const rechazadas = all.filter(r => r.estado === 'Rechazado');
+    const pendientes = all.filter(r => ESTADOS_ESPERA.includes(r.estado));
+    const rechazadas = all.filter(r => ESTADOS_RECHAZO.includes(r.estado));
     const ahora = new Date();
     const esDelMes = (iso: string) => {
       const d = new Date(iso);
@@ -202,11 +204,11 @@ export const cotizacionesService = {
     const ventaTotal = ventas.reduce((a, r) => a + montoCLP(r), 0);
     const decididas = ventas.length + rechazadas.length;
     return {
-      total_cotizaciones: all.length,
+      total_cotizaciones: all.filter(r => r.estado !== 'Anulada').length,
       venta_acumulada: ventaTotal,
       pendiente_pipeline: pendientes.reduce((a, r) => a + montoCLP(r), 0),
       aceptadas: ventas.length,
-      venta_mes: ventas.filter(r => esDelMes(r.created_at)).reduce((a, r) => a + montoCLP(r), 0),
+      venta_mes: ventas.filter(r => esDelMes(r.aceptada_at || r.created_at)).reduce((a, r) => a + montoCLP(r), 0),
       rechazadas: rechazadas.length,
       pendientes: pendientes.length,
       tasa_cierre: decididas > 0 ? Math.round((ventas.length / decididas) * 100) : null,
