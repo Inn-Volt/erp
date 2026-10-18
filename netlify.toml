@@ -7,3 +7,7 @@
 
 [build.environment]
   NODE_VERSION = "20"
+  # No son secretos: la clave PÚBLICA de los avisos tiene que llegar al navegador para
+  # suscribir el celular, y el «subject» es el correo de contacto (ya público). Las secretas
+  # (VAPID_PRIVATE_KEY, PUSH_SECRET, SUPABASE_SERVICE_ROLE_KEY) se siguen revisando.
+  SECRETS_SCAN_OMIT_KEYS = "NEXT_PUBLIC_VAPID_PUBLIC_KEY,VAPID_SUBJECT"
