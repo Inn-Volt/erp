@@ -27,7 +27,7 @@ import {
 } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import FaltaSQL from '@/components/FaltaSQL';
-import CotizarIAModal from '@/components/CotizarIAModal';
+import CotizarIAConversa, { type VistaPrevia } from '@/components/cotizador/CotizarIAConversa';
 import CotizacionPDF, { nombrePDF } from '@/components/pdf/CotizacionPDF';
 import type { EmpresaInfo } from '@/components/pdf/PresupuestoPDF';
 import TarjetaPartida, { type AccionesLinea } from './TarjetaPartida';
@@ -393,7 +393,7 @@ export default function EditorCotizacion({ id, clonarDe, clienteInicial, solicit
       const p: PartidaCot = { id: nuevoId(), nombre: pIA.nombre, descripcion: pIA.descripcion, cantidad: pIA.cantidad || 1, unidad: pIA.unidad || 'global', tipo: 'instalacion' };
       partidas.push(p);
       for (const c of pIA.componentes) {
-        const a = (c.codigo && porCodigo.get(c.codigo.toLowerCase())) ||
+        const a = (c.itemId && mapa.get(c.itemId)) || (c.codigo && porCodigo.get(c.codigo.toLowerCase())) ||
           (c.matched ? mejorMatchCatalogo(c.descripcion, c.categoria, cat.map(x => ({ ...x, familia: x.familia || undefined }))) : null);
         const art = a ? mapa.get(a.id) : null;
         if (art && art.precio_venta !== null) {
@@ -422,6 +422,20 @@ export default function EditorCotizacion({ id, clonarDe, clienteInicial, solicit
     }));
     setModal(null);
     success(`${conv.partidas.length} partida${conv.partidas.length === 1 ? '' : 's'} de la IA. Revisa precios y cantidades.`);
+  };
+
+  // Cotizar con IA conversando: cómo quedaría la cotización (sin tocarla) y agregar lo aprobado.
+  const previsualizarIA = useCallback((partidasIA: PartidaIAResuelta[]): VistaPrevia => {
+    const conv = convertirIA(partidasIA, catalogo, d.moneda, d.valor_uf);
+    const r = calcular(conv.items, conv.partidas, d.moneda, d.valor_uf);
+    return { neto: r.totales.neto, iva: r.totales.iva, total: r.totales.total, porPartida: conv.partidas.map(p => r.partidas.get(p.id)?.neto || 0) };
+  }, [catalogo, d.moneda, d.valor_uf]);
+  const insertarConversa = (partidasIA: PartidaIAResuelta[], supuestos: string[]) => {
+    insertarIA(partidasIA);
+    if (supuestos.length) {
+      const bloque = `**Consideraciones:**\n${supuestos.map(s => `- ${s}`).join('\n')}`;
+      setD(x => ({ ...x, descripcion_general: [x.descripcion_general?.trim(), bloque].filter(Boolean).join('\n\n') }));
+    }
   };
 
   // Fase 11: lo aprobado en «Del levantamiento a la cotización».
@@ -1086,7 +1100,8 @@ export default function EditorCotizacion({ id, clonarDe, clienteInicial, solicit
       </div>
 
       {modal === 'levantamiento' && d.agendamiento_id && <DesdeLevantamiento agendaId={d.agendamiento_id} catalogo={catalogo} onInsertar={insertarLevantamiento} onClose={() => setModal(null)} />}
-      {modal === 'ia' && <CotizarIAModal moneda={d.moneda} onInsertar={insertarIA} onClose={() => setModal(null)} />}
+      {modal === 'ia' && <CotizarIAConversa moneda={d.moneda} catalogo={catalogo} recetas={recetas} previsualizar={previsualizarIA} onInsertar={insertarConversa} onClose={() => setModal(null)} guardarComo={id || 'nueva'}
+        contexto={[d.titulo?.trim(), textoPlano(d.descripcion_general).trim()].filter(Boolean).join('. ').slice(0, 1500)} />}
       {(modal === 'revisar' || modal === 'reenviar') && cot && (
         <RevisarYEnviar avisos={modal === 'reenviar' ? [] : avisos} reenvio={modal === 'reenviar'}
           para={contacto?.email || cliente?.email || ''} telefono={contacto?.telefono || cliente?.telefono || ''}
