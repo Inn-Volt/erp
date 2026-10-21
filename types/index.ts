@@ -146,6 +146,7 @@ export interface ComponenteIAResuelto {
   costo: number;       // CLP neto ya resuelto (catálogo si hubo match, si no el estimado)
   codigo?: string;     // código de catálogo cuando hubo match
   matched: boolean;    // true si se enlazó a un ítem real de la biblioteca
+  itemId?: string;     // el artículo exacto de la biblioteca (cotizar conversando)
 }
 
 /** Partida resuelta lista para insertar en el cotizador. */
