@@ -1,53 +1,59 @@
 import { NextResponse } from 'next/server';
 import { sesionConPermisos, tienePermiso, noAutorizado, sinPermiso } from '@/lib/authServidor';
 import { generarJSON } from '@/lib/ia';
-import { normalizarTurno, type CandidatoIA, type MensajeIA } from '@/lib/cotizador/iaConversacion';
-import { armarPedido, SCHEMA_CONVERSA, SYSTEM_CONVERSA } from '@/lib/cotizador/iaConversacionPrompt';
+import { normalizarComponentes, normalizarTurno, type CandidatoProducto, type CandidatoReceta, type MensajeIA, type PlanPartida } from '@/lib/cotizador/iaConversacion';
+import { pedidoConversar, pedidoPartida, SCHEMA_CONVERSAR, SCHEMA_PARTIDA, SYSTEM_CONVERSAR, SYSTEM_PARTIDA } from '@/lib/cotizador/iaConversacionPrompt';
 
 /**
- * Cotizar con IA conversando: recibe la conversación y una preselección de la biblioteca;
- * devuelve el siguiente turno: preguntas (con opciones) o la propuesta de partidas.
- * Cada turno es una llamada corta (la función del servidor corta a los ~10 s).
+ * Cotizar con IA conversando (cualquier servicio de InnVolt). Dos modos:
+ *   · «conversar»: recibe la conversación y devuelve preguntas (con opciones) o el plan de partidas.
+ *   · «partida»: recibe una partida del plan y una preselección de la biblioteca (productos y
+ *     recetas) y devuelve sus componentes.
+ * Cada llamada es corta: la función del servidor corta a los ~10 s.
  */
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 export const maxDuration = 60;
 
+const error = (msg: string, status: number) => NextResponse.json({ error: msg }, { status });
+const texto = (v: unknown, max: number) => String(v ?? '').slice(0, max);
+
 export async function POST(req: Request) {
   const ses = await sesionConPermisos(req);
   if (!ses) return noAutorizado();
   if (!tienePermiso(ses.permisos, 'ia.usar')) return sinPermiso();
 
-  let mensajes: MensajeIA[] = [];
-  let candidatos: CandidatoIA[] = [];
-  let generarYa = false;
-  try {
-    const body = await req.json();
-    mensajes = (Array.isArray(body?.mensajes) ? body.mensajes : []).slice(-24)
-      .map((m: MensajeIA) => ({ rol: m?.rol === 'asistente' ? 'asistente' : 'usuario', texto: String(m?.texto ?? '').slice(0, 3000) }))
-      .filter((m: MensajeIA) => m.texto.trim());
-    candidatos = (Array.isArray(body?.candidatos) ? body.candidatos : []).slice(0, 90);
-    generarYa = !!body?.generarYa;
-  } catch {
-    return NextResponse.json({ error: 'Cuerpo de la solicitud inválido.' }, { status: 400 });
-  }
-  if (!mensajes.length || mensajes[0].rol !== 'usuario' || mensajes[0].texto.trim().length < 5) {
-    return NextResponse.json({ error: 'Escribe el requerimiento para empezar.' }, { status: 400 });
-  }
-
-  const { user, debeProponer } = armarPedido(mensajes, candidatos, generarYa);
+  let body: Record<string, unknown>;
+  try { body = await req.json(); } catch { return error('Cuerpo de la solicitud inválido.', 400); }
 
   try {
-    const turno = normalizarTurno(await generarJSON<unknown>({ system: SYSTEM_CONVERSA, user, schema: SCHEMA_CONVERSA, rescatar: true }));
-    if (debeProponer && turno.tipo !== 'propuesta') {
-      return NextResponse.json({ error: 'La IA no alcanzó a armar la propuesta. Intenta «Generar cotización» de nuevo.' }, { status: 502 });
+    if (body.modo === 'partida') {
+      const p = (body.partida || {}) as Partial<PlanPartida>;
+      const partida: PlanPartida = {
+        nombre: texto(p.nombre, 160), descripcion: texto(p.descripcion, 600), cantidad: Number(p.cantidad) || 1,
+        unidad: texto(p.unidad, 20) || 'global', alcance: texto(p.alcance, 2000),
+      };
+      if (!partida.nombre) return error('Falta la partida.', 400);
+      const productos = (Array.isArray(body.productos) ? body.productos : []).slice(0, 90) as CandidatoProducto[];
+      const recetas = (Array.isArray(body.recetas) ? body.recetas : []).slice(0, 15) as CandidatoReceta[];
+      const user = pedidoPartida(texto(body.contexto, 3000), partida, productos, recetas);
+      const componentes = normalizarComponentes(await generarJSON<unknown>({ system: SYSTEM_PARTIDA, user, schema: SCHEMA_PARTIDA, rescatar: true }));
+      if (!componentes.length) return error('La IA no armó componentes para esta partida. Intenta de nuevo.', 502);
+      return NextResponse.json({ ok: true, componentes });
     }
-    if (turno.tipo === 'preguntas' && !turno.preguntas.length && !turno.mensaje) {
-      return NextResponse.json({ error: 'La IA respondió vacío. Intenta de nuevo.' }, { status: 502 });
-    }
+
+    const mensajes: MensajeIA[] = (Array.isArray(body.mensajes) ? body.mensajes : []).slice(-24)
+      .map((m: { rol?: string; texto?: string }) => ({ rol: m?.rol === 'asistente' ? 'asistente' as const : 'usuario' as const, texto: texto(m?.texto, 3000) }))
+      .filter(m => m.texto.trim());
+    if (!mensajes.length || mensajes[0].rol !== 'usuario' || mensajes[0].texto.trim().length < 5) return error('Escribe el requerimiento para empezar.', 400);
+    const recetas = (Array.isArray(body.recetas) ? body.recetas : []).map(r => texto(r, 80)).filter(Boolean);
+    const { user, debePlan } = pedidoConversar(mensajes, !!body.generarYa, recetas);
+    const turno = normalizarTurno(await generarJSON<unknown>({ system: SYSTEM_CONVERSAR, user, schema: SCHEMA_CONVERSAR, rescatar: true }));
+    if (debePlan && turno.tipo !== 'plan') return error('La IA no alcanzó a armar el plan. Intenta «Generar cotización» de nuevo.', 502);
+    if (turno.tipo === 'preguntas' && !turno.preguntas.length && !turno.mensaje) return error('La IA respondió vacío. Intenta de nuevo.', 502);
     return NextResponse.json({ ok: true, turno });
   } catch (e: unknown) {
-    return NextResponse.json({ error: e instanceof Error ? e.message : 'Error desconocido' }, { status: 500 });
+    return error(e instanceof Error ? e.message : 'Error desconocido', 500);
   }
 }

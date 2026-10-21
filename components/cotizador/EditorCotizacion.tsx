@@ -1100,7 +1100,8 @@ export default function EditorCotizacion({ id, clonarDe, clienteInicial, solicit
       </div>
 
       {modal === 'levantamiento' && d.agendamiento_id && <DesdeLevantamiento agendaId={d.agendamiento_id} catalogo={catalogo} onInsertar={insertarLevantamiento} onClose={() => setModal(null)} />}
-      {modal === 'ia' && <CotizarIAConversa moneda={d.moneda} catalogo={catalogo} previsualizar={previsualizarIA} onInsertar={insertarConversa} onClose={() => setModal(null)} />}
+      {modal === 'ia' && <CotizarIAConversa moneda={d.moneda} catalogo={catalogo} recetas={recetas} previsualizar={previsualizarIA} onInsertar={insertarConversa} onClose={() => setModal(null)} guardarComo={id || 'nueva'}
+        contexto={[d.titulo?.trim(), textoPlano(d.descripcion_general).trim()].filter(Boolean).join('. ').slice(0, 1500)} />}
       {(modal === 'revisar' || modal === 'reenviar') && cot && (
         <RevisarYEnviar avisos={modal === 'reenviar' ? [] : avisos} reenvio={modal === 'reenviar'}
           para={contacto?.email || cliente?.email || ''} telefono={contacto?.telefono || cliente?.telefono || ''}
