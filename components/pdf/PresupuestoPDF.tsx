@@ -688,7 +688,8 @@ export default function PresupuestoPDF({
             {empresa.rut && <Text style={s.companyLine}>RUT: {empresa.rut}</Text>}
             {empresa.giro && <Text style={s.companyLine}>Giro: {empresa.giro}</Text>}
             {empresa.direccion && <Text style={s.companyLine}>{empresa.direccion}</Text>}
-            <Text style={s.companyLine}>{empresa.telefono}  ·  {empresa.email}</Text>
+            {/* El teléfono va una sola vez: junto al contacto; el de la empresa, solo si el contacto no trae uno. */}
+            <Text style={s.companyLine}>{[vendedor?.nombre && vendedor?.telefono ? null : empresa.telefono, empresa.email].filter(Boolean).join('  ·  ')}</Text>
             {empresa.website && <Text style={s.companyLine}>{empresa.website}</Text>}
             {vendedor?.nombre ? (
               <Text style={[s.companyLine, { color: INK, marginTop: 2 }]}>

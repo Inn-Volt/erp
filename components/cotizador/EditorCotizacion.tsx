@@ -195,7 +195,8 @@ export default function EditorCotizacion({ id, clonarDe, clienteInicial, solicit
           empresa_id: emp.find(e => e.id === perfil?.empresa_id)?.id || emp[0]?.id || null,
           plantilla_id: pl?.id || null, plantilla_version: pl?.version || null,
           descripcion_general: pl?.descripcion || '',
-          aclaraciones: pl?.aclaraciones || aj.aclaraciones || '',
+          // Las aclaraciones y garantías son las mismas para todas: las de los ajustes.
+          aclaraciones: aj.aclaraciones || '',
           que_ve_cliente: pl?.que_ve_cliente || 'partidas',
           titulo_valorizacion: pl?.titulo_valorizacion || null,
           secciones: aj.usa_presentacion ? (pl?.secciones || []) : [],
@@ -611,12 +612,18 @@ export default function EditorCotizacion({ id, clonarDe, clienteInicial, solicit
   // ── Plantilla ──
   const elegirPlantilla = (pid: string) => {
     const pl = plantillas.find(p => p.id === pid) || null;
-    const escritos = [d.descripcion_general.trim() && 'la introducción', d.aclaraciones.trim() && 'las aclaraciones', d.secciones.length && 'las secciones'].filter(Boolean);
+    // Las aclaraciones no dependen de la plantilla (son las de los ajustes): solo se ponen las de
+    // los ajustes si las que hay vinieron de una plantilla de antes; si se escribieron a mano, se respetan.
+    const base = ajustes?.aclaraciones || '';
+    const deUnaPlantilla = !!d.aclaraciones.trim() && d.aclaraciones.trim() !== base.trim()
+      && plantillas.some(x => (x.aclaraciones || '').trim() === d.aclaraciones.trim());
+    const aclaraciones = !d.aclaraciones.trim() || deUnaPlantilla ? base : d.aclaraciones;
+    const escritos = [d.descripcion_general.trim() && 'la introducción', d.secciones.length && 'las secciones'].filter(Boolean);
     if (escritos.length && !confirm(`Cambiar de plantilla reemplaza ${escritos.join(', ')} por los de «${pl?.nombre || 'Sin plantilla'}». ¿Seguir? (puedes deshacer hasta guardar)`)) return;
     setDeshacerPlantilla({ texto: `Se usó «${pl?.nombre || 'Sin plantilla'}».`, antes: d });
-    if (!pl) set({ plantilla_id: null, plantilla_version: null, aclaraciones: ajustes?.aclaraciones || '' });
+    if (!pl) set({ plantilla_id: null, plantilla_version: null, aclaraciones });
     else set({
-      plantilla_id: pl.id, plantilla_version: pl.version, descripcion_general: pl.descripcion || '', aclaraciones: pl.aclaraciones || '',
+      plantilla_id: pl.id, plantilla_version: pl.version, descripcion_general: pl.descripcion || '', aclaraciones,
       que_ve_cliente: pl.que_ve_cliente, titulo_valorizacion: pl.titulo_valorizacion,
       secciones: ajustes?.usa_presentacion ? pl.secciones || [] : d.secciones,
       ...(pl.plan_cobro && pl.plan_cobro.length ? { plan_cobro: pl.plan_cobro.map(h => ({ ...h })) } : {}),
