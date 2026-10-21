@@ -10,7 +10,8 @@ import type { HitoCobro } from '@/lib/cotizador/tipos';
 import { getSupabaseAdmin } from '@/lib/supabaseAdmin';
 import { diasValidez, sumarDias } from '@/utils';
 import type { CotizacionItem, Partida, Moneda } from '@/types';
-import { normalizarEstado, type Seccion } from '@/lib/cotizador/tipos';
+import { IVA, normalizarEstado, type Seccion } from '@/lib/cotizador/tipos';
+import { qp } from '@/lib/cotizador/calculo';
 import type { CotizacionPublica, FotoPublica } from '@/types/publico';
 import type { EmpresaInfo } from '@/components/pdf/PresupuestoPDF';
 
@@ -94,10 +95,12 @@ export function vigencia(cot: Pick<FilaCotizacion, 'created_at' | 'condiciones_c
 }
 
 /** Quita todo dato interno de un ítem (costos, márgenes, imprevistos). */
-function itemPublico(i: CotizacionItem & { ligadoA?: string | null; porUnidad?: number }): CotizacionItem & { ligadoA?: string | null; porUnidad?: number; itemId?: string } {
+function itemPublico(i: CotizacionItem & { ligadoA?: string | null; porUnidad?: number; ivaIncluido?: boolean }, moneda: Moneda): CotizacionItem & { ligadoA?: string | null; porUnidad?: number; itemId?: string } {
+  // Un material con IVA incluido guarda su precio con IVA: al cliente va el neto (el IVA se suma en el total).
+  const conIva = !!i.ivaIncluido && i.categoria === 'material' && i.iva !== 0;
   return {
     id: i.id, descripcion: i.descripcion, categoria: i.categoria,
-    cantidad: i.cantidad, unidad: i.unidad, precio: i.precio,
+    cantidad: i.cantidad, unidad: i.unidad, precio: conIva ? qp((i.precio || 0) / (1 + IVA / 100), moneda) : i.precio,
     iva: typeof i.iva === 'number' ? i.iva : (i.iva_incluido === false ? 0 : 19),
     descuento: i.descuento || 0,
     partidaId: i.partidaId, ligadoA: i.ligadoA || null, porUnidad: i.porUnidad,
@@ -224,7 +227,7 @@ export async function aPublica(cot: FilaCotizacion): Promise<CotizacionPublica> 
     mostrar_detalle: !!cot.mostrar_detalle,
     incluir_portada: !!cot.incluir_portada,
     revision: cot.revision || 0,
-    items: (cot.items || []).map(itemPublico),
+    items: (cot.items || []).map(i => itemPublico(i, (cot.moneda as Moneda) || 'CLP')),
     partidas: (cot.partidas || []).map(partidaPublica),
     cliente: {
       nombre_cliente: c?.nombre_cliente || '', empresa: c?.empresa || undefined, rut: c?.rut || '',
