@@ -10,7 +10,7 @@
 import EditorFormato from '@/components/EditorFormato';
 import NumeroInput from '@/components/NumeroInput';
 import { textoPlano } from '@/lib/textoFormato';
-import { useState } from 'react';
+import { useLayoutEffect, useRef, useState } from 'react';
 import { Layers, Package, Plus } from 'lucide-react';
 import BuscadorCatalogo from './BuscadorCatalogo';
 import { MenuAcciones, opcionMenu, campoChico } from './ui';
@@ -284,10 +284,10 @@ function FilaLinea({ l, esLigada, cols, instalacion, calc, moneda, fila, ligadas
       <div style={{ minWidth: 0, paddingLeft: esLigada ? 18 : 0 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
           {esLigada && <span style={{ color: 'var(--muted)' }}>↳</span>}
-          <input value={l.descripcion} disabled={!editable} maxLength={300} aria-label="Descripción"
-            onChange={e => acc.cambiar(l.id, { descripcion: e.target.value })}
+          <TextoQueCrece valor={l.descripcion} disabled={!editable} etiqueta="Descripción"
+            onCambiar={t => acc.cambiar(l.id, { descripcion: t })}
             placeholder={l.fuera ? 'Qué es: soporte especial para lector' : 'Descripción'}
-            style={{ flex: 1, minWidth: 0, background: 'transparent', border: '1px solid transparent', borderRadius: 6, padding: '0.15rem 0.3rem', fontSize: '0.86rem', color: esLigada ? 'var(--muted)' : 'var(--text)', outline: 'none' }} />
+            color={esLigada ? 'var(--muted)' : 'var(--text)'} />
         </div>
         {conMano && (
           <button type="button" onClick={onDesplegar} aria-expanded={desplegada}
@@ -296,9 +296,21 @@ function FilaLinea({ l, esLigada, cols, instalacion, calc, moneda, fila, ligadas
           </button>
         )}
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, fontSize: '0.66rem', color: 'var(--muted)', paddingLeft: 4 }}>
-          <span style={{ color: CATEGORIA_COLORS[l.categoria], border: `1px solid color-mix(in srgb, ${CATEGORIA_COLORS[l.categoria]} 40%, transparent)`, borderRadius: 4, padding: '0 4px', fontWeight: 700 }}>{CATEGORIA_LABELS[l.categoria]}</span>
+          {l.fuera && !l.ajustada && editable ? (
+            // En lo que no viene de la biblioteca, el tipo se elige en la misma etiqueta.
+            <select value={l.categoria} aria-label="Tipo" title="Tipo (cambia el color y cómo se calcula)"
+              onChange={e => acc.cambiar(l.id, { categoria: e.target.value as Linea['categoria'] })}
+              style={{ color: CATEGORIA_COLORS[l.categoria], border: `1px solid color-mix(in srgb, ${CATEGORIA_COLORS[l.categoria]} 40%, transparent)`, borderRadius: 4, padding: '0 2px', fontWeight: 700, fontSize: '0.66rem', background: 'transparent', cursor: 'pointer' }}>
+              <option value="material">Material</option><option value="mano_obra">Mano de obra</option><option value="servicio">Servicio</option><option value="operacion">Operación</option>
+            </select>
+          ) : (
+            <span style={{ color: CATEGORIA_COLORS[l.categoria], border: `1px solid color-mix(in srgb, ${CATEGORIA_COLORS[l.categoria]} 40%, transparent)`, borderRadius: 4, padding: '0 4px', fontWeight: 700 }}>{CATEGORIA_LABELS[l.categoria]}</span>
+          )}
           {l.codigo && (!l.fuera || l.ajustada) && <span style={{ fontFamily: 'monospace' }}>{l.codigo}</span>}
-          {l.fuera && !l.ajustada && <span style={{ background: 'rgba(217,119,6,.15)', color: '#d97706', borderRadius: 4, padding: '0 4px', fontWeight: 600 }}>Fuera del catálogo</span>}
+          {l.fuera && !l.ajustada && <span title="No está en la biblioteca: existe solo en esta cotización y no se agrega a la biblioteca."
+            style={{ background: 'rgba(217,119,6,.15)', color: '#d97706', borderRadius: 4, padding: '0 4px', fontWeight: 600, cursor: 'help' }}>Solo en esta cotización</span>}
+          {l.fuera && !l.ajustada && (l.costo || 0) > 0 && (l.ganancia === null || l.ganancia === undefined) &&
+            <span style={{ color: '#d97706' }} title="Ponle ganancia para que no se venda a costo">sin ganancia: se vende a costo</span>}
           {l.ajustada && <span style={{ background: 'var(--y-soft)', color: 'var(--text)', borderRadius: 4, padding: '0 4px', fontWeight: 600 }}
             title="El costo o la ganancia se cambiaron en esta cotización; la biblioteca sigue igual">Ajustado aquí
             {editable && l.itemId && <button type="button" onClick={() => acc.alCatalogo(l.id)} style={{ background: 'none', border: 'none', color: 'var(--y)', cursor: 'pointer', fontSize: '0.66rem', fontWeight: 400 }}>↺ volver al de la biblioteca</button>}
@@ -309,22 +321,13 @@ function FilaLinea({ l, esLigada, cols, instalacion, calc, moneda, fila, ligadas
             <span>Cantidad a mano {editable && <button type="button" onClick={() => acc.religar(l.id)} style={{ background: 'none', border: 'none', color: 'var(--y)', cursor: 'pointer', fontSize: '0.66rem' }}>↺ seguir al producto</button>}</span>
           ) : <span>{cantidadLegible(l.porUnidad || 1)} por cada {producto?.unidad || 'unidad'}</span>)}
         </div>
-        {l.fuera && !l.ajustada && editable && (
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 4, paddingLeft: 4, alignItems: 'flex-end' }}>
-            {!verCostos && <>
-              <label style={{ width: 130 }}><span style={{ fontSize: '0.66rem', color: 'var(--muted)' }}>Costo unitario</span>
-                <CeldaNum valor={l.costo} onCambiar={v => acc.cambiar(l.id, { costo: v ?? 0 })} etiqueta="Costo unitario" prefijo={moneda === 'UF' ? 'UF' : '$'} decimales={moneda === 'UF' ? 4 : 0} /></label>
-              <label style={{ width: 96 }}><span style={{ fontSize: '0.66rem', color: 'var(--muted)' }}>Ganancia %</span>
-                <CeldaNum valor={l.ganancia} decimales={1} sufijo="%" vacio onCambiar={v => acc.cambiar(l.id, { ganancia: v })} etiqueta="Ganancia %" /></label>
-            </>}
-            <label style={{ width: 80 }}><span style={{ fontSize: '0.66rem', color: 'var(--muted)' }}>Unidad</span>
-              <input className="input" style={campoChico} list="unidades-de-item" maxLength={20} value={l.unidad} onChange={e => acc.cambiar(l.id, { unidad: e.target.value })} /></label>
-            <label style={{ width: 120 }}><span style={{ fontSize: '0.66rem', color: 'var(--muted)' }}>Tipo</span>
-              <select className="input" style={campoChico} value={l.categoria} onChange={e => acc.cambiar(l.id, { categoria: e.target.value as Linea['categoria'] })}>
-                <option value="material">Material</option><option value="mano_obra">Mano de obra</option><option value="servicio">Servicio</option><option value="operacion">Operación</option>
-              </select></label>
-            {(l.costo || 0) > 0 && (l.ganancia === null || l.ganancia === undefined) && <span style={{ fontSize: '0.72rem', color: '#d97706', paddingBottom: 6 }}>Sin ganancia se vende a costo.</span>}
-            <span style={{ fontSize: '0.68rem', color: 'var(--muted)', paddingBottom: 6 }}>Solo en esta cotización: no se agrega a la biblioteca.</span>
+        {l.fuera && !l.ajustada && editable && !verCostos && (
+          // Con los costos ocultos, el precio de lo nuevo sale de aquí.
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 4, paddingLeft: 4, alignItems: 'center', fontSize: '0.72rem', color: 'var(--muted)' }}>
+            <span>Costo</span>
+            <span style={{ width: 120 }}><CeldaNum valor={l.costo} onCambiar={v => acc.cambiar(l.id, { costo: v ?? 0 })} etiqueta="Costo unitario" prefijo={moneda === 'UF' ? 'UF' : '$'} decimales={moneda === 'UF' ? 4 : 0} /></span>
+            <span>Ganancia</span>
+            <span style={{ width: 84 }}><CeldaNum valor={l.ganancia} decimales={1} sufijo="%" vacio onCambiar={v => acc.cambiar(l.id, { ganancia: v })} etiqueta="Ganancia %" /></span>
           </div>
         )}
       </div>
@@ -332,7 +335,11 @@ function FilaLinea({ l, esLigada, cols, instalacion, calc, moneda, fila, ligadas
         <NumeroInput className="input" min={0} decimales={3} disabled={!editable} value={l.cantidad} ariaLabel="Cantidad"
           onChange={v => acc.cantidad(l.id, v)} envoltura={{ width: 62 }}
           style={{ ...campoChico, textAlign: 'right', color: esLigada && !l.cantidadAMano ? 'var(--muted)' : undefined }} />
-        <span title={l.unidad} style={{ fontSize: '0.68rem', color: 'var(--muted)', width: 40, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{l.unidad}</span>
+        {l.fuera && !l.ajustada && editable ? (
+          <input value={l.unidad} list="unidades-de-item" maxLength={20} aria-label="Unidad" title="Unidad (m, un, global…)"
+            onChange={e => acc.cambiar(l.id, { unidad: e.target.value })}
+            style={{ width: 40, fontSize: '0.72rem', color: 'var(--text)', background: 'transparent', border: '1px dashed var(--border2)', borderRadius: 4, padding: '0.15rem 0.2rem' }} />
+        ) : <span title={l.unidad} style={{ fontSize: '0.68rem', color: 'var(--muted)', width: 40, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{l.unidad}</span>}
       </div>
       {verCostos && (editable ? <>
         <CeldaNum valor={l.costo} etiqueta="Costo unitario (no cambia la biblioteca)" onCambiar={v => acc.ajustar(l.id, { costo: v ?? 0 })}
@@ -398,6 +405,31 @@ function FilaLinea({ l, esLigada, cols, instalacion, calc, moneda, fila, ligadas
         )}
       </span>
     </div>
+  );
+}
+
+/** Texto de una línea que se ve entero: crece hacia abajo en vez de cortarse. */
+function TextoQueCrece({ valor, onCambiar, disabled, placeholder, etiqueta, color }: {
+  valor: string; onCambiar: (t: string) => void; disabled?: boolean; placeholder?: string; etiqueta: string; color: string;
+}) {
+  const ref = useRef<HTMLTextAreaElement>(null);
+  useLayoutEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const ajustar = () => { el.style.height = 'auto'; el.style.height = `${el.scrollHeight}px`; };
+    ajustar();
+    // También cuando cambia el ancho de la columna (ocultar costos, girar el teléfono…).
+    const ro = typeof ResizeObserver !== 'undefined' ? new ResizeObserver(ajustar) : null;
+    ro?.observe(el);
+    return () => ro?.disconnect();
+  }, [valor]);
+  return (
+    <textarea ref={ref} rows={1} value={valor} disabled={disabled} maxLength={300} aria-label={etiqueta} placeholder={placeholder}
+      onChange={e => onCambiar(e.target.value.replace(/\n/g, ' '))}
+      onKeyDown={e => { if (e.key === 'Enter') e.preventDefault(); }}
+      style={{ flex: 1, minWidth: 0, resize: 'none', overflow: 'hidden', background: 'transparent', border: '1px solid transparent', borderRadius: 6,
+        padding: '0.15rem 0.3rem', fontSize: '0.86rem', lineHeight: 1.35, color, outline: 'none', fontFamily: 'inherit' }}
+      onFocus={e => { e.currentTarget.style.borderColor = 'var(--border2)'; }} onBlur={e => { e.currentTarget.style.borderColor = 'transparent'; }} />
   );
 }
 

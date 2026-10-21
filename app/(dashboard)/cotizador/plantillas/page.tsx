@@ -1,9 +1,9 @@
 'use client';
 
 /**
- * Comercial → Plantillas de cotización (TecApp): traen la introducción, las aclaraciones
- * y garantías, qué ve el cliente, el título de la valorización y las secciones de la
- * presentación. No traen partidas (para eso están las recetas). La versión sube solo si
+ * Comercial → Plantillas de cotización (TecApp): traen la introducción, qué ve el cliente,
+ * el título de la valorización y las secciones de la presentación. Las aclaraciones y
+ * garantías NO: son las mismas para todas y se editan en Cotizaciones → Ajustes. No traen partidas (para eso están las recetas). La versión sube solo si
  * cambia algo que se imprime. No se borran: se desactivan; «la de siempre» no.
  */
 
@@ -51,7 +51,7 @@ export default function PlantillasPage() {
     try {
       const id = await plantillasCotService.guardar({
         ...(sel.id ? { id: sel.id } : {}), nombre: sel.nombre.trim(), para_que: sel.para_que || null, descripcion: sel.descripcion || null,
-        aclaraciones: sel.aclaraciones || null, que_ve_cliente: sel.que_ve_cliente, titulo_valorizacion: sel.titulo_valorizacion || null,
+        aclaraciones: null, que_ve_cliente: sel.que_ve_cliente, titulo_valorizacion: sel.titulo_valorizacion || null,
         ...(conPlan ? { plan_cobro: sel.plan_cobro && sel.plan_cobro.length ? sel.plan_cobro : null } : {}),
         secciones: sel.secciones, activa: sel.activa,
       });
@@ -74,7 +74,7 @@ export default function PlantillasPage() {
         doc={{
           id: 'x', folio: 0, estado: 'Borrador', revision: 0, titulo: 'Título de la cotización', cliente_id: 'x', moneda: 'CLP',
           que_ve_cliente: sel.que_ve_cliente, titulo_valorizacion: sel.titulo_valorizacion, descripcion_general: sel.descripcion || '',
-          aclaraciones: sel.aclaraciones || '', secciones: sel.secciones, subtotal: 0, iva: 0, total: 0, created_at: new Date().toISOString(),
+          aclaraciones: aj?.aclaraciones || '', secciones: sel.secciones, subtotal: 0, iva: 0, total: 0, created_at: new Date().toISOString(),
           partidas: [{ id: pid, nombre: 'Partida de ejemplo', cantidad: 1, unidad: 'global', tipo: 'instalacion' }],
           items: [{ id: 'l1', partidaId: pid, descripcion: 'Producto de ejemplo', categoria: 'material', unidad: 'un', cantidad: 2, costo: 0, imprevistos: 0, margen: 0, precio: 100000, iva: 19, descuento: 0 }],
         }} />,
@@ -114,7 +114,9 @@ export default function PlantillasPage() {
               <div><span className="label-muted">Introducción base</span>
                 <EditorFormato valor={sel.descripcion || ''} editable={editable} alto={110} etiqueta="Introducción base" onCambiar={t => setSel(x => x && { ...x, descripcion: t })} /></div>
               <div><span className="label-muted">Aclaraciones y garantías</span>
-                <EditorFormato valor={sel.aclaraciones || ''} editable={editable} alto={150} etiqueta="Aclaraciones y garantías" onCambiar={t => setSel(x => x && { ...x, aclaraciones: t })} /></div>
+                <p style={{ margin: '4px 0 0', fontSize: '0.84rem', color: 'var(--muted)', border: '1px dashed var(--border2)', borderRadius: 8, padding: '0.55rem 0.7rem' }}>
+                  Son las mismas para todas las cotizaciones, con o sin plantilla. Se editan en{' '}
+                  <Link href="/cotizador/ajustes" style={{ color: 'var(--y)' }}>Cotizaciones → Ajustes</Link>.</p></div>
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 220px), 1fr))', gap: 10 }}>
                 <label><span className="label-muted">Qué ve el cliente</span>
                   <select className="input" value={sel.que_ve_cliente} onChange={e => setSel({ ...sel, que_ve_cliente: e.target.value as Plantilla['que_ve_cliente'] })}>

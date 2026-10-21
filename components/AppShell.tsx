@@ -10,13 +10,15 @@
  *    subopciones (Cotizaciones → Nueva, Plantillas, Ajustes) cuelgan con sangría.
  *  · Barra superior en todos los tamaños: dónde se está a la izquierda y, arriba
  *    a la derecha, los avisos, el cambio de tema y la cuenta.
- *  · Escritorio: menú fijo a la altura de la pantalla, plegable.
+ *  · Escritorio: menú fijo a la altura de la pantalla, plegable. Plegado queda una barra
+ *    angosta con los íconos de cada grupo: al pasar el mouse (o tocar) se abre al lado un
+ *    panel con sus opciones, así se sigue navegando con el menú escondido.
  *  · Celular: la misma barra con el botón del cajón lateral.
  *  · Salir de una sección pregunta si hay cambios sin guardar (cotizador).
  */
 
 import { encendido, rutaApagada } from '@/lib/modulos';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import {
@@ -78,6 +80,8 @@ const MENU: { grupo: string; icono: React.ElementType; items: Item[] }[] = [
 ];
 
 const VERSION = '2.0.0';
+/** Nombre corto de cada grupo bajo su ícono (menú plegado). */
+const CORTO: Record<string, string> = { Seguimiento: 'Seguim.', 'Mi empresa': 'Empresa' };
 
 const calza = (pathname: string, it: Item) =>
   it.exacto ? pathname === it.href : pathname === it.href || pathname.startsWith(it.href + '/');
@@ -124,6 +128,25 @@ export default function AppShell({ userName, userId, onLogout, children }: {
 
   const [abierto, setAbierto] = useState(false);       // cajón en celular
   const [plegado, setPlegado] = useState(false);       // menú plegado en escritorio
+  // Menú plegado: el panel de un grupo que se abre al lado de la barra de íconos.
+  const [flotante, setFlotante] = useState<{ grupo: string; top: number } | null>(null);
+  const cierre = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const abrirFlotante = (grupo: string, el: HTMLElement) => {
+    if (cierre.current) clearTimeout(cierre.current);
+    const r = el.getBoundingClientRect();
+    setFlotante({ grupo, top: r.top });
+  };
+  const cerrarLuego = () => {
+    if (cierre.current) clearTimeout(cierre.current);
+    cierre.current = setTimeout(() => setFlotante(null), 220);
+  };
+  const seguirAbierto = () => { if (cierre.current) clearTimeout(cierre.current); };
+  useEffect(() => {
+    if (!flotante) return;
+    const tecla = (e: KeyboardEvent) => { if (e.key === 'Escape') setFlotante(null); };
+    window.addEventListener('keydown', tecla);
+    return () => window.removeEventListener('keydown', tecla);
+  }, [flotante]);
 
   // Dónde se está: el grupo y la opción más precisa (gana la dirección más larga).
   const { grupoDeLaPantalla, marcada } = useMemo(() => {
@@ -142,7 +165,7 @@ export default function AppShell({ userName, userId, onLogout, children }: {
   // Subopciones abiertas o cerradas a mano con la flecha (mandan mientras dure la sesión).
   const [subsElegidas, setSubsElegidas] = useState<Record<string, boolean>>({});
 
-  useEffect(() => { setAbierto(false); }, [pathname]);
+  useEffect(() => { setAbierto(false); setFlotante(null); }, [pathname]);
   useEffect(() => {
     try { setPlegado(localStorage.getItem('innvolt-menu-plegado') === '1'); } catch { /* sin almacenamiento */ }
   }, []);
@@ -304,6 +327,65 @@ export default function AppShell({ userName, userId, onLogout, children }: {
         {pie}
       </aside>
 
+      {/* Menú plegado (escritorio): barra angosta con un ícono por grupo */}
+      <aside className={`hidden h-full w-[68px] shrink-0 flex-col items-center gap-1 border-r border-line bg-surface py-2 ${plegado ? 'md:flex' : ''}`}
+        style={{ paddingTop: 'calc(0.5rem + env(safe-area-inset-top, 0px))' }} aria-label="Menú">
+        <button onClick={alternar} title="Mostrar el menú completo" aria-label="Mostrar el menú completo"
+          className="mb-2 flex h-9 w-9 items-center justify-center rounded-lg text-content-muted hover:bg-surface-3 hover:text-content">
+          <PanelLeftOpen size={17} />
+        </button>
+        {menu.map(g => {
+          const aqui = g.grupo === grupoDeLaPantalla;
+          const abiertoEste = flotante?.grupo === g.grupo;
+          return (
+            <button key={g.grupo} type="button" aria-haspopup="menu" aria-expanded={abiertoEste}
+              onMouseEnter={e => abrirFlotante(g.grupo, e.currentTarget)} onMouseLeave={cerrarLuego}
+              onClick={e => (abiertoEste ? setFlotante(null) : abrirFlotante(g.grupo, e.currentTarget))}
+              className={`relative flex w-14 flex-col items-center gap-0.5 rounded-lg px-1 py-1.5 text-[10px] leading-tight transition ${
+                aqui || abiertoEste ? 'bg-surface-3 text-content' : 'text-content-muted hover:bg-surface-3 hover:text-content'}`}>
+              {aqui && <span aria-hidden className="absolute inset-y-2 left-0 w-[3px] rounded-full bg-innvolt" />}
+              <g.icono size={18} className={aqui ? 'text-accent' : ''} aria-hidden />
+              <span className="w-full truncate text-center">{CORTO[g.grupo] || g.grupo}</span>
+            </button>
+          );
+        })}
+        <span className="flex-1" />
+        <Link href="/mi-cuenta" onClick={e => guardia(e, '/mi-cuenta')} title={`${nombreVisible} · Mi cuenta`} aria-label="Mi cuenta"
+          className="flex h-9 w-9 items-center justify-center rounded-full bg-innvolt text-xs font-bold text-innvolt-ink hover:brightness-95">{iniciales}</Link>
+        <button onClick={() => { if (confirmarSalida()) onLogout(); }} title="Cerrar sesión" aria-label="Cerrar sesión"
+          className="flex h-9 w-9 items-center justify-center rounded-lg text-content-muted hover:bg-surface-3 hover:text-content">
+          <LogOut size={16} />
+        </button>
+      </aside>
+
+      {/* Panel de un grupo, al lado de la barra angosta */}
+      {plegado && flotante && (() => {
+        const g = menu.find(x => x.grupo === flotante.grupo);
+        if (!g) return null;
+        const alto = 56 + g.items.length * 38;
+        const top = Math.max(8, Math.min(flotante.top - 8, (typeof window !== 'undefined' ? window.innerHeight : 800) - alto - 8));
+        return (
+          <div role="menu" aria-label={g.grupo} onMouseEnter={seguirAbierto} onMouseLeave={cerrarLuego}
+            className="fixed z-[210] hidden w-60 rounded-xl border border-line bg-surface p-2 shadow-xl md:block" style={{ left: 72, top }}>
+            <p className="flex items-center gap-2 px-2 pb-1.5 pt-1 text-[11px] font-bold uppercase tracking-wider text-content-muted">
+              <g.icono size={13} className="text-accent" aria-hidden /> {g.grupo}
+            </p>
+            {g.items.map(it => {
+              const activo = marcada === it;
+              return (
+                <Link key={it.href} href={it.href} role="menuitem" onClick={e => { guardia(e, it.href); setFlotante(null); }} aria-current={activo ? 'page' : undefined}
+                  className={`relative block rounded-lg transition ${it.sub ? 'ml-3 px-3 py-1.5 text-[13px]' : 'px-3 py-2 text-sm'} ${
+                    activo ? 'bg-surface-3 font-medium text-content' : 'text-content-muted hover:bg-surface-3 hover:text-content'}`}>
+                  {activo && <span className="absolute inset-y-1.5 left-0 w-[3px] rounded-full bg-innvolt" />}
+                  {it.sub && <span aria-hidden className="mr-1.5 text-content-muted">↳</span>}
+                  {it.label}
+                </Link>
+              );
+            })}
+          </div>
+        );
+      })()}
+
       {/* Columna de contenido */}
       <div className="flex h-full min-w-0 flex-1 flex-col">
         {/* Barra superior: dónde se está a la izquierda; avisos, tema y cuenta arriba a la derecha */}
@@ -314,12 +396,6 @@ export default function AppShell({ userName, userId, onLogout, children }: {
               className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg text-content hover:bg-surface-3 md:hidden">
               <Menu size={22} />
             </button>
-            {plegado && (
-              <button onClick={alternar} title="Mostrar menú" aria-label="Mostrar menú"
-                className="hidden h-9 w-9 shrink-0 items-center justify-center rounded-lg text-content-muted hover:bg-surface-3 hover:text-content md:flex">
-                <PanelLeftOpen size={17} />
-              </button>
-            )}
             <Link href={inicio} onClick={e => guardia(e, inicio)} aria-label="InnVolt — inicio" className={`shrink-0 ${plegado ? '' : 'md:hidden'}`}>
               <LogoImg height={28} />
             </Link>

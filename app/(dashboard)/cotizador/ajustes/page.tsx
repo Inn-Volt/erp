@@ -1,8 +1,8 @@
 'use client';
 
 /**
- * Comercial → Ajustes de cotización (TecApp): validez, aclaraciones para una cotización
- * sin plantilla, «Importante», correo de «Cómo aceptar», mensajes de envío, presentación,
+ * Comercial → Ajustes de cotización (TecApp): validez, aclaraciones y garantías (las mismas
+ * para todas las cotizaciones, con o sin plantilla), «Importante», correo de «Cómo aceptar», mensajes de envío, presentación,
  * respuesta en línea y el próximo N° (con motivo; nunca baja). Los datos de la empresa
  * (nombre, RUT, logo, giro, banco) siguen en Configuración → Empresas.
  */
@@ -74,7 +74,7 @@ export default function AjustesCotPage() {
           <label><span className="label-muted">Correo de «Cómo aceptar»</span>
             <input className="input" type="email" value={a.correo_aceptar || ''} onChange={e => setA({ ...a, correo_aceptar: e.target.value })} placeholder="El de la empresa si se deja vacío" /></label>
         </div>
-        <div><span className="label-muted">Aclaraciones y garantías para una cotización «sin plantilla»</span>
+        <div><span className="label-muted">Aclaraciones y garantías (las mismas para todas las cotizaciones, con o sin plantilla)</span>
           <EditorFormato valor={a.aclaraciones || ''} onCambiar={t => setA({ ...a, aclaraciones: t })} alto={150} etiqueta="Aclaraciones y garantías por omisión" /></div>
         <div><span className="label-muted">Texto «Importante» (va con la inversión total; vacío usa el de la empresa)</span>
           <EditorFormato valor={a.importante || ''} onCambiar={t => setA({ ...a, importante: t })} alto={70} etiqueta="Texto Importante" /></div>
