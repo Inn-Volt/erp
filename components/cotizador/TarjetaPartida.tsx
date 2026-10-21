@@ -11,11 +11,11 @@ import EditorFormato from '@/components/EditorFormato';
 import NumeroInput from '@/components/NumeroInput';
 import { textoPlano } from '@/lib/textoFormato';
 import { useLayoutEffect, useRef, useState } from 'react';
-import { Layers, Package, Plus } from 'lucide-react';
+import { ArrowDown, ArrowUp, CornerDownRight, Layers, Package, Percent, Plus, Trash2 } from 'lucide-react';
 import BuscadorCatalogo from './BuscadorCatalogo';
 import { MenuAcciones, opcionMenu, campoChico } from './ui';
 import type { ArticuloCatalogo, Linea, Moneda, PartidaCot, QueVe, TipoPartida } from '@/lib/cotizador/tipos';
-import { UNIDADES_PARTIDA } from '@/lib/cotizador/tipos';
+import { UNIDADES_ITEM, UNIDADES_PARTIDA } from '@/lib/cotizador/tipos';
 import { CATEGORIA_COLORS, CATEGORIA_LABELS } from '@/types';
 import { agrupar, cantidadLegible, filasDelCliente, formatMonto, porcentaje, type Resultado } from '@/lib/cotizador/calculo';
 import type { RecetaCompleta } from '@/lib/cotizador/recetas';
@@ -73,7 +73,9 @@ export default function TarjetaPartida(props: {
   const utilidad = neto - costo;
   const recetasF = props.recetas.filter(r => !buscaReceta.trim() || r.nombre.toLowerCase().includes(buscaReceta.trim().toLowerCase())).slice(0, 50);
 
-  const cols = `minmax(220px,1fr) 116px ${verCostos ? '124px 92px 92px ' : ''}${instalacion ? '100px 100px' : '108px'} 84px 112px 32px`;
+  const cols = verCostos
+    ? 'minmax(240px,1fr) 156px 128px 86px 86px 126px 80px 52px 32px'
+    : 'minmax(240px,1fr) 156px 120px 126px 80px 52px 32px';
   const th: React.CSSProperties = { fontSize: '0.66rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.4, color: 'var(--muted)', textAlign: 'right' };
 
   return (
@@ -204,12 +206,19 @@ export default function TarjetaPartida(props: {
                 : instalacion ? 'Busca arriba lo que lleva: cada producto trae su instalación.' : 'Busca arriba los productos que se venden.'}
             </p>
           ) : (
-            <div style={{ minWidth: verCostos ? 1080 : 760 }}>
-              <div style={{ display: 'grid', gridTemplateColumns: cols, gap: 8, padding: '0.4rem 0.7rem', borderBottom: '1px solid var(--border2)' }}>
-                <span style={{ ...th, textAlign: 'left' }}>Descripción</span><span style={th}>Cant.</span>
-                {verCostos && <><span style={th} title="Costo unitario">Costo unit.</span><span style={th} title="% sobre el costo">Ganancia</span><span style={th} title="% sobre lo que paga el cliente">Utilidad</span></>}
-                {instalacion ? <><span style={th} title="Valor del producto por unidad">Equipo</span><span style={th} title="Mano de obra por unidad del producto">HH</span></> : <span style={th}>Precio</span>}
-                <span style={th}>Desc.</span><span style={th}>Total</span><span />
+            <div style={{ minWidth: verCostos ? 1040 : 820 }}>
+              <div style={{ display: 'grid', gridTemplateColumns: cols, gap: 8, padding: '0.45rem 0.7rem', borderBottom: '1px solid var(--border2)', borderLeft: '3px solid transparent' }}>
+                <span style={{ ...th, textAlign: 'left' }}>Descripción</span>
+                <span style={{ ...th, textAlign: 'left' }}>Cantidad</span>
+                {verCostos
+                  ? <><span style={th} title="Costo por unidad (neto, o con IVA si es un material con IVA incluido)">Costo unit.</span>
+                    <span style={th} title="% que se suma al costo">Margen</span>
+                    <span style={th} title="% de lo que paga el cliente que queda como utilidad">Utilidad</span></>
+                  : <span style={th} title="Precio neto por unidad">Precio unit.</span>}
+                <span style={th} title="Lo que suma la línea, neto y con su descuento">Subtotal</span>
+                <span style={th}>Desc.</span>
+                <span style={{ ...th, textAlign: 'center' }} title="Materiales: si el precio ya trae el IVA. Lo demás: si lleva IVA o es exento">IVA</span>
+                <span />
               </div>
               {grupos.map((g, n) => {
                 const conMano = instalacion && g.ligadas.length > 0;
@@ -218,8 +227,8 @@ export default function TarjetaPartida(props: {
                 return (
                   <div key={g.cabeza.id} style={{ borderBottom: '1px solid var(--border2)' }}>
                     {visibles.map(l => (
-                      <FilaLinea key={l.id} l={l} esLigada={l !== g.cabeza} cols={cols} instalacion={instalacion} calc={calc} moneda={moneda}
-                        fila={instalacion && l === g.cabeza ? filas.get(l.id) : undefined} ligadas={l === g.cabeza ? g.ligadas : []}
+                      <FilaLinea key={l.id} l={l} esLigada={l !== g.cabeza} cols={cols} calc={calc} moneda={moneda}
+                        fila={l === g.cabeza ? filas.get(l.id) : undefined} ligadas={l === g.cabeza ? g.ligadas : []}
                         conMano={conMano && l === g.cabeza} desplegada={desplegada}
                         onDesplegar={() => setDesplegadas(s => { const x = new Set(s); if (x.has(g.cabeza.id)) x.delete(g.cabeza.id); else x.add(g.cabeza.id); return x; })}
                         producto={l !== g.cabeza ? g.cabeza : null}
@@ -259,97 +268,115 @@ export default function TarjetaPartida(props: {
   );
 }
 
-function FilaLinea({ l, esLigada, cols, instalacion, calc, moneda, fila, ligadas, conMano, desplegada, onDesplegar, producto, verCostos, editable, primera, ultima, partidas, acc }: {
-  l: Linea; esLigada: boolean; cols: string; instalacion: boolean; calc: Resultado; moneda: Moneda;
+function FilaLinea({ l, esLigada, cols, calc, moneda, fila, ligadas, conMano, desplegada, onDesplegar, producto, verCostos, editable, primera, ultima, partidas, acc }: {
+  l: Linea; esLigada: boolean; cols: string; calc: Resultado; moneda: Moneda;
   fila?: ReturnType<typeof filasDelCliente>[number]; ligadas: Linea[]; conMano: boolean; desplegada: boolean; onDesplegar: () => void;
   producto: Linea | null; verCostos: boolean; editable: boolean; primera: boolean; ultima: boolean; partidas: PartidaCot[]; acc: AccionesLinea;
 }) {
   const c = calc.lineas.get(l.id);
   const deAntes = !l.itemId && !l.fuera;
+  const nueva = !!l.fuera && !l.ajustada;
+  const material = l.categoria === 'material';
+  const exenta = (l.iva ?? 19) === 0;
+  const conIvaAdentro = material && !!l.ivaIncluido && !exenta;
   const bajoCosto = c?.margenReal !== null && c?.margenReal !== undefined && c.margenReal < 0;
   // Plegada, el descuento del producto vale también para su mano de obra.
   const delGrupo = conMano && !desplegada;
   const variosDesc = delGrupo && ligadas.some(m => (m.descuento || 0) !== (l.descuento || 0));
-  const netoFila = instalacion && !esLigada && fila ? fila.neto : c?.neto;
-  const descFila = instalacion && !esLigada && fila ? fila.descuento : c?.descuento;
-  const der: React.CSSProperties = { textAlign: 'right', fontSize: '0.84rem', fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap', alignSelf: 'center' };
-  const parte = (total: number | null | undefined, unit: number | null | undefined) =>
-    total === null || total === undefined ? <span /> :
-      unit !== null && unit !== undefined ? <span style={der}>{formatMonto(unit, moneda, true)}</span>
-        : <span style={der} title="No da exacto por unidad: el PDF imprime «—» y el total">—<span style={{ display: 'block', fontSize: '0.66rem', color: 'var(--muted)' }}>suma {formatMonto(total, moneda)}</span></span>;
+  // Lo que suma la fila: con la instalación plegada, el producto más su mano de obra.
+  const netoFila = delGrupo && fila ? fila.neto : c?.neto;
+  const brutoFila = delGrupo && fila ? fila.subtotal : c?.subtotal;
+  const der: React.CSSProperties = { textAlign: 'right', fontSize: '0.86rem', fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap', paddingTop: '0.4rem' };
+  const nota: React.CSSProperties = { display: 'block', fontSize: '0.66rem', fontWeight: 400, color: 'var(--muted)', whiteSpace: 'nowrap' };
+  const etiqueta: React.CSSProperties = { borderRadius: 4, padding: '0 4px', fontWeight: 600 };
+  const unidades = UNIDADES_ITEM.includes(l.unidad) || !l.unidad ? UNIDADES_ITEM : [l.unidad, ...UNIDADES_ITEM];
+
   return (
-    <div style={{ display: 'grid', gridTemplateColumns: cols, gap: 8, padding: '0.45rem 0.7rem', alignItems: 'start', background: esLigada ? 'var(--bg3)' : undefined,
-      // Cada tipo con su color (como el cotizador de antes): material, mano de obra, servicio, operación.
+    <div style={{ display: 'grid', gridTemplateColumns: cols, gap: 8, padding: '0.5rem 0.7rem', alignItems: 'start', background: esLigada ? 'var(--bg3)' : undefined,
+      // Cada tipo con su color: material, mano de obra, servicio, operación.
       borderLeft: `3px solid ${CATEGORIA_COLORS[l.categoria] || 'transparent'}` }}>
+      {/* Descripción */}
       <div style={{ minWidth: 0, paddingLeft: esLigada ? 18 : 0 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-          {esLigada && <span style={{ color: 'var(--muted)' }}>↳</span>}
+        <div style={{ display: 'flex', alignItems: 'flex-start', gap: 4 }}>
+          {esLigada && <span style={{ color: 'var(--muted)', paddingTop: '0.2rem' }}>↳</span>}
           <TextoQueCrece valor={l.descripcion} disabled={!editable} etiqueta="Descripción"
             onCambiar={t => acc.cambiar(l.id, { descripcion: t })}
             placeholder={l.fuera ? 'Qué es: soporte especial para lector' : 'Descripción'}
             color={esLigada ? 'var(--muted)' : 'var(--text)'} />
         </div>
-        {conMano && (
-          <button type="button" onClick={onDesplegar} aria-expanded={desplegada}
-            style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--muted)', fontSize: '0.72rem', padding: '0.1rem 0.3rem', textAlign: 'left' }}>
-            {desplegada ? '▾' : '▸'} {ligadas.map(m => m.descripcion).join(', ')} · {cantidadLegible(ligadas[0]?.porUnidad || 1)} por unidad
-          </button>
-        )}
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, fontSize: '0.66rem', color: 'var(--muted)', paddingLeft: 4 }}>
-          {l.fuera && !l.ajustada && editable ? (
+        <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 6, fontSize: '0.66rem', color: 'var(--muted)', paddingLeft: 4, marginTop: 2 }}>
+          {nueva && editable ? (
             // En lo que no viene de la biblioteca, el tipo se elige en la misma etiqueta.
-            <select value={l.categoria} aria-label="Tipo" title="Tipo (cambia el color y cómo se calcula)"
-              onChange={e => acc.cambiar(l.id, { categoria: e.target.value as Linea['categoria'] })}
-              style={{ color: CATEGORIA_COLORS[l.categoria], border: `1px solid color-mix(in srgb, ${CATEGORIA_COLORS[l.categoria]} 40%, transparent)`, borderRadius: 4, padding: '0 2px', fontWeight: 700, fontSize: '0.66rem', background: 'transparent', cursor: 'pointer' }}>
+            <select value={l.categoria} aria-label="Tipo" title="Tipo: cambia el color y cómo se calcula el IVA"
+              onChange={e => {
+                const cat = e.target.value as Linea['categoria'];
+                acc.cambiar(l.id, cat === 'material' ? { categoria: cat } : { categoria: cat, ivaIncluido: false });
+              }}
+              style={{ ...etiqueta, color: CATEGORIA_COLORS[l.categoria], border: `1px solid color-mix(in srgb, ${CATEGORIA_COLORS[l.categoria]} 40%, transparent)`, fontWeight: 700, fontSize: '0.66rem', background: 'transparent', cursor: 'pointer', padding: '0 2px' }}>
               <option value="material">Material</option><option value="mano_obra">Mano de obra</option><option value="servicio">Servicio</option><option value="operacion">Operación</option>
             </select>
           ) : (
-            <span style={{ color: CATEGORIA_COLORS[l.categoria], border: `1px solid color-mix(in srgb, ${CATEGORIA_COLORS[l.categoria]} 40%, transparent)`, borderRadius: 4, padding: '0 4px', fontWeight: 700 }}>{CATEGORIA_LABELS[l.categoria]}</span>
+            <span style={{ ...etiqueta, color: CATEGORIA_COLORS[l.categoria], border: `1px solid color-mix(in srgb, ${CATEGORIA_COLORS[l.categoria]} 40%, transparent)`, fontWeight: 700 }}>{CATEGORIA_LABELS[l.categoria]}</span>
           )}
-          {l.codigo && (!l.fuera || l.ajustada) && <span style={{ fontFamily: 'monospace' }}>{l.codigo}</span>}
-          {l.fuera && !l.ajustada && <span title="No está en la biblioteca: existe solo en esta cotización y no se agrega a la biblioteca."
-            style={{ background: 'rgba(217,119,6,.15)', color: '#d97706', borderRadius: 4, padding: '0 4px', fontWeight: 600, cursor: 'help' }}>Solo en esta cotización</span>}
-          {l.fuera && !l.ajustada && (l.costo || 0) > 0 && (l.ganancia === null || l.ganancia === undefined) &&
-            <span style={{ color: '#d97706' }} title="Ponle ganancia para que no se venda a costo">sin ganancia: se vende a costo</span>}
-          {l.ajustada && <span style={{ background: 'var(--y-soft)', color: 'var(--text)', borderRadius: 4, padding: '0 4px', fontWeight: 600 }}
-            title="El costo o la ganancia se cambiaron en esta cotización; la biblioteca sigue igual">Ajustado aquí
+          {l.codigo && !nueva && <span style={{ fontFamily: 'monospace' }}>{l.codigo}</span>}
+          {nueva && <span title="No está en la biblioteca: existe solo en esta cotización y no se agrega a la biblioteca."
+            style={{ ...etiqueta, background: 'rgba(217,119,6,.15)', color: '#d97706', cursor: 'help' }}>Solo en esta cotización</span>}
+          {l.ajustada && <span style={{ ...etiqueta, background: 'var(--y-soft)', color: 'var(--text)' }}
+            title="El costo o el margen se cambiaron en esta cotización; la biblioteca sigue igual">Ajustado aquí
             {editable && l.itemId && <button type="button" onClick={() => acc.alCatalogo(l.id)} style={{ background: 'none', border: 'none', color: 'var(--y)', cursor: 'pointer', fontSize: '0.66rem', fontWeight: 400 }}>↺ volver al de la biblioteca</button>}
           </span>}
-          {deAntes && <span style={{ background: 'var(--bg3)', borderRadius: 4, padding: '0 4px' }}>Línea de antes</span>}
-          {(l.iva ?? 19) === 0 && <span style={{ background: 'var(--bg3)', borderRadius: 4, padding: '0 4px' }}>Exento de IVA</span>}
+          {deAntes && <span style={{ ...etiqueta, background: 'var(--bg3)', fontWeight: 400 }}>Línea de antes</span>}
+          {nueva && (l.costo || 0) > 0 && (l.ganancia === null || l.ganancia === undefined) &&
+            <span style={{ color: '#d97706' }} title="Ponle margen para que no se venda a costo">sin margen: se vende a costo</span>}
           {esLigada && (l.cantidadAMano ? (
             <span>Cantidad a mano {editable && <button type="button" onClick={() => acc.religar(l.id)} style={{ background: 'none', border: 'none', color: 'var(--y)', cursor: 'pointer', fontSize: '0.66rem' }}>↺ seguir al producto</button>}</span>
           ) : <span>{cantidadLegible(l.porUnidad || 1)} por cada {producto?.unidad || 'unidad'}</span>)}
         </div>
-        {l.fuera && !l.ajustada && editable && !verCostos && (
+        {conMano && (
+          <button type="button" onClick={onDesplegar} aria-expanded={desplegada}
+            style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--muted)', fontSize: '0.72rem', padding: '0.15rem 0.3rem', textAlign: 'left' }}>
+            {desplegada ? '▾ Ocultar la instalación' : `▸ Incluye instalación: ${ligadas.map(m => m.descripcion).join(', ')}`}
+          </button>
+        )}
+        {nueva && editable && !verCostos && (
           // Con los costos ocultos, el precio de lo nuevo sale de aquí.
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 4, paddingLeft: 4, alignItems: 'center', fontSize: '0.72rem', color: 'var(--muted)' }}>
             <span>Costo</span>
             <span style={{ width: 120 }}><CeldaNum valor={l.costo} onCambiar={v => acc.cambiar(l.id, { costo: v ?? 0 })} etiqueta="Costo unitario" prefijo={moneda === 'UF' ? 'UF' : '$'} decimales={moneda === 'UF' ? 4 : 0} /></span>
-            <span>Ganancia</span>
-            <span style={{ width: 84 }}><CeldaNum valor={l.ganancia} decimales={1} sufijo="%" vacio onCambiar={v => acc.cambiar(l.id, { ganancia: v })} etiqueta="Ganancia %" /></span>
+            <span>Margen</span>
+            <span style={{ width: 84 }}><CeldaNum valor={l.ganancia} decimales={1} sufijo="%" vacio onCambiar={v => acc.cambiar(l.id, { ganancia: v })} etiqueta="Margen % sobre el costo" /></span>
           </div>
         )}
       </div>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 3, justifyContent: 'flex-end' }}>
+
+      {/* Cantidad con su unidad */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
         <NumeroInput className="input" min={0} decimales={3} disabled={!editable} value={l.cantidad} ariaLabel="Cantidad"
-          onChange={v => acc.cantidad(l.id, v)} envoltura={{ width: 62 }}
+          onChange={v => acc.cantidad(l.id, v)} envoltura={{ width: 70 }}
           style={{ ...campoChico, textAlign: 'right', color: esLigada && !l.cantidadAMano ? 'var(--muted)' : undefined }} />
-        {l.fuera && !l.ajustada && editable ? (
-          <input value={l.unidad} list="unidades-de-item" maxLength={20} aria-label="Unidad" title="Unidad (m, un, global…)"
-            onChange={e => acc.cambiar(l.id, { unidad: e.target.value })}
-            style={{ width: 40, fontSize: '0.72rem', color: 'var(--text)', background: 'transparent', border: '1px dashed var(--border2)', borderRadius: 4, padding: '0.15rem 0.2rem' }} />
-        ) : <span title={l.unidad} style={{ fontSize: '0.68rem', color: 'var(--muted)', width: 40, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{l.unidad}</span>}
+        {editable && nueva ? (
+          <select value={l.unidad || 'un'} aria-label="Unidad" title="Unidad" onChange={e => acc.cambiar(l.id, { unidad: e.target.value })}
+            className="input" style={{ ...campoChico, width: 78, padding: '0.35rem 0.3rem' }}>
+            {unidades.map(u => <option key={u} value={u}>{u}</option>)}
+          </select>
+        ) : (
+          <span title={l.unidad} style={{ width: 78, fontSize: '0.8rem', color: 'var(--muted)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', paddingLeft: 4 }}>{l.unidad}</span>
+        )}
       </div>
-      {verCostos && (editable ? <>
-        <CeldaNum valor={l.costo} etiqueta="Costo unitario (no cambia la biblioteca)" onCambiar={v => acc.ajustar(l.id, { costo: v ?? 0 })}
-          prefijo={moneda === 'UF' ? 'UF' : '$'} decimales={moneda === 'UF' ? 4 : 0} />
-        <CeldaNum valor={l.fuera ? l.ganancia : c?.ganancia} decimales={1} sufijo="%" vacio={!!l.fuera} etiqueta="Ganancia % sobre el costo (no cambia la biblioteca)"
+
+      {/* Costo, margen y utilidad (o el precio unitario, con los costos ocultos) */}
+      {verCostos ? (editable ? <>
+        <div>
+          <CeldaNum valor={l.costo} etiqueta={conIvaAdentro ? 'Costo unitario con IVA incluido' : 'Costo unitario neto (no cambia la biblioteca)'} onCambiar={v => acc.ajustar(l.id, { costo: v ?? 0 })}
+            prefijo={moneda === 'UF' ? 'UF' : '$'} decimales={moneda === 'UF' ? 4 : 0} />
+          {conIvaAdentro && <span style={{ ...nota, textAlign: 'right', marginTop: 2 }}>con IVA · neto {formatMonto((l.costo || 0) / 1.19, moneda, true)}</span>}
+        </div>
+        <CeldaNum valor={l.fuera ? l.ganancia : c?.ganancia} decimales={1} sufijo="%" vacio={!!l.fuera} etiqueta="Margen: % que se suma al costo"
           onCambiar={v => acc.ajustar(l.id, { ganancia: v })} />
-        <CeldaNum valor={c?.margenReal} decimales={1} sufijo="%" etiqueta="Utilidad % sobre lo que paga el cliente" color={bajoCosto ? 'var(--danger)' : undefined}
+        <CeldaNum valor={c?.margenReal} decimales={1} sufijo="%" etiqueta="Utilidad: % de lo que paga el cliente que queda" color={bajoCosto ? 'var(--danger)' : undefined}
           onCambiar={v => {
             if (v === null) return;
-            // La ganancia que deja esa utilidad después del descuento de la línea.
+            // El margen que deja esa utilidad después del descuento de la línea.
             const u = Math.min(v, 99) / 100;
             const dto = Math.min(Math.max(l.descuento || 0, 0), 99.9) / 100;
             acc.ajustar(l.id, { ganancia: (1 / ((1 - u) * (1 - dto)) - 1) * 100 });
@@ -358,15 +385,23 @@ function FilaLinea({ l, esLigada, cols, instalacion, calc, moneda, fila, ligadas
         <span style={{ ...der, color: 'var(--muted)' }}>{formatMonto(l.costo, moneda, true)}</span>
         <span style={{ ...der, color: 'var(--muted)' }}>{porcentaje(c?.ganancia)}</span>
         <span style={{ ...der, color: bajoCosto ? 'var(--danger)' : 'var(--muted)', fontWeight: bajoCosto ? 700 : 400 }}>{porcentaje(c?.margenReal)}</span>
-      </>)}
-      {instalacion ? (esLigada
-        ? <><span /><span style={{ ...der, color: 'var(--muted)' }} title="Precio de la mano de obra por unidad">{formatMonto(c?.precio, moneda, true)}</span></>
-        : <>{parte(fila?.equipo, fila?.equipoUnitario)}{parte(fila?.hh, fila?.hhUnitario)}</>)
-        : <span style={der}>{formatMonto(c?.precio, moneda, true)}</span>}
-      <span style={{ alignSelf: 'center' }}>
+      </>) : (
+        <span style={der}>{formatMonto(c?.precio, moneda, true)}
+          {conIvaAdentro && <span style={nota}>neto · {formatMonto((c?.precio || 0) * 1.19, moneda, true)} c/IVA</span>}</span>
+      )}
+
+      {/* Subtotal: lo que suma la fila (neto, con su descuento) */}
+      <span style={{ ...der, fontWeight: esLigada ? 400 : 700, color: esLigada ? 'var(--muted)' : 'var(--text)' }}>
+        {formatMonto(netoFila, moneda)}
+        {(brutoFila || 0) > (netoFila || 0) && <span style={{ ...nota, textDecoration: 'line-through' }}>{formatMonto(brutoFila, moneda)}</span>}
+        {delGrupo && fila && <span style={nota}>con instalación</span>}
+      </span>
+
+      {/* Descuento */}
+      <span>
         {variosDesc ? (
           <button type="button" onClick={onDesplegar} title="El producto y su instalación llevan distinto descuento: despliégala para cambiar cada uno"
-            style={{ width: '100%', border: '1px dashed var(--border2)', borderRadius: 6, background: 'none', fontSize: '0.72rem', color: 'var(--muted)', cursor: 'pointer', padding: '0.3rem' }}>varios</button>
+            style={{ width: '100%', border: '1px dashed var(--border2)', borderRadius: 6, background: 'none', fontSize: '0.72rem', color: 'var(--muted)', cursor: 'pointer', padding: '0.4rem 0.3rem' }}>varios</button>
         ) : (
           <NumeroInput className="input" min={0} max={100} sufijo="%" disabled={!editable} value={l.descuento || 0} ariaLabel="% de descuento"
             onChange={v => {
@@ -374,32 +409,46 @@ function FilaLinea({ l, esLigada, cols, instalacion, calc, moneda, fila, ligadas
             }} style={{ ...campoChico, textAlign: 'right' }} />
         )}
       </span>
-      <span style={{ ...der, fontWeight: esLigada && instalacion ? 400 : 700, color: esLigada && instalacion ? 'var(--muted)' : 'var(--text)' }}>
-        {formatMonto(netoFila, moneda)}
-        {(descFila || 0) > 0 && <span style={{ display: 'block', fontSize: '0.66rem', fontWeight: 400, color: 'var(--muted)' }}>− {formatMonto(descFila, moneda)}</span>}
-      </span>
+
+      {/* IVA: en materiales, si el precio ya lo trae; en lo demás, si lleva IVA o es exento */}
+      <label style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 1, paddingTop: '0.35rem', cursor: editable ? 'pointer' : 'default' }}
+        title={material
+          ? (exenta ? 'Exento de IVA (se cambia en ⋯)' : 'Material: marcado, el precio escrito ya trae el IVA incluido (se calcula el neto); sin marcar, es neto y se le suma el IVA')
+          : 'Marcado: lleva IVA (se le suma el 19 %). Sin marcar: exento (va al total sin IVA)'}>
+        <input type="checkbox" disabled={!editable || (material && exenta)} aria-label="IVA"
+          checked={material ? conIvaAdentro : !exenta}
+          onChange={e => acc.cambiar(l.id, material ? { ivaIncluido: e.target.checked } : { iva: e.target.checked ? 19 : 0 })}
+          style={{ accentColor: 'var(--y-brand)', width: 16, height: 16 }} />
+        <span style={{ fontSize: '0.6rem', color: 'var(--muted)', whiteSpace: 'nowrap' }}>
+          {material ? (exenta ? 'exento' : conIvaAdentro ? 'incluido' : 'neto') : exenta ? 'exento' : '+19%'}</span>
+      </label>
+
+      {/* Más acciones */}
       <span>
         {editable && (
-          <MenuAcciones etiqueta="Más acciones de la línea" ancho={240}>
+          <MenuAcciones etiqueta="Más acciones de la línea" ancho={250}>
             {cerrar => (<>
-              <label style={{ ...opcionMenu, display: 'flex', gap: 8, alignItems: 'center' }}>
-                <input type="checkbox" checked={(l.iva ?? 19) === 0} onChange={e => acc.cambiar(l.id, { iva: e.target.checked ? 0 : 19 })} style={{ accentColor: 'var(--y-brand)' }} /> Exento de IVA
-              </label>
               {!esLigada && <>
-                <button type="button" style={{ ...opcionMenu, borderTop: '1px solid var(--border2)' }} disabled={primera} onClick={() => { cerrar(); acc.mover(l.id, -1); }}>↑ Subir</button>
-                <button type="button" style={opcionMenu} disabled={ultima} onClick={() => { cerrar(); acc.mover(l.id, 1); }}>↓ Bajar</button>
+                <button type="button" style={opcion} disabled={primera} onClick={() => { cerrar(); acc.mover(l.id, -1); }}><ArrowUp size={13} style={iconoMenu} /> Subir</button>
+                <button type="button" style={opcion} disabled={ultima} onClick={() => { cerrar(); acc.mover(l.id, 1); }}><ArrowDown size={13} style={iconoMenu} /> Bajar</button>
               </>}
               {!esLigada && partidas.length > 0 && (
-                <div style={{ borderTop: '1px solid var(--border2)', padding: '0.5rem 0.85rem' }}>
-                  <span style={{ fontSize: '0.7rem', color: 'var(--muted)' }}>Mover a otra partida (al final)</span>
-                  <select className="input" style={campoChico} value="" onChange={e => { if (e.target.value) acc.moverA(l.id, e.target.value); cerrar(); }}>
-                    <option value="">Elegir…</option>
-                    {partidas.map(x => <option key={x.id} value={x.id}>{x.nombre || 'Sin nombre'}</option>)}
-                  </select>
+                <div style={{ borderTop: '1px solid var(--border2)', padding: '0.35rem 0' }}>
+                  <span style={{ display: 'block', padding: '0.2rem 0.85rem', fontSize: '0.7rem', color: 'var(--muted)' }}>Mover a la partida…</span>
+                  {partidas.map((x, i) => (
+                    <button key={x.id} type="button" style={{ ...opcion, paddingLeft: '1.1rem', display: 'flex', alignItems: 'center' }} onClick={() => { cerrar(); acc.moverA(l.id, x.id); }}>
+                      <CornerDownRight size={13} style={iconoMenu} /> <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{x.nombre?.trim() || `Partida sin nombre ${i + 1}`}</span>
+                    </button>
+                  ))}
                 </div>
               )}
-              <button type="button" style={{ ...opcionMenu, borderTop: '1px solid var(--border2)', color: 'var(--danger)' }} onClick={() => { cerrar(); acc.quitar(l.id); }}>
-                {!esLigada && ligadas.length ? 'Quitar (con su mano de obra)' : 'Quitar'}</button>
+              {material && (
+                <button type="button" style={{ ...opcion, borderTop: '1px solid var(--border2)' }}
+                  onClick={() => { cerrar(); acc.cambiar(l.id, exenta ? { iva: 19 } : { iva: 0, ivaIncluido: false }); }}>
+                  <Percent size={13} style={iconoMenu} /> {exenta ? 'Que lleve IVA' : 'Exento de IVA'}</button>
+              )}
+              <button type="button" style={{ ...opcion, borderTop: '1px solid var(--border2)', color: 'var(--danger)' }} onClick={() => { cerrar(); acc.quitar(l.id); }}>
+                <Trash2 size={13} style={iconoMenu} /> {!esLigada && ligadas.length ? 'Quitar (con su instalación)' : 'Quitar'}</button>
             </>)}
           </MenuAcciones>
         )}
@@ -407,6 +456,9 @@ function FilaLinea({ l, esLigada, cols, instalacion, calc, moneda, fila, ligadas
     </div>
   );
 }
+
+const iconoMenu: React.CSSProperties = { flexShrink: 0, marginRight: 8, color: 'var(--muted)' };
+const opcion: React.CSSProperties = { ...opcionMenu, display: 'flex', alignItems: 'center' };
 
 /** Texto de una línea que se ve entero: crece hacia abajo en vez de cortarse. */
 function TextoQueCrece({ valor, onCambiar, disabled, placeholder, etiqueta, color }: {
@@ -443,7 +495,7 @@ function CeldaNum({ valor, onCambiar, etiqueta, decimales = 4, vacio = false, co
     <NumeroInput className="input" value={valor} mostrarCero decimales={decimales} min={0} ariaLabel={etiqueta} title={etiqueta}
       prefijo={prefijo} sufijo={sufijo}
       onChange={v => onCambiar(v)} onVacio={vacio ? () => onCambiar(null) : undefined}
-      envoltura={{ alignSelf: 'center' }}
+      envoltura={{ alignSelf: 'start' }}
       style={{ ...campoChico, textAlign: 'right', color, fontWeight: color ? 700 : undefined }} />
   );
 }

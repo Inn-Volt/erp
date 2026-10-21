@@ -38,7 +38,7 @@ export const QUE_VE: { valor: QueVe; nombre: string; ayuda: string }[] = [
 
 export const MOTIVOS_RECHAZO = ['Precio', 'Plazo', 'Eligió a la competencia', 'Lo postergó', 'Cambió el alcance', 'No respondió', 'Otro'] as const;
 
-export const UNIDADES_ITEM = ['un', 'ml', 'gl', 'm', 'm²', 'kg', 'hr', 'día', 'mes', 'global', 'pt'];
+export const UNIDADES_ITEM = ['un', 'global', 'm', 'ml', 'm²', 'm³', 'kg', 'lt', 'gl', 'hr', 'día', 'mes', 'pt', 'punto', 'par', 'juego', 'kit', 'rollo', 'caja', 'tira', 'bolsa', 'saco', 'viaje'];
 export const UNIDADES_PARTIDA = ['global', 'un', 'local', 'm²', 'depto', 'piso', 'mes', 'puerta', 'punto'];
 
 export const TITULO_VALORIZACION = 'VALORIZACIÓN';
@@ -84,6 +84,9 @@ export interface Linea extends CotizacionItem {
   cantidadAMano?: boolean;
   /** El producto del catálogo trae mano de obra al instalarse (para religarla al cambiar de tipo). */
   manoObraId?: string | null;
+  /** Material con precio de mercado IVA incluido: el costo y el precio escritos traen el IVA
+   *  adentro; se calcula con el neto (÷ 1,19) y el total queda igual a lo escrito. */
+  ivaIncluido?: boolean;
 }
 
 export interface PartidaCot extends Partida {

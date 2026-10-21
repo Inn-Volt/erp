@@ -43,7 +43,7 @@ import {
   type HitoCobro, type Plantilla, type Seccion, type TipoPartida,
 } from '@/lib/cotizador/tipos';
 import {
-  aMoneda, calcular, calcularLinea, formatMonto, lineaFuera, lineasDeArticulo, nuevoId, porcentaje, q, sinDescuentoGlobal,
+  aMoneda, calcular, formatMonto, precioDeLinea, lineaFuera, lineasDeArticulo, nuevoId, porcentaje, q, sinDescuentoGlobal,
 } from '@/lib/cotizador/calculo';
 import { revisar, llenarMensaje } from '@/lib/cotizador/revision';
 import type { RecetaCompleta, Respuestas } from '@/lib/cotizador/recetas';
@@ -333,7 +333,7 @@ export default function EditorCotizacion({ id, clonarDe, clienteInicial, solicit
       if (l.id !== lid) return l;
       if (l.fuera) return { ...l, ...patch };
       const ci = (l.costo || 0) * (1 + (l.imprevistos || 0) / 100);
-      const precio = calcularLinea(l, d.moneda).precio;
+      const precio = precioDeLinea(l, d.moneda);
       return { ...l, fuera: true, ajustada: true, ganancia: ci > 0 ? (precio / ci - 1) * 100 : 0, ...patch };
     })),
     alCatalogo: lid => setItems(items => items.map(l => {
@@ -459,7 +459,7 @@ export default function EditorCotizacion({ id, clonarDe, clienteInicial, solicit
         const a = catMap.get(l.itemId);
         if (a && a.precio_venta !== null) linea = { ...linea, costo: aMoneda(a.costo || 0, x.moneda, x.valor_uf, true), precio: aMoneda(a.precio_venta, x.moneda, x.valor_uf) };
       } else if (c) {
-        linea.precio = c.precio;
+        linea.precio = precioDeLinea(l, x.moneda);
       }
       return linea;
     });

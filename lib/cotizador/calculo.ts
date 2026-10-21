@@ -9,6 +9,8 @@
  *   descuento = subtotal × % descuento                redondeado a la moneda
  *   neto      = subtotal − descuento
  *
+ * IVA de cada línea: afecta (se le suma el 19 %) o exenta (iva 0). Un material con «IVA
+ * incluido» trae el IVA adentro de su costo y su precio: se calcula con el neto (÷ 1,19).
  * Totales: Subtotal − Descuento = Neto; IVA = afecto × 19 %; Neto + IVA = Total.
  * Cada pieza ya está redondeada y las cuentas son sumas: siempre cuadran.
  * En UF el precio unitario va a 0,0001 y los montos a 0,01.
@@ -36,6 +38,8 @@ export const qm = (v: number, m: Moneda) => q(v, CUANTO[m]);
 export const qp = (v: number, m: Moneda) => q(v, CUANTO_PRECIO[m]);
 
 export const esExenta = (l: Linea) => (l.iva ?? IVA) === 0;
+/** Cuánto IVA traen adentro el costo y el precio escritos (1 = son netos). */
+export const factorIva = (l: Linea) => (l.ivaIncluido && l.categoria === 'material' && !esExenta(l) ? 1 + IVA / 100 : 1);
 export const esFuera = (l: Linea) => !!l.fuera;
 export const esDelCatalogo = (l: Linea) => !!l.itemId && !l.fuera;
 export const esDeAntes = (l: Linea) => !l.itemId && !l.fuera;
@@ -79,14 +83,16 @@ export interface LineaCalculada {
 
 export function calcularLinea(l: Linea, moneda: Moneda): LineaCalculada {
   const cantidad = Number(l.cantidad) || 0;
-  const precio = precioDeLinea(l, moneda);
+  const f = factorIva(l);
+  const precio = f === 1 ? precioDeLinea(l, moneda) : qp(precioDeLinea(l, moneda) / f, moneda);
   const subtotal = qm(precio * cantidad, moneda);
   const descuento = qm(subtotal * Math.min(Math.max(l.descuento || 0, 0), 100) / 100, moneda);
   const neto = subtotal - descuento;
-  const costoTotal = (l.costo || 0) * cantidad;
+  const costo = (l.costo || 0) / f;
+  const costoTotal = costo * cantidad;
   const costoConImprevistos = costoTotal * (1 + (l.imprevistos || 0) / 100);
   const utilidad = neto - qm(costoConImprevistos, moneda);
-  const costoCIu = (l.costo || 0) * (1 + (l.imprevistos || 0) / 100);
+  const costoCIu = costo * (1 + (l.imprevistos || 0) / 100);
   return {
     precio, subtotal, descuento, neto,
     costoTotal: qm(costoTotal, moneda),
@@ -157,8 +163,8 @@ export function calcular(lineas: Linea[], partidas: PartidaCot[], moneda: Moneda
     const cat = CATEGORIAS.includes(l.categoria) ? l.categoria : 'material';
     const a = acc.get(cat) || [0, 0, 0];
     a[0] += c.neto;
-    a[1] += (l.costo || 0) * (Number(l.cantidad) || 0);
-    a[2] += (l.costo || 0) * (Number(l.cantidad) || 0) * (1 + (l.imprevistos || 0) / 100);
+    a[1] += c.costoTotal;
+    a[2] += c.costoConImprevistos;
     acc.set(cat, a);
   }
   const porCategoria: PorCategoria[] = CATEGORIAS.filter(c => acc.has(c)).map(c => {
