@@ -17,7 +17,7 @@ import { MenuAcciones, opcionMenu, campoChico } from './ui';
 import type { ArticuloCatalogo, Linea, Moneda, PartidaCot, QueVe, TipoPartida } from '@/lib/cotizador/tipos';
 import { IVA, UNIDADES_ITEM, UNIDADES_PARTIDA } from '@/lib/cotizador/tipos';
 import { CATEGORIA_COLORS, CATEGORIA_LABELS } from '@/types';
-import { agrupar, cantidadLegible, filasDelCliente, formatMonto, porcentaje, qm, type Resultado } from '@/lib/cotizador/calculo';
+import { agrupar, cantidadLegible, filasDelCliente, formatMonto, porcentaje, qp, type Resultado } from '@/lib/cotizador/calculo';
 import type { RecetaCompleta } from '@/lib/cotizador/recetas';
 
 export interface AccionesPartida {
@@ -215,13 +215,13 @@ export default function TarjetaPartida(props: {
                 <span style={{ ...th, textAlign: 'left' }}>Descripción</span>
                 <span style={{ ...th, textAlign: 'left' }}>Cantidad</span>
                 {verCostos
-                  ? <><span style={th} title="Costo por unidad (neto; o con IVA si lo marcas: precio de mercado)">Costo unit.</span>
+                  ? <><span style={th} title="Costo neto por unidad. Si el precio que tienes trae IVA, escríbelo y toca «quitar IVA»">Costo unit.</span>
                     <span style={th} title="De lo que paga el cliente (neto), qué parte queda para InnVolt">Utilidad</span></>
                   : <span style={th} title="Precio neto por unidad">Precio unit.</span>}
                 <span style={th} title="Precio × cantidad, antes del descuento">Subtotal</span>
                 <span style={th}>Desc.</span>
-                <span style={th} title="Lo que suma la línea, con su descuento (neto, sin IVA)">Total</span>
-                <span style={{ ...th, textAlign: 'center' }} title="Marcado: lleva IVA (se le suma el 19 % al final). Sin marcar: exento">IVA</span>
+                <span style={th} title="Subtotal menos el descuento (neto: el IVA se suma en el total de la cotización)">Total</span>
+                <span style={{ ...th, textAlign: 'center' }} title="Marcado: lleva IVA 19 %. Sin marcar: exento">IVA</span>
                 <span />
               </div>
               {grupos.map((g, n) => {
@@ -280,8 +280,9 @@ function FilaLinea({ l, esLigada, cols, calc, moneda, fila, ligadas, conMano, de
   const c = calc.lineas.get(l.id);
   const deAntes = !l.itemId && !l.fuera;
   const nueva = !!l.fuera && !l.ajustada;
-  const exenta = (l.iva ?? 19) === 0;
-  const conIvaAdentro = !!l.ivaIncluido && !exenta;
+  const exenta = (l.iva ?? IVA) === 0;
+  // Líneas guardadas antes con «costo con IVA»: se siguen calculando con su neto.
+  const costoConIva = !!l.ivaIncluido && !exenta;
   const bajoCosto = c?.margenReal !== null && c?.margenReal !== undefined && c.margenReal < 0;
   // Plegada, el descuento del producto vale también para su mano de obra.
   const delGrupo = conMano && !desplegada;
@@ -310,7 +311,7 @@ function FilaLinea({ l, esLigada, cols, calc, moneda, fila, ligadas, conMano, de
         <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 6, fontSize: '0.66rem', color: 'var(--muted)', paddingLeft: 4, marginTop: 2 }}>
           {nueva && editable ? (
             // En lo que no viene de la biblioteca, el tipo se elige en la misma etiqueta.
-            <select value={l.categoria} aria-label="Tipo" title="Tipo: cambia el color y cómo se calcula el IVA"
+            <select value={l.categoria} aria-label="Tipo" title="Tipo de línea"
               onChange={e => {
                 const cat = e.target.value as Linea['categoria'];
                 acc.cambiar(l.id, { categoria: cat });
@@ -346,7 +347,7 @@ function FilaLinea({ l, esLigada, cols, calc, moneda, fila, ligadas, conMano, de
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 4, paddingLeft: 4, alignItems: 'center', fontSize: '0.72rem', color: 'var(--muted)' }}>
             <span>Costo</span>
             <span style={{ width: 120 }}><CeldaNum valor={l.costo} onCambiar={v => acc.cambiar(l.id, { costo: v ?? 0 })} etiqueta="Costo unitario" prefijo={moneda === 'UF' ? 'UF' : '$'} decimales={moneda === 'UF' ? 4 : 0} /></span>
-            <ConIva l={l} acc={acc} />
+            <QuitarIva l={l} moneda={moneda} onCosto={patch => acc.cambiar(l.id, patch)} />
             <span>Utilidad</span>
             <span style={{ width: 84 }}><CeldaNum valor={c?.margenReal} decimales={1} sufijo="%" etiqueta="Utilidad %" onCambiar={v => { if (v !== null) acc.cambiar(l.id, { ganancia: gananciaParaUtilidad(v, l.descuento) }); }} /></span>
           </div>
@@ -371,15 +372,16 @@ function FilaLinea({ l, esLigada, cols, calc, moneda, fila, ligadas, conMano, de
       {/* Costo, margen y utilidad (o el precio unitario, con los costos ocultos) */}
       {verCostos ? (editable ? <>
         <div>
-          <CeldaNum valor={l.costo} etiqueta={conIvaAdentro ? 'Costo unitario con IVA incluido' : 'Costo unitario neto (no cambia la biblioteca)'} onCambiar={v => acc.ajustar(l.id, { costo: v ?? 0 })}
+          <CeldaNum valor={l.costo} etiqueta={costoConIva ? 'Costo unitario con IVA incluido' : 'Costo unitario neto (no cambia la biblioteca)'} onCambiar={v => acc.ajustar(l.id, { costo: v ?? 0 })}
             prefijo={moneda === 'UF' ? 'UF' : '$'} decimales={moneda === 'UF' ? 4 : 0} />
-          {nueva ? <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 3 }}><ConIva l={l} acc={acc} neto={conIvaAdentro ? formatMonto((l.costo || 0) / 1.19, moneda, true) : null} /></div>
-            : conIvaAdentro && <span style={{ ...nota, textAlign: 'right', marginTop: 2 }}>con IVA · neto {formatMonto((l.costo || 0) / 1.19, moneda, true)}</span>}
+          <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 2 }}>
+            <QuitarIva l={l} moneda={moneda} onCosto={patch => acc.ajustar(l.id, patch)} />
+          </div>
         </div>
         <CeldaNum valor={c?.margenReal} decimales={1} sufijo="%" etiqueta="Utilidad: de lo que paga el cliente, qué parte queda para InnVolt" color={bajoCosto ? 'var(--danger)' : undefined}
           onCambiar={v => { if (v !== null) acc.ajustar(l.id, { ganancia: gananciaParaUtilidad(v, l.descuento) }); }} />
       </> : <>
-        <span style={{ ...der, color: 'var(--muted)' }}>{formatMonto(l.costo, moneda, true)}</span>
+        <span style={{ ...der, color: 'var(--muted)' }}>{formatMonto(l.costo, moneda, true)}{costoConIva && <span style={nota}>con IVA adentro</span>}</span>
         <span style={{ ...der, color: bajoCosto ? 'var(--danger)' : 'var(--muted)', fontWeight: bajoCosto ? 700 : 400 }}>{porcentaje(c?.margenReal)}</span>
       </>) : (
         <span style={der}>{formatMonto(c?.precio, moneda, true)}</span>
@@ -404,22 +406,21 @@ function FilaLinea({ l, esLigada, cols, calc, moneda, fila, ligadas, conMano, de
         )}
       </span>
 
-      {/* Total de la línea: con su descuento (neto; el IVA se suma al final de la cotización) */}
+      {/* Total de la línea: con su descuento (neto; el IVA se suma en el total de la cotización) */}
       <span style={{ ...der, fontWeight: esLigada ? 400 : 700, color: esLigada ? 'var(--muted)' : 'var(--text)' }}>
         {formatMonto(netoFila, moneda)}
-        {!exenta && !esLigada && <span style={nota}>+ IVA {formatMonto(qm(((netoFila || 0) * IVA) / 100, moneda), moneda)}</span>}
       </span>
 
-      {/* IVA: lleva IVA (se suma al final) o es exento */}
+      {/* IVA: lleva IVA o es exento */}
       <label style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 1, paddingTop: '0.35rem', cursor: editable ? 'pointer' : 'default' }}
-        title="Marcado: lleva IVA (se le suma el 19 % en el total). Sin marcar: exento (va al total sin IVA)">
+        title={exenta ? 'Exento: va al total sin IVA. Márcalo para que lleve IVA 19 %' : 'Lleva IVA 19 %. Desmárcalo si es exento'}>
         <input type="checkbox" disabled={!editable} aria-label="Lleva IVA" checked={!exenta}
           onChange={e => {
             if (delGrupo) [l, ...ligadas].forEach(x => acc.cambiar(x.id, { iva: e.target.checked ? 19 : 0 }));
             else acc.cambiar(l.id, { iva: e.target.checked ? 19 : 0 });
           }}
           style={{ accentColor: 'var(--y-brand)', width: 16, height: 16 }} />
-        <span style={{ fontSize: '0.6rem', color: 'var(--muted)', whiteSpace: 'nowrap' }}>{exenta ? 'exento' : 'con IVA'}</span>
+        <span style={{ fontSize: '0.6rem', color: exenta ? '#d97706' : 'var(--muted)', whiteSpace: 'nowrap' }}>{exenta ? 'exento' : '19 %'}</span>
       </label>
 
       {/* Más acciones */}
@@ -458,14 +459,38 @@ function gananciaParaUtilidad(u: number, descuento?: number | null) {
   return (1 / ((1 - x) * (1 - dto)) - 1) * 100;
 }
 
-/** «Costo con IVA»: el costo escrito es un precio de mercado con IVA; se calcula con su neto. */
-function ConIva({ l, acc, neto }: { l: Linea; acc: AccionesLinea; neto?: string | null }) {
+/**
+ * El costo siempre es neto. Si el precio que se tiene es de mercado (con IVA), se escribe tal
+ * cual y «quitar IVA» lo deja en neto (÷ 1,19), con la opción de volver atrás. Solo en materiales
+ * que no vienen de la biblioteca (o se ajustaron aquí): la biblioteca ya guarda costos netos.
+ */
+function QuitarIva({ l, moneda, onCosto }: { l: Linea; moneda: Moneda; onCosto: (patch: Partial<Linea>) => void }) {
+  const [antes, setAntes] = useState<{ con: number; sin: number } | null>(null);
+  const costo = l.costo || 0;
+  const sinIva = (v: number) => qp(v / (1 + IVA / 100), moneda);
+  const enlace: React.CSSProperties = { background: 'none', border: 'none', padding: '0.1rem 0', cursor: 'pointer', color: 'var(--y)', fontSize: '0.66rem', whiteSpace: 'nowrap' };
+  const nota: React.CSSProperties = { fontSize: '0.66rem', color: 'var(--muted)', textAlign: 'right', lineHeight: 1.35 };
+  // Guardada antes con «costo con IVA» (ya no se marca así): se ofrece dejarla en neto.
+  if (l.ivaIncluido && (l.iva ?? IVA) !== 0) {
+    return (
+      <span style={nota} title="Esta línea se guardó con el costo con IVA: se calcula con su neto">
+        con IVA · neto {formatMonto(costo / (1 + IVA / 100), moneda, true)}{' '}
+        {l.fuera && <button type="button" style={enlace} onClick={() => onCosto({ costo: sinIva(costo), ivaIncluido: false })}>dejar en neto</button>}
+      </span>
+    );
+  }
+  // Los precios de mercado con IVA son de materiales; la mano de obra y los servicios se escriben netos.
+  if (!l.fuera || costo <= 0 || l.categoria !== 'material') return null;
+  if (antes && antes.sin === costo) {
+    return (
+      <span style={nota}>era {formatMonto(antes.con, moneda, true)} con IVA ·{' '}
+        <button type="button" style={enlace} title="Volver al costo que escribiste" onClick={() => { onCosto({ costo: antes.con }); setAntes(null); }}>deshacer</button>
+      </span>
+    );
+  }
   return (
-    <label title="Marca si el costo que escribiste trae IVA (precio de mercado): se calcula con el neto (÷ 1,19)"
-      style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: '0.66rem', color: l.ivaIncluido ? 'var(--text)' : 'var(--muted)', cursor: 'pointer', whiteSpace: 'nowrap' }}>
-      <input type="checkbox" checked={!!l.ivaIncluido} onChange={e => acc.cambiar(l.id, { ivaIncluido: e.target.checked })} style={{ accentColor: 'var(--y-brand)', width: 13, height: 13 }} />
-      con IVA{neto ? ` · neto ${neto}` : ''}
-    </label>
+    <button type="button" style={enlace} title={`¿El costo trae IVA (precio de mercado)? Lo deja en neto: ${formatMonto(costo, moneda, true)} ÷ 1,19 = ${formatMonto(sinIva(costo), moneda, true)}`}
+      onClick={() => { const sin = sinIva(costo); setAntes({ con: costo, sin }); onCosto({ costo: sin }); }}>quitar IVA</button>
   );
 }
 

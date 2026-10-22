@@ -401,8 +401,10 @@ export default function CotizacionPDF(p: CotizacionPDFProps) {
       <View style={s.totales} wrap={false}>
         <View style={s.totRow}><Text style={{ fontSize: 7.8, color: MUTED }}>Subtotal</Text><Text style={{ fontSize: 8, fontFamily: 'Helvetica-Bold' }}>{fmt(r.totales.subtotal)}</Text></View>
         {conDescuento && <View style={s.totRow}><Text style={{ fontSize: 7.8, color: MUTED }}>Descuento</Text><Text style={{ fontSize: 8, fontFamily: 'Helvetica-Bold' }}>− {fmt(r.totales.descuento)}</Text></View>}
-        <View style={s.totRow}><Text style={{ fontSize: 7.8, color: MUTED }}>Neto</Text><Text style={{ fontSize: 8, fontFamily: 'Helvetica-Bold' }}>{fmt(r.totales.neto)}</Text></View>
-        {r.totales.exento > 0 && <View style={s.totRow}><Text style={{ fontSize: 7.8, color: MUTED }}>Exento</Text><Text style={{ fontSize: 8 }}>{fmt(r.totales.exento)}</Text></View>}
+        {r.totales.exento > 0 ? <>
+          <View style={s.totRow}><Text style={{ fontSize: 7.8, color: MUTED }}>Neto afecto</Text><Text style={{ fontSize: 8, fontFamily: 'Helvetica-Bold' }}>{fmt(r.totales.afecto)}</Text></View>
+          <View style={s.totRow}><Text style={{ fontSize: 7.8, color: MUTED }}>Exento (sin IVA)</Text><Text style={{ fontSize: 8, fontFamily: 'Helvetica-Bold' }}>{fmt(r.totales.exento)}</Text></View>
+        </> : <View style={s.totRow}><Text style={{ fontSize: 7.8, color: MUTED }}>Neto</Text><Text style={{ fontSize: 8, fontFamily: 'Helvetica-Bold' }}>{fmt(r.totales.neto)}</Text></View>}
         <View style={s.totRow}><Text style={{ fontSize: 7.8, color: MUTED }}>IVA 19 %</Text><Text style={{ fontSize: 8, fontFamily: 'Helvetica-Bold' }}>{fmt(r.totales.iva)}</Text></View>
         <View style={s.totFinal}><Text style={{ fontSize: 9, fontFamily: 'Helvetica-Bold', color: WHITE, letterSpacing: 1 }}>TOTAL</Text><Text style={{ fontSize: 13, fontFamily: 'Helvetica-Bold', color: WHITE }}>{fmt(r.totales.total)}</Text></View>
         {enPesos && <View style={[s.totRow, { borderBottomWidth: 0 }]}><Text style={{ fontSize: 7.5, color: MUTED }}>En pesos (al valor UF)</Text><Text style={{ fontSize: 8 }}>{formatMonto(r.totales.totalClp, 'CLP')}</Text></View>}
