@@ -6,8 +6,8 @@
  *   2. INTRODUCCIÓN y las secciones de la presentación.
  *   3. VALORIZACIÓN, a continuación y entera en una hoja (si no cabe donde va, pasa completa
  *      a la siguiente): resumen por partida, inversión total, forma de pago e «Importante».
- *   4. DETALLE DE LA COTIZACIÓN (hoja nueva) según «Qué ve el cliente», y el cuadro de
- *      totales, que siempre va con las últimas filas (nunca solo en una hoja).
+ *   4. DETALLE DE LA COTIZACIÓN (hoja nueva) según «Qué ve el cliente». Cada partida va entera
+ *      (si no cabe, pasa completa a la hoja siguiente); el cuadro de totales va con lo último.
  *   5. Cierre, en UN bloque que no se corta: aclaraciones y garantías, «Cómo aceptar», datos
  *      para transferir y firmas. Si cabe, sigue a los totales; si no, pasa entero a la hoja
  *      siguiente. Con aclaraciones largas, la letra baja lo justo (hasta 6,6 pt) para que todo quepa en
@@ -398,12 +398,28 @@ export default function CotizacionPDF(p: CotizacionPDFProps) {
    * El detalle como bloques hermanos que no se cortan: la cabecera de cada partida va con su
    * primera fila (no queda sola al pie de una hoja).
    */
-  const bloquesDetalle = (): React.ReactNode[] => {
-    const out: React.ReactNode[] = [];
+  /** Alto aproximado (pt) de una fila del detalle: 8 pt, la descripción en su columna. */
+  const altoFila = (desc: string, ancho: number) => 11 + Math.max(1, Math.ceil((desc || '').length / Math.floor(ancho / (8 * 0.48)))) * 9.6;
+  const bloquesDetalle = (): { nodo: React.ReactNode; alto: number }[] => {
+    const out: { nodo: React.ReactNode; alto: number }[] = [];
     if (doc.que_ve_cliente === 'detalle') {
-      const grupo = (clave: string, cab: React.ReactNode, lineas: Linea[], pt: PartidaCot) => {
+      // Cada partida va ENTERA (no se corta entre hojas): si no cabe al final de una, pasa completa a
+      // la siguiente. Solo una partida de más de ¾ de hoja se divide: la cabecera con sus dos primeras
+      // filas y las dos últimas juntas, para que nunca quede una fila sola.
+      const grupo = (clave: string, cab: React.ReactNode, altoCab: number, lineas: Linea[], pt: PartidaCot) => {
         const { cols, filas } = filasDe(lineas, pt);
-        out.push(<View key={`${clave}-cab`} wrap={false}>{cab}{cols}{filas[0]}</View>, ...filas.slice(1));
+        const instal = (pt.tipo || 'instalacion') === 'instalacion';
+        const altos = (instal ? filasDelCliente(lineas, r).map(f => f.descripcion) : lineas.map(l => l.descripcion))
+          .map(d => altoFila(d, (instal ? 255 : 315) - (conDescuento ? 40 : 0)));
+        const suma = (xs: number[]) => xs.reduce((a, b) => a + b, 0);
+        const total = altoCab + 24 + suma(altos);
+        if (total <= ALTO_UTIL * 0.75 || filas.length <= 4) {
+          out.push({ nodo: <View key={clave} wrap={false}>{cab}{cols}{filas}</View>, alto: total });
+          return;
+        }
+        out.push({ nodo: <View key={`${clave}-cab`} wrap={false}>{cab}{cols}{filas.slice(0, 2)}</View>, alto: altoCab + 24 + suma(altos.slice(0, 2)) });
+        filas.slice(2, -2).forEach((f, j) => out.push({ nodo: f, alto: altos[j + 2] }));
+        out.push({ nodo: <View key={`${clave}-fin`} wrap={false}>{filas.slice(-2)}</View>, alto: suma(altos.slice(-2)) });
       };
       partidas.forEach((pt, i) => grupo(pt.id, <>
         <View style={[s.partidaCab, { borderLeftColor: acento }]}>
@@ -411,10 +427,10 @@ export default function CotizacionPDF(p: CotizacionPDFProps) {
           <Text style={{ fontSize: 8.8, fontFamily: 'Helvetica-Bold' }}>{fmt(r.partidas.get(pt.id)?.subtotal)}</Text>
         </View>
         {pt.descripcion ? <View style={{ padding: '4 8' }}><TextoFormato estilo={{ ...s.texto, fontSize: 7.8 }} texto={pt.descripcion} /></View> : null}
-      </>, lineasDe(pt.id), pt));
+      </>, 30 + (pt.descripcion ? altoTexto(pt.descripcion, 7.8, 1.55, 515) + 8 : 0), lineasDe(pt.id), pt));
       if (sueltas.length > 0) {
         grupo('sueltas', <View style={[s.partidaCab, { borderLeftColor: acento }]}><Text style={{ fontSize: 8.8, fontFamily: 'Helvetica-Bold' }}>Ítems adicionales</Text></View>,
-          sueltas, { id: '', nombre: '', cantidad: 1, unidad: 'global', tipo: 'venta' });
+          30, sueltas, { id: '', nombre: '', cantidad: 1, unidad: 'global', tipo: 'venta' });
       }
       return out;
     }
@@ -462,7 +478,7 @@ export default function CotizacionPDF(p: CotizacionPDFProps) {
             );
           }),
     ];
-    out.push(<View key="cols" wrap={false}>{cols}{filas[0]}</View>, ...filas.slice(1));
+    out.push({ nodo: <View key="cols" wrap={false}>{cols}{filas[0]}</View>, alto: 46 }, ...filas.slice(1).map(nodo => ({ nodo, alto: 24 })));
     return out;
   };
 
@@ -481,14 +497,20 @@ export default function CotizacionPDF(p: CotizacionPDFProps) {
   );
 
   // El cuadro de totales va con las dos últimas filas: nunca queda solo en una hoja.
+  // El cuadro de totales va con lo último del detalle (la última partida entera, o las dos últimas
+  // filas): nunca queda solo en una hoja.
   const Detalle = () => {
     const bloques = bloquesDetalle();
-    const cola = Math.min(2, bloques.length);
+    const n = bloques.length;
+    const TOT = 130;
+    let cola = n ? 1 : 0;
+    if (n >= 2 && bloques[n - 1].alto < 60 && bloques[n - 1].alto + bloques[n - 2].alto + TOT <= ALTO_UTIL) cola = 2;
+    if (n && bloques[n - 1].alto + TOT > ALTO_UTIL) cola = 0;
     return (
       <View>
         <Text style={[s.bloqueTitulo, { borderBottomColor: acento }]}>DETALLE DE LA COTIZACIÓN</Text>
-        {bloques.slice(0, bloques.length - cola)}
-        <View wrap={false}>{bloques.slice(bloques.length - cola)}<Totales /></View>
+        {bloques.slice(0, n - cola).map(b => b.nodo)}
+        <View wrap={false}>{bloques.slice(n - cola).map(b => b.nodo)}<Totales /></View>
       </View>
     );
   };
