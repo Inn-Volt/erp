@@ -112,7 +112,8 @@ export default function PlantillasPage() {
                 <label><span className="label-muted">Para qué sirve (se ve al elegirla)</span><input className="input" value={sel.para_que || ''} onChange={e => setSel({ ...sel, para_que: e.target.value })} /></label>
               </div>
               <div><span className="label-muted">Introducción base</span>
-                <EditorFormato valor={sel.descripcion || ''} editable={editable} alto={110} etiqueta="Introducción base" onCambiar={t => setSel(x => x && { ...x, descripcion: t })} /></div>
+                <EditorFormato valor={sel.descripcion || ''} editable={editable} alto={110} etiqueta="Introducción base" onCambiar={t => setSel(x => x && { ...x, descripcion: t })}
+                  ia={{ tipo: 'introduccion', contexto: () => `Es la introducción base de la plantilla «${sel.nombre || 'sin nombre'}»: sirve para varias cotizaciones de ese tipo, sin nombres de cliente.` }} /></div>
               <div><span className="label-muted">Aclaraciones y garantías</span>
                 <p style={{ margin: '4px 0 0', fontSize: '0.84rem', color: 'var(--muted)', border: '1px dashed var(--border2)', borderRadius: 8, padding: '0.55rem 0.7rem' }}>
                   Son las mismas para todas las cotizaciones, con o sin plantilla. Se editan en{' '}
@@ -142,7 +143,9 @@ export default function PlantillasPage() {
                       <button type="button" className="btn btn-ghost btn-xs" onClick={() => setSel({ ...sel, secciones: sel.secciones.filter((_, j) => j !== i) })}>✕</button>
                     </div>
                     <EditorFormato valor={s.texto} editable={editable} alto={70} etiqueta={s.titulo || 'Texto de la sección'}
-                      onCambiar={t => setSel(y => y && { ...y, secciones: y.secciones.map((x, j) => (j === i ? { ...x, texto: t } : x)) })} />
+                      onCambiar={t => setSel(y => y && { ...y, secciones: y.secciones.map((x, j) => (j === i ? { ...x, texto: t } : x)) })}
+                      ia={{ tipo: s.tipo === 'portada' ? 'portada' : 'presentacion',
+                        contexto: () => `${s.tipo === 'portada' ? 'Portada' : `Sección «${s.titulo || 'sin título'}»`} de la plantilla «${sel.nombre || 'sin nombre'}»: sirve para varias cotizaciones, sin nombres de cliente.` }} />
                   </div>
                 ))}
                 <div style={{ display: 'flex', gap: 8, marginTop: 6 }}>
