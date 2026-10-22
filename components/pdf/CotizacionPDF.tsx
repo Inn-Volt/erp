@@ -82,10 +82,12 @@ const s = StyleSheet.create({
 });
 
 /** Texto con formato (lib/textoFormato): negrita, cursiva, subrayado, tachado, títulos y listas. */
-function TextoFormato({ texto, estilo = s.texto, antes }: {
+function TextoFormato({ texto, estilo = s.texto, antes, despues }: {
   texto?: string | null; estilo?: typeof s.texto;
   /** Título del bloque: va pegado al primer párrafo (no queda solo al pie de una hoja). */
   antes?: React.ReactNode;
+  /** Lo que sigue al texto (el cierre con las firmas): va pegado a sus dos últimos párrafos. */
+  despues?: React.ReactNode;
 }) {
   if (!(texto || '').trim()) return null;
   const linea = (nodos: NodoTexto[] | undefined) => (nodos || []).map((n, i) => {
@@ -139,6 +141,10 @@ function TextoFormato({ texto, estilo = s.texto, antes }: {
     } else out.push(bloque(b, i));
   }
   if (antes) out[0] = <View key="antes" wrap={false}>{antes}{out[0]}</View>;
+  if (despues) {
+    const cola = out.splice(Math.max(0, out.length - 2));
+    out.push(<View key="despues" wrap={false}>{cola}{despues}</View>);
+  }
   return <View>{out}</View>;
 }
 
@@ -495,14 +501,10 @@ export default function CotizacionPDF(p: CotizacionPDFProps) {
   const LETRA_ACLARACIONES = { fontSize: 8.8, lineHeight: 1.5 };
   const letraCierre = [LETRA_ACLARACIONES, { fontSize: 8.4, lineHeight: 1.45 }, { fontSize: 8, lineHeight: 1.4 }]
     .find(l => fijoCierre + altoTexto(doc.aclaraciones, l.fontSize, l.lineHeight) <= ALTO_UTIL);
-  const HojaFinal = () => (
-    <View wrap={!letraCierre}>
-      {doc.aclaraciones?.trim() ? (<View style={{ marginBottom: 14 }}>
-        <TextoFormato texto={doc.aclaraciones} estilo={{ ...s.texto, ...(letraCierre || LETRA_ACLARACIONES) }}
-          antes={<Text style={[s.bloqueTitulo, { borderBottomColor: acento }]}>ACLARACIONES Y GARANTÍAS</Text>} />
-      </View>) : null}
-      {/* «Cómo aceptar», la transferencia y las firmas van juntos: las firmas nunca quedan solas. */}
-      <View wrap={false}>
+  // «Cómo aceptar», la transferencia y las firmas: siempre juntos y pegados al final de las
+  // aclaraciones (sus dos últimos párrafos), para que nunca queden solos en una hoja.
+  const Cierre = () => (
+    <View>
       <View style={{ flexDirection: 'row' }}>
         {ver('mostrar_como_aceptar') && <View style={[s.card, { borderLeftColor: acento, flex: 1, marginRight: 12 }]}>
           <Text style={s.rotulo}>CÓMO ACEPTAR</Text>
@@ -538,7 +540,15 @@ export default function CotizacionPDF(p: CotizacionPDFProps) {
           <Text style={{ fontSize: 7, color: MUTED }}>{p.vendedor?.nombre ? `${p.vendedor.cargo || 'Representante comercial'} · ${empresa.nombre}` : 'Representante comercial'}</Text>
         </View>
       </View>}
-      </View>
+    </View>
+  );
+  const HojaFinal = () => (
+    <View wrap={!letraCierre}>
+      {doc.aclaraciones?.trim() ? (
+        <TextoFormato texto={doc.aclaraciones} estilo={{ ...s.texto, ...(letraCierre || LETRA_ACLARACIONES) }}
+          antes={<Text style={[s.bloqueTitulo, { borderBottomColor: acento }]}>ACLARACIONES Y GARANTÍAS</Text>}
+          despues={<View style={{ marginTop: 14 }}><Cierre /></View>} />
+      ) : <View wrap={false}><Cierre /></View>}
     </View>
   );
 
