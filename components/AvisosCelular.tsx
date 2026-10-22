@@ -5,14 +5,15 @@
  * para que lleguen aunque InnVolt esté cerrada. Explica qué falta cuando no se puede
  * (iPhone sin instalar la app, permiso bloqueado, avisos sin configurar).
  * Completo (Mi cuenta): también lista los equipos de la persona, con el último aviso que
- * recibió cada uno, y deja quitar los que ya no usa.
+ * recibió cada uno, deja quitar los que ya no usa y revisar este equipo paso a paso.
+ * Un equipo recibe los avisos de una sola cuenta: la última que los activó en él.
  * `compacto`: franja para Inicio y «Mis OT» que solo se ve si todavía no están activos.
  */
 
 import { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
-import { BellRing, BellOff, Loader2, Send, Smartphone, Trash2 } from 'lucide-react';
-import { activarPush, desactivarPush, estadoPush, probarPush, resincronizarPush, type EstadoPush } from '@/lib/push';
+import { BellRing, BellOff, CheckCircle2, CircleAlert, CircleHelp, Loader2, Send, Smartphone, Trash2 } from 'lucide-react';
+import { activarPush, desactivarPush, diagnosticoEquipo, estadoPush, probarPush, resincronizarPush, type DiagnosticoEquipo, type EstadoPush } from '@/lib/push';
 import { supabase } from '@/lib/supabase';
 import { useToast } from '@/hooks/useToast';
 import { usePermisos } from '@/hooks/usePermisos';
@@ -24,6 +25,7 @@ const AYUDA: Record<EstadoPush, string> = {
   'sin-servidor': 'Los avisos al celular todavía no están configurados. El administrador los activa en Configuración → Avisos al celular.',
   bloqueado: 'Bloqueaste los avisos para InnVolt. Actívalos en los ajustes del navegador o del teléfono (Notificaciones) y vuelve aquí.',
   inactivo: 'Actívalos para que te llegue al celular o al computador cuando te asignen una visita, el cliente responda una cotización o pase algo tuyo, aunque la app esté cerrada.',
+  'otra-cuenta': 'Este equipo recibe los avisos de otra cuenta. Si los activas aquí, pasan a la tuya (la otra cuenta deja de recibirlos en este equipo).',
   activo: 'Activos en este equipo. Te llegan aunque InnVolt esté cerrada.',
 };
 
@@ -38,6 +40,9 @@ export default function AvisosCelular({ compacto = false }: { compacto?: boolean
   const [ocupado, setOcupado] = useState(false);
   const [equipos, setEquipos] = useState<Equipo[]>([]);
   const [este, setEste] = useState<string | null>(null);
+  const [fallo, setFallo] = useState('');
+  const [revision, setRevision] = useState<DiagnosticoEquipo[] | null>(null);
+  const revisar = async () => { setRevision(null); setRevision(await diagnosticoEquipo().catch(() => [])); };
 
   const leer = useCallback(() => { estadoPush().then(setEstado).catch(() => setEstado('no-soportado')); }, []);
   const leerEquipos = useCallback(async () => {
@@ -54,9 +59,10 @@ export default function AvisosCelular({ compacto = false }: { compacto?: boolean
 
   const activar = async () => {
     setOcupado(true);
+    setFallo('');
     try { await activarPush(); success('Avisos activados en este equipo'); }
-    catch (e) { toastError(e instanceof Error ? e.message : 'No se pudieron activar'); }
-    finally { setOcupado(false); leer(); leerEquipos(); }
+    catch (e) { const m = e instanceof Error ? e.message : 'No se pudieron activar'; setFallo(m); toastError(m); }
+    finally { setOcupado(false); leer(); leerEquipos(); if (revision) revisar(); }
   };
   const desactivar = async () => {
     setOcupado(true);
@@ -79,15 +85,18 @@ export default function AvisosCelular({ compacto = false }: { compacto?: boolean
 
   if (!estado) return null;
 
+  const puedeActivar = estado === 'inactivo' || estado === 'otra-cuenta';
+  const textoActivar = estado === 'otra-cuenta' ? 'Activar en mi cuenta' : 'Activar avisos';
+
   if (compacto) {
     if (estado === 'activo' || estado === 'no-soportado' || estado === 'no-seguro' || estado === 'sin-servidor') return null;
     return (
       <div className="flex flex-wrap items-center gap-3 rounded-xl border border-line bg-surface px-4 py-3 text-sm text-content">
         <BellRing size={18} className="shrink-0 text-accent" />
-        <span className="min-w-0 flex-1">{AYUDA[estado]}</span>
-        {estado === 'inactivo' && (
+        <span className="min-w-0 flex-1">{AYUDA[estado]}{fallo && <span style={{ display: 'block', color: 'var(--danger)', marginTop: 4 }}>{fallo}</span>}</span>
+        {puedeActivar && (
           <button className="btn btn-primary btn-sm" onClick={activar} disabled={ocupado}>
-            {ocupado ? <Loader2 size={13} className="iv-spin" /> : <BellRing size={13} />} Activar avisos</button>
+            {ocupado ? <Loader2 size={13} className="iv-spin" /> : <BellRing size={13} />} {textoActivar}</button>
         )}
       </div>
     );
@@ -100,9 +109,10 @@ export default function AvisosCelular({ compacto = false }: { compacto?: boolean
         {AYUDA[estado]}
         {estado === 'sin-servidor' && puede('configuracion.gestionar') && <> <Link href="/configuracion#avisos-celular" style={{ color: 'var(--y)' }}>Configurarlos ahora</Link></>}
       </p>
+      {fallo && <p style={{ margin: 0, fontSize: '0.84rem', color: 'var(--danger)' }}>{fallo}</p>}
       <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
-        {estado === 'inactivo' && <button className="btn btn-primary" onClick={activar} disabled={ocupado}>
-          {ocupado ? <Loader2 size={14} className="iv-spin" /> : <BellRing size={14} />} Activar avisos</button>}
+        {puedeActivar && <button className="btn btn-primary" onClick={activar} disabled={ocupado}>
+          {ocupado ? <Loader2 size={14} className="iv-spin" /> : <BellRing size={14} />} {textoActivar}</button>}
         {estado === 'activo' && <button className="btn btn-ghost" onClick={desactivar} disabled={ocupado}><BellOff size={14} /> Desactivar aquí</button>}
         {equipos.length > 0 && <button className="btn btn-ghost" onClick={probar} disabled={ocupado}>
           {ocupado ? <Loader2 size={14} className="iv-spin" /> : <Send size={14} />} Enviarme una prueba</button>}
@@ -124,6 +134,22 @@ export default function AvisosCelular({ compacto = false }: { compacto?: boolean
           ))}
         </div>
       )}
+      <details onToggle={e => { if ((e.target as HTMLDetailsElement).open && !revision) revisar(); }}>
+        <summary style={{ cursor: 'pointer', fontSize: '0.8rem', color: 'var(--muted)' }}>Revisar este equipo (si no llegan o no se pueden activar)</summary>
+        {!revision ? <p style={{ fontSize: '0.8rem', color: 'var(--muted)', margin: '6px 0' }}><Loader2 size={12} className="iv-spin" /> Revisando…</p> : (
+          <div style={{ marginTop: 6 }}>
+            {revision.map(r => (
+              <div key={r.punto} style={{ display: 'flex', gap: 8, alignItems: 'flex-start', fontSize: '0.8rem', padding: '0.15rem 0' }}>
+                {r.ok === true ? <CheckCircle2 size={14} color="var(--success)" style={{ flexShrink: 0, marginTop: 2 }} />
+                  : r.ok === false ? <CircleAlert size={14} color="var(--danger)" style={{ flexShrink: 0, marginTop: 2 }} />
+                  : <CircleHelp size={14} color="var(--muted)" style={{ flexShrink: 0, marginTop: 2 }} />}
+                <span style={{ color: 'var(--text)' }}>{r.punto}: <span style={{ color: 'var(--muted)' }}>{r.detalle}</span></span>
+              </div>
+            ))}
+            <button type="button" className="btn btn-ghost btn-xs" onClick={revisar} style={{ marginTop: 4 }}>Revisar de nuevo</button>
+          </div>
+        )}
+      </details>
     </div>
   );
 }

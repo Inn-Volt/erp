@@ -10,8 +10,13 @@
  * pantalla de inicio (Apple no permite avisos a una página abierta en Safari).
  * Se necesita https (o localhost).
  *
+ * Un equipo (un navegador) recibe los avisos de UNA cuenta: la última que los activó en él.
+ * Si otra cuenta entra en ese equipo, ve «Activar en mi cuenta» (y la anterior deja de
+ * recibirlos ahí); el equipo no cambia de dueño solo por iniciar sesión.
+ *
  * Para que no se corten: cada vez que se abre la app se revisa la suscripción; si el
- * navegador la perdió o cambiaron las claves, se renueva sola (sin volver a pedir permiso).
+ * navegador la perdió o cambiaron las claves, se renueva sola para su dueño (sin volver a
+ * pedir permiso).
  */
 
 import { supabase } from '@/lib/supabase';
@@ -24,10 +29,27 @@ export type EstadoPush =
   | 'sin-servidor'   // el administrador todavía no configura los avisos
   | 'bloqueado'      // la persona negó el permiso (se cambia en los ajustes)
   | 'inactivo'       // se puede activar
+  | 'otra-cuenta'    // el navegador está suscrito, pero los avisos van a otra cuenta
   | 'activo';
 
-/** Este equipo tenía los avisos activos (para renovarlos solos si el navegador los pierde). */
-const MARCA = 'innvolt-push-activo';
+/** Cuenta dueña de los avisos de este equipo (para renovarlos sola si el navegador los pierde). */
+const MARCA = 'innvolt-push-cuenta';
+
+async function miId(): Promise<string | null> {
+  try { return (await supabase.auth.getSession()).data.session?.user.id ?? null; } catch { return null; }
+}
+
+/** ¿La suscripción de este navegador está registrada en la cuenta actual? (cada uno ve solo las suyas) */
+async function esMia(endpoint: string): Promise<boolean | null> {
+  const { data, error } = await supabase.from('push_suscripciones').select('id').eq('endpoint', endpoint).limit(1);
+  if (error) return null;
+  return (data || []).length > 0;
+}
+
+/** Corta una espera que no termina (un service worker que no se activa). */
+function conPlazo<T>(p: Promise<T>, ms: number, error: string): Promise<T> {
+  return Promise.race([p, new Promise<T>((_, rechazar) => setTimeout(() => rechazar(new Error(error)), ms))]);
+}
 
 export function esIOS(): boolean {
   return /iphone|ipad|ipod/i.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
@@ -75,7 +97,8 @@ function nombreDispositivo(): string {
 
 async function registro(): Promise<ServiceWorkerRegistration> {
   if (!(await navigator.serviceWorker.getRegistration('/'))) await navigator.serviceWorker.register('/sw.js');
-  return navigator.serviceWorker.ready;
+  return conPlazo(navigator.serviceWorker.ready, 15_000,
+    'El navegador no terminó de preparar los avisos (service worker). Recarga la página e inténtalo de nuevo.');
 }
 
 async function suscripcionActual(): Promise<PushSubscription | null> {
@@ -113,21 +136,39 @@ export async function estadoPush(): Promise<EstadoPush> {
   if (!clave) return 'sin-servidor';
   if (Notification.permission === 'denied') return 'bloqueado';
   const sub = await suscripcionActual();
-  return sub && Notification.permission === 'granted' && mismaClave(sub.options.applicationServerKey, claveServidor(clave)) ? 'activo' : 'inactivo';
+  if (!sub || Notification.permission !== 'granted' || !mismaClave(sub.options.applicationServerKey, claveServidor(clave))) return 'inactivo';
+  // Sin poder revisar (sin conexión), se da por buena.
+  return (await esMia(sub.endpoint)) === false ? 'otra-cuenta' : 'activo';
 }
 
-/** Llamar directo desde un clic: el iPhone solo pide el permiso si lo pide un gesto de la persona. */
+/**
+ * Llamar directo desde un clic: el iPhone solo pide el permiso si lo pide un gesto de la persona.
+ * Cada paso dice en qué falló, para saber qué revisar en ese equipo.
+ */
 export async function activarPush(): Promise<void> {
   const permiso = await Notification.requestPermission();
   if (permiso !== 'granted') {
     throw new Error(permiso === 'denied'
-      ? 'Bloqueaste los avisos. Actívalos en los ajustes del navegador o del teléfono.'
-      : 'No se concedió el permiso para mostrar avisos.');
+      ? 'Bloqueaste los avisos. Actívalos en los ajustes del navegador o del teléfono (Notificaciones) y vuelve a intentarlo.'
+      : 'No se concedió el permiso para mostrar avisos. Toca «Permitir» cuando el navegador lo pregunte.');
   }
   const clave = await clavePublica();
-  if (!clave) throw new Error('El administrador todavía no configura los avisos.');
-  await guardar(await suscribir(clave));
-  try { localStorage.setItem(MARCA, '1'); } catch { /* opcional */ }
+  if (!clave) throw new Error('El servidor no entrega la clave de los avisos: el administrador debe tocar «Configurar» en Configuración → Avisos al celular.');
+  let sub: PushSubscription;
+  try { sub = await suscribir(clave); }
+  catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    if (/service worker/i.test(msg)) throw e;
+    const ua = navigator.userAgent;
+    const ayuda = /brave/i.test(ua) || (navigator as Navigator & { brave?: unknown }).brave
+      ? ' En Brave, activa «Usar los servicios de Google para mensajería push» en Configuración → Privacidad.'
+      : /huawei|honor/i.test(ua) ? ' En celulares sin servicios de Google, usa Firefox.' : ' Prueba con Chrome, Edge o Firefox.';
+    throw new Error(`Este navegador no pudo suscribirse a los avisos (${msg}).${ayuda}`);
+  }
+  try { await guardar(sub); }
+  catch (e) { throw new Error(`No se pudo registrar el equipo en tu cuenta: ${e instanceof Error ? e.message : String(e)}`); }
+  const yo = await miId();
+  try { if (yo) localStorage.setItem(MARCA, yo); } catch { /* opcional */ }
 }
 
 export async function desactivarPush(): Promise<void> {
@@ -139,22 +180,57 @@ export async function desactivarPush(): Promise<void> {
 }
 
 /**
- * Al abrir la app: si este equipo tiene los avisos, reafirma su registro (por si se borró o
- * es otra persona); si el navegador perdió la suscripción o cambió la clave, la renueva sola.
+ * Al abrir la app: si los avisos de este equipo son de esta cuenta, reafirma su registro; si el
+ * navegador perdió la suscripción o cambió la clave, la renueva sola. Nunca le quita el equipo a
+ * otra cuenta: eso se hace con «Activar en mi cuenta».
  */
 export async function resincronizarPush(): Promise<void> {
   try {
     if (!('serviceWorker' in navigator) || !('PushManager' in window) || !('Notification' in window)) return;
     if (Notification.permission !== 'granted') return;
     const clave = await clavePublica();
-    if (!clave) return;
+    const yo = await miId();
+    if (!clave || !yo) return;
     const sub = await suscripcionActual();
-    let marcado = false;
-    try { marcado = localStorage.getItem(MARCA) === '1'; } catch { /* opcional */ }
-    if (sub && mismaClave(sub.options.applicationServerKey, claveServidor(clave))) { await guardar(sub); return; }
-    // Tenía avisos (o una suscripción de otra clave): se renueva sin volver a pedir permiso.
-    if (sub || marcado) await guardar(await suscribir(clave));
+    let dueno: string | null = null;
+    try { dueno = localStorage.getItem(MARCA); } catch { /* opcional */ }
+    const mia = sub ? await esMia(sub.endpoint) : false;
+    if (sub && mismaClave(sub.options.applicationServerKey, claveServidor(clave))) {
+      if (mia) await guardar(sub);
+      return;
+    }
+    // Perdió la suscripción o cambió la clave: se renueva solo si el equipo era de esta cuenta.
+    if (mia || dueno === yo) await guardar(await suscribir(clave));
   } catch { /* sin conexión o sin la fase 6: queda como está */ }
+}
+
+export interface DiagnosticoEquipo { punto: string; ok: boolean | null; detalle: string }
+
+/** Revisión de este equipo, paso a paso (Mi cuenta → «Revisar este equipo»). */
+export async function diagnosticoEquipo(): Promise<DiagnosticoEquipo[]> {
+  const out: DiagnosticoEquipo[] = [];
+  const add = (punto: string, ok: boolean | null, detalle: string) => out.push({ punto, ok, detalle });
+  add('Equipo', null, nombreDispositivo());
+  add('Conexión segura (https)', window.isSecureContext, window.isSecureContext ? 'Sí' : 'No: los avisos necesitan https');
+  const soporta = 'serviceWorker' in navigator && 'PushManager' in window && 'Notification' in window;
+  if (esIOS()) add('App instalada (iPhone)', esAppInstalada(), esAppInstalada() ? 'Sí' : 'No: agrégala a la pantalla de inicio y ábrela desde el ícono');
+  add('El navegador recibe avisos', soporta, soporta ? 'Sí' : 'No');
+  if (!soporta) return out;
+  const permiso = Notification.permission;
+  add('Permiso de notificaciones', permiso === 'granted' ? true : permiso === 'denied' ? false : null,
+    permiso === 'granted' ? 'Concedido' : permiso === 'denied' ? 'Bloqueado: actívalo en los ajustes del navegador o del teléfono' : 'Todavía no se pregunta');
+  const reg = await navigator.serviceWorker.getRegistration('/');
+  add('Servicio de avisos (service worker)', !!reg?.active, reg?.active ? 'Activo' : reg ? 'Instalándose: recarga la página' : 'No registrado: recarga la página');
+  const clave = await clavePublica();
+  add('Clave del servidor', !!clave, clave ? 'Disponible' : 'Falta: el administrador debe tocar «Configurar» en Configuración');
+  const sub = (await reg?.pushManager.getSubscription()) ?? null;
+  const misma = !!sub && !!clave && mismaClave(sub.options.applicationServerKey, claveServidor(clave));
+  add('Suscripción del navegador', sub ? misma : null, sub ? (misma ? 'Sí' : 'Sí, pero con una clave antigua: toca «Activar avisos»') : 'No');
+  if (sub) {
+    const mia = await esMia(sub.endpoint);
+    add('Registrada en tu cuenta', mia, mia ? 'Sí' : mia === false ? 'No: los avisos de este equipo van a otra cuenta' : 'No se pudo revisar (sin conexión)');
+  }
+  return out;
 }
 
 export async function probarPush(): Promise<{ enviados: number; dispositivos: number; error?: string }> {
