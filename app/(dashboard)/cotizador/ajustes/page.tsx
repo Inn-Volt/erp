@@ -75,9 +75,11 @@ export default function AjustesCotPage() {
             <input className="input" type="email" value={a.correo_aceptar || ''} onChange={e => setA({ ...a, correo_aceptar: e.target.value })} placeholder="El de la empresa si se deja vacío" /></label>
         </div>
         <div><span className="label-muted">Aclaraciones y garantías (las mismas para todas las cotizaciones, con o sin plantilla)</span>
-          <EditorFormato valor={a.aclaraciones || ''} onCambiar={t => setA({ ...a, aclaraciones: t })} alto={150} etiqueta="Aclaraciones y garantías por omisión" /></div>
+          <EditorFormato valor={a.aclaraciones || ''} onCambiar={t => setA({ ...a, aclaraciones: t })} alto={150} etiqueta="Aclaraciones y garantías por omisión"
+            ia={{ tipo: 'aclaraciones', contexto: () => 'Son las aclaraciones y garantías base: las mismas para todas las cotizaciones.' }} /></div>
         <div><span className="label-muted">Texto «Importante» (va con la inversión total; vacío usa el de la empresa)</span>
-          <EditorFormato valor={a.importante || ''} onCambiar={t => setA({ ...a, importante: t })} alto={70} etiqueta="Texto Importante" /></div>
+          <EditorFormato valor={a.importante || ''} onCambiar={t => setA({ ...a, importante: t })} alto={70} etiqueta="Texto Importante"
+            ia={{ tipo: 'importante' }} /></div>
         {'plan_cobro' in a && (
           <div><span className="label-muted">Forma de pago de las cotizaciones nuevas (cobros por hitos; cada cotización la puede cambiar)</span>
             <PlanCobro plan={a.plan_cobro && a.plan_cobro.length ? a.plan_cobro : PLAN_COBRO_BASE} onCambiar={p => setA({ ...a, plan_cobro: p })} /></div>

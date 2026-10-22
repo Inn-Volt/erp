@@ -684,6 +684,20 @@ export default function EditorCotizacion({ id, clonarDe, clienteInicial, solicit
   const resumenCliente = cliente ? [cliente.nombre_cliente, sucursal?.nombre, contacto?.nombre && `At. ${contacto.nombre}`].filter(Boolean).join(' · ') : 'Sin cliente';
   const resumenCot = `${d.moneda === 'UF' ? 'UF' : 'Pesos'} · ${QUE_VE.find(x => x.valor === d.que_ve_cliente)?.nombre} · válida hasta ${d.valida_hasta ? formatDate(d.valida_hasta) : '—'}`;
   const sueltas = d.items.filter(l => !l.partidaId || !d.partidas.some(p => p.id === l.partidaId));
+  /** Lo que la IA sabe de la cotización al mejorar o escribir sus textos (sin precios: no los pone). */
+  const contextoIA = (incluirIntro = true) => {
+    const items = (ls: Linea[]) => ls.slice(0, 10).map(l => `   · ${l.descripcion}${l.cantidad ? ` (${l.cantidad} ${l.unidad || ''})`.replace(' )', ')') : ''}`).join('\n');
+    return [
+      d.titulo.trim() && `Título: ${d.titulo.trim()}`,
+      cliente && `Cliente: ${[cliente.empresa, cliente.nombre_cliente].filter((x, i, a) => x && a.indexOf(x) === i).join(' · ')}`,
+      incluirIntro && textoPlano(d.descripcion_general).trim() && `Introducción actual: ${textoPlano(d.descripcion_general).trim().slice(0, 600)}`,
+      d.partidas.length > 0 && `Partidas:\n${d.partidas.map((p, i) => {
+        const ls = d.items.filter(l => l.partidaId === p.id);
+        return `${i + 1}. ${p.nombre || 'Sin nombre'}${p.cantidad > 1 ? ` (${p.cantidad} ${p.unidad})` : ''}${p.descripcion ? ` — ${textoPlano(p.descripcion).slice(0, 160)}` : ''}${ls.length ? `\n${items(ls)}` : ''}`;
+      }).join('\n')}`,
+      sueltas.length > 0 && `Ítems sin partida:\n${items(sueltas)}`,
+    ].filter(Boolean).join('\n').slice(0, 2900);
+  };
   const clientesF = buscaCliente.trim()
     ? clientes.filter(c => `${c.nombre_cliente} ${c.empresa || ''} ${c.rut || ''}`.toLowerCase().includes(buscaCliente.trim().toLowerCase())).slice(0, 8) : [];
 
@@ -995,6 +1009,7 @@ export default function EditorCotizacion({ id, clonarDe, clienteInicial, solicit
             abierto={abierto.descripcion} onAlternar={() => setAbierto(a => ({ ...a, descripcion: !a.descripcion }))}>
             <span style={etiqueta}>Introducción (la lee el cliente al comienzo, antes de la valorización)</span>
             <EditorFormato valor={d.descripcion_general} editable={editable} onCambiar={t => set({ descripcion_general: t })} alto={130} etiqueta="Introducción"
+              ia={{ tipo: 'introduccion', contexto: () => contextoIA(false) }}
               placeholder="De qué trata el trabajo: qué necesita el cliente, qué proponemos y qué resultado tendrá." />
           </BloquePlegable>
 
@@ -1007,7 +1022,7 @@ export default function EditorCotizacion({ id, clonarDe, clienteInicial, solicit
                   : 'Las secciones siguen a la introducción; la valorización empieza en una hoja nueva.'}
                 {!ajustes?.usa_presentacion && ' La presentación está apagada: estas secciones se conservan y se imprimen, pero no se agregan otras.'}
               </p>
-              <EditorSecciones secciones={d.secciones} editable={editable} puedeAgregar={!!ajustes?.usa_presentacion} tituloCot={d.titulo} onCambiar={setSecciones} />
+              <EditorSecciones secciones={d.secciones} editable={editable} puedeAgregar={!!ajustes?.usa_presentacion} tituloCot={d.titulo} onCambiar={setSecciones} contextoIA={contextoIA} />
             </BloquePlegable>
           )}
 
@@ -1032,7 +1047,7 @@ export default function EditorCotizacion({ id, clonarDe, clienteInicial, solicit
                 calc={calc} moneda={d.moneda} valorUf={d.valor_uf} queVe={d.que_ve_cliente} verCostos={puedeCostos && verCostos} editable={editable}
                 catalogo={catalogo} recetas={recetas} partidas={d.partidas} recienCreada={recienCreada === p.id}
                 recetaAgregada={recetaAgregada?.partidaId === p.id ? recetaAgregada : null}
-                lineaAcc={lineaAcc}
+                lineaAcc={lineaAcc} contextoIA={() => [d.titulo.trim() && `Cotización: ${d.titulo.trim()}`, cliente && `Cliente: ${cliente.empresa || cliente.nombre_cliente}`].filter(Boolean).join('\n')}
                 acciones={{
                   onCambiar: patch => setPartidas(ps => ps.map(x => (x.id === p.id ? { ...x, ...patch } : x))),
                   onTipo: t => cambiarTipo(p.id, t),
@@ -1098,6 +1113,7 @@ export default function EditorCotizacion({ id, clonarDe, clienteInicial, solicit
             abierto={abierto.aclaraciones} onAlternar={() => setAbierto(a => ({ ...a, aclaraciones: !a.aclaraciones }))}>
             <span style={etiqueta}>Aclaraciones y garantías (las lee el cliente al final, antes de la firma)</span>
             <EditorFormato valor={d.aclaraciones} editable={editable} onCambiar={t => set({ aclaraciones: t })} alto={170} etiqueta="Aclaraciones y garantías"
+              ia={{ tipo: 'aclaraciones', contexto: () => contextoIA() }}
               placeholder="La garantía de los equipos y de la mano de obra, lo que no incluye, los horarios, la forma de pago." />
             {editable && <p style={{ fontSize: '0.74rem', color: 'var(--muted)', margin: '6px 0 0' }}>
               Aquí se cambian solo para esta cotización. {plantillaActual ? `La plantilla «${plantillaActual.nombre}» trae las suyas al elegirla.` : '«Sin plantilla» trae las de los Ajustes.'} Los datos para transferir no van aquí: el PDF los imprime solos al final.
@@ -1200,8 +1216,9 @@ function EstadoActual({ d, envios, equipo, onAbrir }: { d: CotizacionDoc; envios
   );
 }
 
-function EditorSecciones({ secciones, editable, puedeAgregar, tituloCot, onCambiar }: {
+function EditorSecciones({ secciones, editable, puedeAgregar, tituloCot, onCambiar, contextoIA }: {
   secciones: Seccion[]; editable: boolean; puedeAgregar: boolean; tituloCot: string; onCambiar: (f: (s: Seccion[]) => Seccion[]) => void;
+  contextoIA?: () => string;
 }) {
   const cambiar = (clave: string, patch: Partial<Seccion>) => onCambiar(ss => ss.map(s => (s.clave === clave ? { ...s, ...patch } : s)));
   const mover = (i: number, dir: -1 | 1) => onCambiar(ss => {
@@ -1227,6 +1244,8 @@ function EditorSecciones({ secciones, editable, puedeAgregar, tituloCot, onCambi
           {s.tipo === 'portada' && <input className="input" disabled={!editable} value={s.subtitulo || ''} onChange={e => cambiar(s.clave, { subtitulo: e.target.value })} placeholder="Subtítulo (opcional)" />}
           <EditorFormato valor={s.texto} editable={editable} onCambiar={t => cambiar(s.clave, { texto: t })} alto={s.tipo === 'portada' ? 60 : 100}
             etiqueta={s.titulo || 'Texto de la sección'}
+            ia={{ tipo: s.tipo === 'portada' ? 'portada' : 'presentacion',
+              contexto: () => [s.tipo !== 'portada' && `Sección: ${s.titulo || 'sin título'}`, s.tipo === 'portada' && s.subtitulo && `Subtítulo de la portada: ${s.subtitulo}`, contextoIA?.()].filter(Boolean).join('\n') }}
             placeholder={s.tipo === 'portada' ? 'Texto de la portada (opcional)' : 'Quiénes somos, el alcance, la metodología, la experiencia…'} />
           {s.tipo !== 'portada' && (
             <label style={{ display: 'flex', gap: 6, alignItems: 'center', fontSize: '0.8rem', color: 'var(--text)' }}>

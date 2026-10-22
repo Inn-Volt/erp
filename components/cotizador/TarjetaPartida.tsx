@@ -55,6 +55,8 @@ export default function TarjetaPartida(props: {
   queVe: QueVe; verCostos: boolean; editable: boolean; catalogo: ArticuloCatalogo[]; recetas: RecetaCompleta[];
   partidas: PartidaCot[]; recienCreada?: boolean; recetaAgregada?: { nombre: string; cuantas: number } | null;
   acciones: AccionesPartida; lineaAcc: AccionesLinea;
+  /** Título y cliente de la cotización, para «Mejorar con IA». */
+  contextoIA?: () => string;
 }) {
   const { partida: p, indice, total, lineas, calc, moneda, valorUf, queVe, verCostos, editable, acciones, lineaAcc } = props;
   const instalacion = (p.tipo || 'instalacion') === 'instalacion';
@@ -131,7 +133,9 @@ export default function TarjetaPartida(props: {
           </div>
           <div style={{ marginTop: 8 }}>
             <EditorFormato valor={p.descripcion || ''} editable={editable} onCambiar={t => acciones.onCambiar({ descripcion: t })} alto={70}
-              etiqueta="Descripción para el cliente" placeholder="Lo que lee el cliente bajo el nombre (en el PDF va a todo el ancho)." />
+              etiqueta="Descripción para el cliente" placeholder="Lo que lee el cliente bajo el nombre (en el PDF va a todo el ancho)."
+              ia={{ tipo: 'partida', contexto: () => [props.contextoIA?.(), `Partida: ${p.nombre || 'sin nombre'}${p.cantidad > 1 ? ` (${p.cantidad} ${p.unidad})` : ''}`,
+                lineas.length > 0 && `Incluye:\n${lineas.slice(0, 15).map(l => `· ${l.descripcion}${l.cantidad ? ` (${l.cantidad} ${l.unidad || ''})`.replace(' )', ')') : ''}`).join('\n')}`].filter(Boolean).join('\n') }} />
           </div>
           <datalist id="unidades-de-partida">{UNIDADES_PARTIDA.map(u => <option key={u} value={u} />)}</datalist>
         </details>
