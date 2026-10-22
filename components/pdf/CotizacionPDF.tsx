@@ -4,10 +4,12 @@
  *   1. Hoja 1: empresa, tarjeta con N°/revisión/fechas, «PREPARADO PARA» y el título
  *      (o la portada, si la primera sección es una portada).
  *   2. INTRODUCCIÓN y las secciones de la presentación.
- *   3. VALORIZACIÓN (hoja nueva si antes se imprimió algo): resumen por partida,
- *      inversión total e «Importante».
- *   4. DETALLE DE LA COTIZACIÓN según «Qué ve el cliente», y el cuadro de totales.
- *   5. Hoja final: aclaraciones y garantías, cómo aceptar, datos para transferir y firmas.
+ *   3. VALORIZACIÓN, a continuación y entera en una hoja (si no cabe donde va, pasa completa
+ *      a la siguiente): resumen por partida, inversión total, forma de pago e «Importante».
+ *   4. DETALLE DE LA COTIZACIÓN (hoja nueva) según «Qué ve el cliente», y el cuadro de
+ *      totales, que siempre va con las últimas filas (nunca solo en una hoja).
+ *   5. A continuación: aclaraciones y garantías; «Cómo aceptar», datos para transferir y
+ *      firmas van juntos.
  *   6. Registro fotográfico (si viene de un levantamiento con fotos).
  * Nunca imprime costos, márgenes ni el tipo de cada línea. Marca en diagonal: BORRADOR,
  * ANULADA o EJEMPLO.
@@ -66,7 +68,7 @@ const s = StyleSheet.create({
   totales: { alignSelf: 'flex-end', width: 250, marginTop: 12, borderWidth: 1, borderColor: LINE, borderRadius: 6, overflow: 'hidden' },
   totRow: { flexDirection: 'row', justifyContent: 'space-between', padding: '5 10', borderBottomWidth: 1, borderBottomColor: LINE },
   totFinal: { flexDirection: 'row', justifyContent: 'space-between', padding: '8 10', backgroundColor: DARK },
-  firmas: { flexDirection: 'row', justifyContent: 'space-between', marginTop: 34 },
+  firmas: { flexDirection: 'row', justifyContent: 'space-between', marginTop: 22 },
   firmaCol: { width: 220, alignItems: 'center' },
   firmaImg: { height: 52, width: 170, objectFit: 'contain' },
   firmaLinea: { width: '100%', borderTopWidth: 1, borderTopColor: INK, marginBottom: 4 },
@@ -78,7 +80,11 @@ const s = StyleSheet.create({
 });
 
 /** Texto con formato (lib/textoFormato): negrita, cursiva, subrayado, tachado, títulos y listas. */
-function TextoFormato({ texto, estilo = s.texto }: { texto?: string | null; estilo?: typeof s.texto }) {
+function TextoFormato({ texto, estilo = s.texto, antes }: {
+  texto?: string | null; estilo?: typeof s.texto;
+  /** Título del bloque: va pegado al primer párrafo (no queda solo al pie de una hoja). */
+  antes?: React.ReactNode;
+}) {
   if (!(texto || '').trim()) return null;
   const linea = (nodos: NodoTexto[] | undefined) => (nodos || []).map((n, i) => {
     const ms = (n.marks || []).map(m => m.type);
@@ -108,20 +114,30 @@ function TextoFormato({ texto, estilo = s.texto }: { texto?: string | null; esti
     );
   };
   const tam = (estilo as { fontSize?: number }).fontSize || 9;
-  return (
-    <View>
-      {aDoc(texto).content.map((b, i) => {
-        if (b.type === 'heading') {
-          return <Text key={i} style={[estilo, { fontFamily: 'Helvetica-Bold', fontSize: b.attrs.level === 1 ? tam + 2.5 : tam + 1, color: INK, marginTop: i ? 6 : 0, marginBottom: 2 }]}>{linea(b.content)}</Text>;
-        }
-        if (esLista(b)) return lista(b, 0, i);
-        if (!(b.content || []).length) return <View key={i} style={{ height: 5 }} />;
-        // «1) Cobertura»: un título de las aclaraciones de antes, en negrita.
-        if (esTituloDeAntes(b)) return <Text key={i} style={[estilo, { fontFamily: 'Helvetica-Bold', marginTop: i ? 5 : 0 }]}>{b.content[0].text.trim()}</Text>;
-        return <Text key={i} style={estilo}>{linea(b.content)}</Text>;
-      })}
-    </View>
-  );
+  const bloques = aDoc(texto).content;
+  const bloque = (b: (typeof bloques)[number], i: number): React.ReactNode => {
+    if (b.type === 'heading') {
+      return <Text key={i} style={[estilo, { fontFamily: 'Helvetica-Bold', fontSize: b.attrs.level === 1 ? tam + 2.5 : tam + 1, color: INK, marginTop: i ? 6 : 0, marginBottom: 2 }]}>{linea(b.content)}</Text>;
+    }
+    if (esLista(b)) return lista(b, 0, i);
+    if (!(b.content || []).length) return <View key={i} style={{ height: 5 }} />;
+    // «1) Cobertura»: un título de las aclaraciones de antes, en negrita.
+    if (esTituloDeAntes(b)) return <Text key={i} style={[estilo, { fontFamily: 'Helvetica-Bold', marginTop: i ? 5 : 0 }]}>{b.content[0].text.trim()}</Text>;
+    return <Text key={i} style={estilo}>{linea(b.content)}</Text>;
+  };
+  const esTitulo = (b: (typeof bloques)[number] | undefined) => !!b && (b.type === 'heading' || (!esLista(b) && esTituloDeAntes(b)));
+  const largo = (b: unknown) => JSON.stringify(b).length;
+  const out: React.ReactNode[] = [];
+  for (let i = 0; i < bloques.length; i++) {
+    const b = bloques[i], sig = bloques[i + 1];
+    // Un título no queda solo al pie de una hoja: va pegado a lo que sigue (si no es muy largo).
+    if (esTitulo(b) && sig && !esTitulo(sig) && largo(sig) < 2500) {
+      out.push(<View key={`t${i}`} wrap={false}>{bloque(b, i)}{bloque(sig, i + 1)}</View>);
+      i++;
+    } else out.push(bloque(b, i));
+  }
+  if (antes) out[0] = <View key="antes" wrap={false}>{antes}{out[0]}</View>;
+  return <View>{out}</View>;
 }
 
 /** Diseño del PDF (ajustes_cotizacion.pdf_diseno, fase 8). */
@@ -232,21 +248,26 @@ export default function CotizacionPDF(p: CotizacionPDFProps) {
   const Presentacion = () => (
     <View>
       {hayIntro && <View wrap>
-        <Text style={[s.rotulo, { marginTop: 4 }]}>INTRODUCCIÓN</Text>
-        <TextoFormato texto={doc.descripcion_general} />
+        <TextoFormato texto={doc.descripcion_general} antes={<Text style={[s.rotulo, { marginTop: 4 }]}>INTRODUCCIÓN</Text>} />
       </View>}
       {textos.map(x => (
         <View key={x.clave} break={!!x.hoja_nueva}>
-          {x.titulo ? <Text style={s.seccionTitulo}>{x.titulo}</Text> : null}
-          {x.subtitulo ? <Text style={[s.texto, { color: MUTED, marginBottom: 4 }]}>{x.subtitulo}</Text> : null}
-          <TextoFormato texto={x.texto} />
+          {(x.texto || '').trim() ? <TextoFormato texto={x.texto} antes={x.titulo || x.subtitulo ? <>
+            {x.titulo ? <Text style={s.seccionTitulo}>{x.titulo}</Text> : null}
+            {x.subtitulo ? <Text style={[s.texto, { color: MUTED, marginBottom: 4 }]}>{x.subtitulo}</Text> : null}
+          </> : undefined} /> : <>
+            {x.titulo ? <Text style={s.seccionTitulo}>{x.titulo}</Text> : null}
+            {x.subtitulo ? <Text style={[s.texto, { color: MUTED, marginBottom: 4 }]}>{x.subtitulo}</Text> : null}
+          </>}
         </View>
       ))}
     </View>
   );
 
+  // La valorización va entera en una hoja; solo si tiene demasiadas partidas se deja cortar.
+  const valorizacionCabe = partidas.length + (sueltas.length ? 1 : 0) <= 24;
   const Valorizacion = () => (
-    <View>
+    <View wrap={!valorizacionCabe}>
       {algoAntes && <Text style={[s.bloqueTitulo, { borderBottomColor: acento }]}>{tituloVal}</Text>}
       {(partidas.length > 0) && <>
         <Text style={s.rotulo}>RESUMEN POR PARTIDA</Text>
@@ -306,13 +327,13 @@ export default function CotizacionPDF(p: CotizacionPDFProps) {
     </View>
   );
 
-  const DetalleLineas = ({ lineas, pt }: { lineas: Linea[]; pt?: PartidaCot }) => {
+  /** Encabezado de columnas y filas de unas líneas (cada fila, un bloque que no se corta). */
+  const filasDe = (lineas: Linea[], pt?: PartidaCot): { cols: React.ReactNode; filas: React.ReactNode[] } => {
     const instalacion = (pt?.tipo || 'instalacion') === 'instalacion';
     if (instalacion) {
-      const filas = filasDelCliente(lineas, r);
-      return (<View>
-        <ColsInstalacion />
-        {filas.map(f => (
+      return {
+        cols: <ColsInstalacion />,
+        filas: filasDelCliente(lineas, r).map(f => (
           <View key={f.principal.id} style={s.tr} wrap={false}>
             <Text style={[s.td, { width: 40 }]}>{cantidadLegible(f.cantidad)} {f.unidad}</Text>
             <Text style={[s.td, { flex: 1, paddingRight: 6 }]}>{f.descripcion}</Text>
@@ -321,12 +342,12 @@ export default function CotizacionPDF(p: CotizacionPDFProps) {
             {conDescuento && <Text style={[s.td, { width: 40, textAlign: 'right' }]}>{f.descuentoPct ? `${f.descuentoPct} %` : f.descuento ? fmt(f.descuento) : ''}</Text>}
             <Text style={[s.td, { width: 80, textAlign: 'right', fontFamily: 'Helvetica-Bold' }]}>{fmt(f.subtotal)}</Text>
           </View>
-        ))}
-      </View>);
+        )),
+      };
     }
-    return (<View>
-      <ColsVenta />
-      {lineas.map(l => {
+    return {
+      cols: <ColsVenta />,
+      filas: lineas.map(l => {
         const c = r.lineas.get(l.id)!;
         return (
           <View key={l.id} style={s.tr} wrap={false}>
@@ -337,32 +358,35 @@ export default function CotizacionPDF(p: CotizacionPDFProps) {
             <Text style={[s.td, { width: 80, textAlign: 'right', fontFamily: 'Helvetica-Bold' }]}>{fmt(c.subtotal)}</Text>
           </View>
         );
-      })}
-    </View>);
+      }),
+    };
   };
 
-  const Detalle = () => (
-    <View>
-      <Text style={[s.bloqueTitulo, { borderBottomColor: acento }]}>DETALLE DE LA COTIZACIÓN</Text>
-      {doc.que_ve_cliente === 'detalle' ? (
-        <>
-          {partidas.map((pt, i) => (
-            <View key={pt.id}>
-              <View style={[s.partidaCab, { borderLeftColor: acento }]} wrap={false}>
-                <Text style={{ fontSize: 8.8, fontFamily: 'Helvetica-Bold', flex: 1 }}>{i + 1}. {pt.nombre || 'Partida'}</Text>
-                <Text style={{ fontSize: 8.8, fontFamily: 'Helvetica-Bold' }}>{fmt(r.partidas.get(pt.id)?.subtotal)}</Text>
-              </View>
-              {pt.descripcion ? <View style={{ padding: '4 8' }}><TextoFormato estilo={{ ...s.texto, fontSize: 7.8 }} texto={pt.descripcion} /></View> : null}
-              <DetalleLineas lineas={lineasDe(pt.id)} pt={pt} />
-            </View>
-          ))}
-          {sueltas.length > 0 && (<View>
-            <View style={[s.partidaCab, { borderLeftColor: acento }]}><Text style={{ fontSize: 8.8, fontFamily: 'Helvetica-Bold' }}>Ítems adicionales</Text></View>
-            <DetalleLineas lineas={sueltas} pt={{ id: '', nombre: '', cantidad: 1, unidad: 'global', tipo: 'venta' }} />
-          </View>)}
-        </>
-      ) : (
-        <View>
+  /**
+   * El detalle como bloques hermanos que no se cortan: la cabecera de cada partida va con su
+   * primera fila (no queda sola al pie de una hoja).
+   */
+  const bloquesDetalle = (): React.ReactNode[] => {
+    const out: React.ReactNode[] = [];
+    if (doc.que_ve_cliente === 'detalle') {
+      const grupo = (clave: string, cab: React.ReactNode, lineas: Linea[], pt: PartidaCot) => {
+        const { cols, filas } = filasDe(lineas, pt);
+        out.push(<View key={`${clave}-cab`} wrap={false}>{cab}{cols}{filas[0]}</View>, ...filas.slice(1));
+      };
+      partidas.forEach((pt, i) => grupo(pt.id, <>
+        <View style={[s.partidaCab, { borderLeftColor: acento }]}>
+          <Text style={{ fontSize: 8.8, fontFamily: 'Helvetica-Bold', flex: 1 }}>{i + 1}. {pt.nombre || 'Partida'}</Text>
+          <Text style={{ fontSize: 8.8, fontFamily: 'Helvetica-Bold' }}>{fmt(r.partidas.get(pt.id)?.subtotal)}</Text>
+        </View>
+        {pt.descripcion ? <View style={{ padding: '4 8' }}><TextoFormato estilo={{ ...s.texto, fontSize: 7.8 }} texto={pt.descripcion} /></View> : null}
+      </>, lineasDe(pt.id), pt));
+      if (sueltas.length > 0) {
+        grupo('sueltas', <View style={[s.partidaCab, { borderLeftColor: acento }]}><Text style={{ fontSize: 8.8, fontFamily: 'Helvetica-Bold' }}>Ítems adicionales</Text></View>,
+          sueltas, { id: '', nombre: '', cantidad: 1, unidad: 'global', tipo: 'venta' });
+      }
+      return out;
+    }
+    const cols = (
           <View style={s.thRow}>
             <Text style={[s.th, { width: 18 }]}>#</Text><Text style={[s.th, { flex: 1 }]}>SERVICIO O PRODUCTO</Text>
             {doc.que_ve_cliente === 'partidas' && <>
@@ -371,7 +395,9 @@ export default function CotizacionPDF(p: CotizacionPDFProps) {
               <Text style={[s.th, { width: 84, textAlign: 'right' }]}>TOTAL</Text>
             </>}
           </View>
-          {partidas.map((pt, i) => {
+    );
+    const filas: React.ReactNode[] = [
+          ...partidas.map((pt, i) => {
             const pc = r.partidas.get(pt.id);
             const exacto = pc?.valorUnitario !== null && pc?.valorUnitario !== undefined;
             return (
@@ -388,8 +414,8 @@ export default function CotizacionPDF(p: CotizacionPDFProps) {
                 </>}
               </View>
             );
-          })}
-          {sueltas.map((l, i) => {
+          }),
+          ...sueltas.map((l, i) => {
             const c = r.lineas.get(l.id)!;
             return (
               <View key={l.id} style={s.tr} wrap={false}>
@@ -402,9 +428,13 @@ export default function CotizacionPDF(p: CotizacionPDFProps) {
                 </>}
               </View>
             );
-          })}
-        </View>
-      )}
+          }),
+    ];
+    out.push(<View key="cols" wrap={false}>{cols}{filas[0]}</View>, ...filas.slice(1));
+    return out;
+  };
+
+  const Totales = () => (
       <View style={s.totales} wrap={false}>
         <View style={s.totRow}><Text style={{ fontSize: 7.8, color: MUTED }}>Subtotal</Text><Text style={{ fontSize: 8, fontFamily: 'Helvetica-Bold' }}>{fmt(r.totales.subtotal)}</Text></View>
         {conDescuento && <View style={s.totRow}><Text style={{ fontSize: 7.8, color: MUTED }}>Descuento</Text><Text style={{ fontSize: 8, fontFamily: 'Helvetica-Bold' }}>− {fmt(r.totales.descuento)}</Text></View>}
@@ -416,16 +446,29 @@ export default function CotizacionPDF(p: CotizacionPDFProps) {
         <View style={s.totFinal}><Text style={{ fontSize: 9, fontFamily: 'Helvetica-Bold', color: WHITE, letterSpacing: 1 }}>TOTAL</Text><Text style={{ fontSize: 13, fontFamily: 'Helvetica-Bold', color: WHITE }}>{fmt(r.totales.total)}</Text></View>
         {enPesos && <View style={[s.totRow, { borderBottomWidth: 0 }]}><Text style={{ fontSize: 7.5, color: MUTED }}>En pesos (al valor UF)</Text><Text style={{ fontSize: 8 }}>{formatMonto(r.totales.totalClp, 'CLP')}</Text></View>}
       </View>
-    </View>
   );
+
+  // El cuadro de totales va con las dos últimas filas: nunca queda solo en una hoja.
+  const Detalle = () => {
+    const bloques = bloquesDetalle();
+    const cola = Math.min(2, bloques.length);
+    return (
+      <View>
+        <Text style={[s.bloqueTitulo, { borderBottomColor: acento }]}>DETALLE DE LA COTIZACIÓN</Text>
+        {bloques.slice(0, bloques.length - cola)}
+        <View wrap={false}>{bloques.slice(bloques.length - cola)}<Totales /></View>
+      </View>
+    );
+  };
 
   const HojaFinal = () => (
     <View>
       {doc.aclaraciones?.trim() ? (<View style={{ marginBottom: 14 }}>
-        <Text style={[s.bloqueTitulo, { borderBottomColor: acento }]}>ACLARACIONES Y GARANTÍAS</Text>
-        <TextoFormato texto={doc.aclaraciones} />
+        <TextoFormato texto={doc.aclaraciones} antes={<Text style={[s.bloqueTitulo, { borderBottomColor: acento }]}>ACLARACIONES Y GARANTÍAS</Text>} />
       </View>) : null}
-      <View style={{ flexDirection: 'row' }} wrap={false}>
+      {/* «Cómo aceptar», la transferencia y las firmas van juntos: las firmas nunca quedan solas. */}
+      <View wrap={false}>
+      <View style={{ flexDirection: 'row' }}>
         {ver('mostrar_como_aceptar') && <View style={[s.card, { borderLeftColor: acento, flex: 1, marginRight: 12 }]}>
           <Text style={s.rotulo}>CÓMO ACEPTAR</Text>
           <Text style={[s.texto, { fontSize: 7.8 }]}>
@@ -448,18 +491,19 @@ export default function CotizacionPDF(p: CotizacionPDFProps) {
       </View>
       {ver('mostrar_firmas') && <View style={s.firmas} wrap={false}>
         <View style={s.firmaCol}>
-          {p.aceptacion?.firma ? <Image src={p.aceptacion.firma} style={s.firmaImg} /> : <View style={{ height: 52 }} />}
+          {p.aceptacion?.firma ? <Image src={p.aceptacion.firma} style={s.firmaImg} /> : <View style={{ height: 44 }} />}
           <View style={s.firmaLinea} />
           <Text style={{ fontSize: 8.5, fontFamily: 'Helvetica-Bold' }}>{p.aceptacion?.nombre || 'Acepta el cliente'}</Text>
           <Text style={{ fontSize: 7, color: MUTED }}>{p.aceptacion ? `${p.aceptacion.rut ? `RUT ${p.aceptacion.rut} · ` : ''}aceptó en línea el ${formatDate(p.aceptacion.fecha)}` : 'Nombre, RUT y fecha'}</Text>
         </View>
         <View style={s.firmaCol}>
-          <View style={{ height: 52 }} />
+          <View style={{ height: p.aceptacion?.firma ? 52 : 44 }} />
           <View style={s.firmaLinea} />
           <Text style={{ fontSize: 8.5, fontFamily: 'Helvetica-Bold' }}>{p.vendedor?.nombre || empresa.nombre}</Text>
           <Text style={{ fontSize: 7, color: MUTED }}>{p.vendedor?.nombre ? `${p.vendedor.cargo || 'Representante comercial'} · ${empresa.nombre}` : 'Representante comercial'}</Text>
         </View>
       </View>}
+      </View>
     </View>
   );
 
@@ -485,9 +529,11 @@ export default function CotizacionPDF(p: CotizacionPDFProps) {
           </>
         )}
         {portada && (hayIntro || textos.length > 0) && <View break><Presentacion /></View>}
-        <View break={algoAntes}><Valorizacion /></View>
+        {/* Todo lo de antes del detalle, junto: la valorización sigue a la introducción. Solo una
+            portada sin más texto queda sola en su hoja. */}
+        <View break={!!portada && !hayIntro && textos.length === 0} style={{ marginTop: algoAntes ? 10 : 0 }}><Valorizacion /></View>
         <View break><Detalle /></View>
-        <View break><HojaFinal /></View>
+        <View style={{ marginTop: 18 }}><HojaFinal /></View>
         <Pie />
       </Page>
       {(p.fotos || []).length > 0 && (
