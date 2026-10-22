@@ -84,8 +84,9 @@ export interface Linea extends CotizacionItem {
   cantidadAMano?: boolean;
   /** El producto del catálogo trae mano de obra al instalarse (para religarla al cambiar de tipo). */
   manoObraId?: string | null;
-  /** Costo con IVA (precio de mercado): el costo y el precio escritos traen el IVA adentro;
-   *  se calcula con el neto (÷ 1,19). */
+  /** Líneas guardadas antes con «costo con IVA» (precio de mercado): el costo y el precio
+   *  escritos traen el IVA adentro y se calcula con el neto (÷ 1,19). Hoy el costo se pasa a
+   *  neto con «quitar IVA» y esto ya no se marca. */
   ivaIncluido?: boolean;
 }
 

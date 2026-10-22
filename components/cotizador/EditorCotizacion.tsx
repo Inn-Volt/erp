@@ -508,6 +508,19 @@ export default function EditorCotizacion({ id, clonarDe, clienteInicial, solicit
       return null;
     } finally { setGuardando(false); }
   };
+  const porGuardar = editable && (sucio || !cot);
+
+  // Ctrl+S (⌘S en Mac) guarda la cotización en vez de abrir «Guardar página» del navegador.
+  useEffect(() => {
+    if (!editable) return;
+    const tecla = (e: KeyboardEvent) => {
+      if (!(e.ctrlKey || e.metaKey) || e.altKey || e.key.toLowerCase() !== 's') return;
+      e.preventDefault();
+      if (porGuardar && !guardando) guardar();
+    };
+    window.addEventListener('keydown', tecla);
+    return () => window.removeEventListener('keydown', tecla);
+  });
 
   /** El plan de cobro de la cotización, o el de los ajustes, o un solo cobro al terminar. */
   const planDe = (x: Pick<CotizacionDoc, 'plan_cobro'>): HitoCobro[] =>
@@ -716,8 +729,9 @@ export default function EditorCotizacion({ id, clonarDe, clienteInicial, solicit
     <aside style={{ display: 'flex', flexDirection: 'column', gap: 12, position: 'sticky', top: 12, alignSelf: 'start' }}>
       <div className="panel-y" style={{ padding: '1rem' }}>
         <p className="section-label" style={{ marginTop: 0 }}>Lo que paga el cliente</p>
-        {[['Subtotal', calc.totales.subtotal], ...(calc.totales.descuento ? [['Descuento', -calc.totales.descuento]] : []), ['Neto', calc.totales.neto],
-          ...(calc.totales.exento ? [['Exento', calc.totales.exento]] : []), ['IVA 19 %', calc.totales.iva]].map(([t, v]) => (
+        {[['Subtotal', calc.totales.subtotal], ...(calc.totales.descuento ? [['Descuento', -calc.totales.descuento]] : []),
+          ...(calc.totales.exento ? [['Neto afecto', calc.totales.afecto], ['Exento (sin IVA)', calc.totales.exento]] : [['Neto', calc.totales.neto]]),
+          ['IVA 19 %', calc.totales.iva]].map(([t, v]) => (
           <div key={t as string} style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.86rem', padding: '0.2rem 0', color: 'var(--text)' }}>
             <span style={{ color: 'var(--muted)' }}>{t}</span><span style={{ fontVariantNumeric: 'tabular-nums' }}>{formatMonto(v as number, d.moneda)}</span>
           </div>
@@ -784,7 +798,21 @@ export default function EditorCotizacion({ id, clonarDe, clienteInicial, solicit
   }
 
   return (
-    <div className="anim-in">
+    <div className="anim-in" style={editable ? { paddingBottom: 76 } : undefined}>
+      {/* Guardar: flotante abajo a la derecha, siempre a mano (y Ctrl+S). */}
+      {editable && (
+        <button type="button" onClick={() => guardar()} disabled={!porGuardar || guardando}
+          title={porGuardar ? 'Guardar (Ctrl+S)' : 'Todo guardado'} aria-live="polite"
+          className={porGuardar ? 'btn btn-primary' : 'btn btn-ghost'}
+          style={{ position: 'fixed', zIndex: 150, right: 'max(1.25rem, env(safe-area-inset-right))', bottom: 'calc(1.25rem + env(safe-area-inset-bottom))',
+            borderRadius: 999, padding: porGuardar ? '0.75rem 1.35rem' : '0.55rem 1rem', gap: 8, fontWeight: 700, fontSize: porGuardar ? '0.95rem' : '0.8rem',
+            boxShadow: 'var(--shadow-pop)', opacity: 1, transition: 'padding .15s, font-size .15s',
+            ...(porGuardar ? {} : { background: 'rgb(var(--surface))', color: 'var(--muted)', border: '1px solid rgb(var(--line))', cursor: 'default' }) }}>
+          {guardando ? <><Loader2 size={16} className="iv-spin" /> Guardando…</>
+            : porGuardar ? <><Save size={16} /> {cot ? 'Guardar cambios' : 'Guardar'}</>
+            : <><CheckCircle2 size={15} color="var(--success)" /> Guardado</>}
+        </button>
+      )}
       {/* Encabezado: N°, estado y los botones del estado. */}
       <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'flex-end', justifyContent: 'space-between', gap: 12, marginBottom: 16 }}>
         <div style={{ minWidth: 0 }}>
@@ -808,10 +836,6 @@ export default function EditorCotizacion({ id, clonarDe, clienteInicial, solicit
           }}><Copy size={14} /> Clonar</button>}
           {editable ? (<>
             <button className="btn btn-ghost" onClick={verPDF} disabled={guardando}><Eye size={14} /> Vista previa del PDF</button>
-            <button className="btn btn-ghost" onClick={() => guardar()} disabled={guardando || (!sucio && !!cot)}>
-              {guardando ? <Loader2 size={14} className="iv-spin" /> : <Save size={14} />} Guardar
-              {sucio && !guardando && <span aria-label="Hay cambios sin guardar" style={{ width: 8, height: 8, borderRadius: 4, background: 'var(--danger)', display: 'inline-block', marginLeft: 4 }} />}
-            </button>
             <button className="btn btn-primary" onClick={abrirRevisar} disabled={guardando}><Send size={14} /> Revisar y enviar</button>
           </>) : cot && (<>
             <button className="btn btn-ghost" onClick={verPDF}><FileDown size={14} /> PDF</button>

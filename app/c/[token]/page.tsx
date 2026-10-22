@@ -75,7 +75,8 @@ export default function CotizacionClientePage() {
   const t = useMemo(() => {
     if (!doc) return null;
     const r = calcular(doc.items, doc.partidas, doc.moneda, doc.valor_uf);
-    return { r, subtotal: r.totales.subtotal, neto: r.totales.neto, total: r.totales.total, descuento: r.totales.descuento, iva: r.totales.iva };
+    return { r, subtotal: r.totales.subtotal, neto: r.totales.neto, total: r.totales.total, descuento: r.totales.descuento, iva: r.totales.iva,
+      afecto: r.totales.afecto, exento: r.totales.exento };
   }, [doc]);
 
   const fmt = (v: number) => formatMoneda(v, cot?.moneda || 'CLP');
@@ -250,8 +251,8 @@ export default function CotizacionClientePage() {
             {[
               ['Subtotal', fmt(t.subtotal)],
               ...(t.descuento > 0 ? [['Descuento', `- ${fmt(t.descuento)}`]] : []),
-              ['Neto', fmt(t.neto)],
-              ...(t.iva > 0 ? [['IVA', fmt(t.iva)]] : []),
+              ...(t.exento > 0 ? [['Neto afecto', fmt(t.afecto)], ['Exento (sin IVA)', fmt(t.exento)]] : [['Neto', fmt(t.neto)]]),
+              ...(t.iva > 0 ? [['IVA 19 %', fmt(t.iva)]] : []),
             ].map(([k, v]) => (
               <div key={k} style={{ display: 'flex', justifyContent: 'space-between', padding: '5px 0', color: C.muted }}><span>{k}</span><span style={{ color: C.ink, fontWeight: 600 }}>{v}</span></div>
             ))}

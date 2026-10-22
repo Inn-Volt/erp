@@ -9,9 +9,10 @@
  *   descuento = subtotal × % descuento                redondeado a la moneda
  *   neto      = subtotal − descuento
  *
- * IVA de cada línea: afecta (se le suma el 19 %) o exenta (iva 0). Una línea con «costo con
- * IVA» (precio de mercado) trae el IVA adentro de su costo y su precio: se calcula con el neto (÷ 1,19).
- * Totales: Subtotal − Descuento = Neto; IVA = afecto × 19 %; Neto + IVA = Total.
+ * IVA de cada línea: afecta (se le suma el 19 %) o exenta (iva 0). El costo es siempre neto (un
+ * precio de mercado se pasa a neto con «quitar IVA»); las líneas guardadas antes con «costo con
+ * IVA» (`ivaIncluido`) traen el IVA adentro de su costo y su precio y se calculan con el neto (÷ 1,19).
+ * Totales: Subtotal − Descuento = Neto (= afecto + exento); IVA = afecto × 19 %; Neto + IVA = Total.
  * Cada pieza ya está redondeada y las cuentas son sumas: siempre cuadran.
  * En UF el precio unitario va a 0,0001 y los montos a 0,01.
  */
