@@ -10,8 +10,8 @@
  *      totales, que siempre va con las últimas filas (nunca solo en una hoja).
  *   5. Cierre, en UN bloque que no se corta: aclaraciones y garantías, «Cómo aceptar», datos
  *      para transferir y firmas. Si cabe, sigue a los totales; si no, pasa entero a la hoja
- *      siguiente. Con aclaraciones largas, la letra baja un poco (hasta 8 pt) para que quepa en una
- *      hoja; si ni así, parte en hoja nueva y sigue en la siguiente.
+ *      siguiente. Con aclaraciones largas, la letra baja lo justo (hasta 6,6 pt) para que todo quepa en
+ *      una hoja; si ni así, parte en hoja nueva y sigue en la siguiente.
  *   6. Registro fotográfico (si viene de un levantamiento con fotos).
  * Nunca imprime costos, márgenes ni el tipo de cada línea. Marca en diagonal: BORRADOR,
  * ANULADA o EJEMPLO.
@@ -495,12 +495,20 @@ export default function CotizacionPDF(p: CotizacionPDFProps) {
 
   // El cierre (aclaraciones + cómo aceptar + transferencia + firmas) va en una sola hoja. Si las
   // aclaraciones son largas, con letra un poco menor; solo si ni así caben, se deja cortar.
-  const fijoCierre = 32 + 14 + 100 + (ver('mostrar_firmas') ? 95 : 0);
-  // Letra de las aclaraciones: algo mayor que la del resto (se leen con atención) y, para que el
-  // cierre quepa en una hoja, baja a lo más a 8 pt; más chica cuesta leerla.
+  const conBanco = ver('mostrar_banco') && !!(empresa.banco || empresa.cuenta_bancaria);
+  const altoTarjetas = conBanco ? 95 : ver('mostrar_como_aceptar') ? (p.enlace ? 70 : 58) : 0;
+  const fijoCierre = 32 + 14 + altoTarjetas + (ver('mostrar_firmas') ? 95 : 0);
+  // Letra de las aclaraciones: 8,8 pt (algo mayor que el resto). Si el cierre no cabe en una hoja,
+  // baja de a 0,2 pt (y el interlineado con ella) lo justo para que quepa, sin pasar de 6,6 pt.
   const LETRA_ACLARACIONES = { fontSize: 8.8, lineHeight: 1.5 };
-  const letraCierre = [LETRA_ACLARACIONES, { fontSize: 8.4, lineHeight: 1.45 }, { fontSize: 8, lineHeight: 1.4 }]
-    .find(l => fijoCierre + altoTexto(doc.aclaraciones, l.fontSize, l.lineHeight) <= ALTO_UTIL);
+  const letraCierre = (() => {
+    for (let i = 0; i <= 11; i++) {
+      const fontSize = Math.round((8.8 - i * 0.2) * 10) / 10;
+      const l = { fontSize, lineHeight: Math.round((1.32 + ((fontSize - 6.6) / 2.2) * 0.18) * 100) / 100 };
+      if (fijoCierre + altoTexto(doc.aclaraciones, l.fontSize, l.lineHeight) <= ALTO_UTIL) return l;
+    }
+    return null;
+  })();
   // «Cómo aceptar», la transferencia y las firmas: siempre juntos y pegados al final de las
   // aclaraciones (sus dos últimos párrafos), para que nunca queden solos en una hoja.
   const Cierre = () => (
