@@ -29,7 +29,16 @@ export interface ConfigPush {
   sinFase14: boolean;
 }
 
-const ASUNTO = () => process.env.VAPID_SUBJECT || 'mailto:innvolt.cl@gmail.com';
+/**
+ * Contacto de quien manda los avisos (VAPID «subject»). Tiene que ser «mailto:correo» o una
+ * dirección https (Apple rechaza lo demás); si en Netlify quedó solo el correo, se completa.
+ */
+const ASUNTO = () => {
+  const v = (process.env.VAPID_SUBJECT || '').trim();
+  if (/^mailto:[^\s@]+@[^\s@]+\.[^\s@]+$/i.test(v) || /^https:\/\/\S+$/i.test(v)) return v;
+  if (/^[^\s@:]+@[^\s@]+\.[^\s@]+$/.test(v)) return `mailto:${v}`;
+  return 'mailto:innvolt.cl@gmail.com';
+};
 
 let cache: { valor: ConfigPush; hasta: number } | null = null;
 
