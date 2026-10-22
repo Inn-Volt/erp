@@ -6,6 +6,7 @@ import { supabase } from '@/lib/supabase';
 import { useToast } from '@/hooks/useToast';
 import { INNVOLT_INFO } from '@/types';
 import IAEstadoCard from '@/components/IAEstadoCard';
+import AvisosCelularAdmin from '@/components/AvisosCelularAdmin';
 import Link from 'next/link';
 import PageHeader from '@/components/PageHeader';
 
@@ -204,6 +205,9 @@ export default function ConfiguracionPage() {
           <Link href="/cotizador/plantillas" className="btn btn-ghost btn-sm">Plantillas</Link>
           <Link href="/cotizador/ajustes" className="btn btn-ghost btn-sm">Ajustes de cotización</Link>
         </div>
+
+        {/* Avisos al celular (push): configurarlos y revisar que lleguen */}
+        <AvisosCelularAdmin />
 
         {/* Inteligencia artificial: proveedores y prueba */}
         <IAEstadoCard />

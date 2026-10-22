@@ -29,6 +29,7 @@ import ThemeToggle from '@/components/ThemeToggle';
 import { LogoImg } from '@/components/Logo';
 import CampanaAvisos from '@/components/CampanaAvisos';
 import { useAvisos } from '@/hooks/useAvisos';
+import { marcarInsignia, resincronizarPush } from '@/lib/push';
 import { confirmarSalida } from '@/hooks/useSinGuardar';
 import { usePermisos } from '@/hooks/usePermisos';
 import { permisosDeRuta } from '@/lib/permisos';
@@ -111,6 +112,11 @@ export default function AppShell({ userName, userId, onLogout, children }: {
   const router = useRouter();
   const { perfil, roles, permisos, cargando, error, sinMigracion, puedeAlguno, recargar } = usePermisos();
   const avisos = useAvisos(userId && !sinMigracion && !cargando ? userId : null);
+
+  // Avisos al celular: al abrir la app se revisa la suscripción de este equipo (se renueva sola
+  // si el navegador la perdió) y el número sobre el ícono sigue a los avisos sin leer.
+  useEffect(() => { if (userId) resincronizarPush(); }, [userId]);
+  useEffect(() => { if (userId && !cargando) marcarInsignia(avisos.noLeidos); }, [userId, cargando, avisos.noLeidos]);
 
   // Menú filtrado por permisos: un grupo sin ítems visibles no se muestra.
   const menu = useMemo(() => MENU
