@@ -84,8 +84,8 @@ export interface Linea extends CotizacionItem {
   cantidadAMano?: boolean;
   /** El producto del catálogo trae mano de obra al instalarse (para religarla al cambiar de tipo). */
   manoObraId?: string | null;
-  /** Material con precio de mercado IVA incluido: el costo y el precio escritos traen el IVA
-   *  adentro; se calcula con el neto (÷ 1,19) y el total queda igual a lo escrito. */
+  /** Costo con IVA (precio de mercado): el costo y el precio escritos traen el IVA adentro;
+   *  se calcula con el neto (÷ 1,19). */
   ivaIncluido?: boolean;
 }
 
@@ -220,6 +220,10 @@ export interface AjustesCot {
   plan_cobro?: HitoCobro[] | null;
   /** Fase 8: el diseño del PDF (color, título, pie y bloques que se muestran). */
   pdf_diseno?: import('@/components/pdf/CotizacionPDF').DisenoPDF | null;
+  /** Fase 13: gastos fijos, ventas del mes y ganancia deseada (calculadora de utilidad). */
+  estructura_costos?: Partial<import('@/lib/cotizador/utilidad').EstructuraCostos> | null;
+  /** Fase 13: utilidad % por omisión de lo nuevo, por tipo. */
+  utilidad_por_tipo?: import('@/lib/cotizador/utilidad').UtilidadPorTipo | null;
 }
 
 export interface Plantilla {

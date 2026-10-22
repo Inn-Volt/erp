@@ -11,13 +11,13 @@ import EditorFormato from '@/components/EditorFormato';
 import NumeroInput from '@/components/NumeroInput';
 import { textoPlano } from '@/lib/textoFormato';
 import { useLayoutEffect, useRef, useState } from 'react';
-import { ArrowDown, ArrowUp, CornerDownRight, Layers, Package, Percent, Plus, Trash2 } from 'lucide-react';
+import { ArrowDown, ArrowUp, CornerDownRight, Layers, Package, Plus, Trash2 } from 'lucide-react';
 import BuscadorCatalogo from './BuscadorCatalogo';
 import { MenuAcciones, opcionMenu, campoChico } from './ui';
 import type { ArticuloCatalogo, Linea, Moneda, PartidaCot, QueVe, TipoPartida } from '@/lib/cotizador/tipos';
-import { UNIDADES_ITEM, UNIDADES_PARTIDA } from '@/lib/cotizador/tipos';
+import { IVA, UNIDADES_ITEM, UNIDADES_PARTIDA } from '@/lib/cotizador/tipos';
 import { CATEGORIA_COLORS, CATEGORIA_LABELS } from '@/types';
-import { agrupar, cantidadLegible, filasDelCliente, formatMonto, porcentaje, type Resultado } from '@/lib/cotizador/calculo';
+import { agrupar, cantidadLegible, filasDelCliente, formatMonto, porcentaje, qm, type Resultado } from '@/lib/cotizador/calculo';
 import type { RecetaCompleta } from '@/lib/cotizador/recetas';
 
 export interface AccionesPartida {
@@ -74,8 +74,8 @@ export default function TarjetaPartida(props: {
   const recetasF = props.recetas.filter(r => !buscaReceta.trim() || r.nombre.toLowerCase().includes(buscaReceta.trim().toLowerCase())).slice(0, 50);
 
   const cols = verCostos
-    ? 'minmax(240px,1fr) 156px 128px 86px 86px 126px 80px 52px 32px'
-    : 'minmax(240px,1fr) 156px 120px 126px 80px 52px 32px';
+    ? 'minmax(240px,1fr) 156px 132px 92px 118px 80px 122px 52px 32px'
+    : 'minmax(240px,1fr) 156px 118px 118px 80px 122px 52px 32px';
   const th: React.CSSProperties = { fontSize: '0.66rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.4, color: 'var(--muted)', textAlign: 'right' };
 
   return (
@@ -211,13 +211,13 @@ export default function TarjetaPartida(props: {
                 <span style={{ ...th, textAlign: 'left' }}>Descripción</span>
                 <span style={{ ...th, textAlign: 'left' }}>Cantidad</span>
                 {verCostos
-                  ? <><span style={th} title="Costo por unidad (neto, o con IVA si es un material con IVA incluido)">Costo unit.</span>
-                    <span style={th} title="% que se suma al costo">Margen</span>
-                    <span style={th} title="% de lo que paga el cliente que queda como utilidad">Utilidad</span></>
+                  ? <><span style={th} title="Costo por unidad (neto; o con IVA si lo marcas: precio de mercado)">Costo unit.</span>
+                    <span style={th} title="De lo que paga el cliente (neto), qué parte queda para InnVolt">Utilidad</span></>
                   : <span style={th} title="Precio neto por unidad">Precio unit.</span>}
-                <span style={th} title="Lo que suma la línea, neto y con su descuento">Subtotal</span>
+                <span style={th} title="Precio × cantidad, antes del descuento">Subtotal</span>
                 <span style={th}>Desc.</span>
-                <span style={{ ...th, textAlign: 'center' }} title="Materiales: si el precio ya trae el IVA. Lo demás: si lleva IVA o es exento">IVA</span>
+                <span style={th} title="Lo que suma la línea, con su descuento (neto, sin IVA)">Total</span>
+                <span style={{ ...th, textAlign: 'center' }} title="Marcado: lleva IVA (se le suma el 19 % al final). Sin marcar: exento">IVA</span>
                 <span />
               </div>
               {grupos.map((g, n) => {
@@ -276,9 +276,8 @@ function FilaLinea({ l, esLigada, cols, calc, moneda, fila, ligadas, conMano, de
   const c = calc.lineas.get(l.id);
   const deAntes = !l.itemId && !l.fuera;
   const nueva = !!l.fuera && !l.ajustada;
-  const material = l.categoria === 'material';
   const exenta = (l.iva ?? 19) === 0;
-  const conIvaAdentro = material && !!l.ivaIncluido && !exenta;
+  const conIvaAdentro = !!l.ivaIncluido && !exenta;
   const bajoCosto = c?.margenReal !== null && c?.margenReal !== undefined && c.margenReal < 0;
   // Plegada, el descuento del producto vale también para su mano de obra.
   const delGrupo = conMano && !desplegada;
@@ -310,7 +309,7 @@ function FilaLinea({ l, esLigada, cols, calc, moneda, fila, ligadas, conMano, de
             <select value={l.categoria} aria-label="Tipo" title="Tipo: cambia el color y cómo se calcula el IVA"
               onChange={e => {
                 const cat = e.target.value as Linea['categoria'];
-                acc.cambiar(l.id, cat === 'material' ? { categoria: cat } : { categoria: cat, ivaIncluido: false });
+                acc.cambiar(l.id, { categoria: cat });
               }}
               style={{ ...etiqueta, color: CATEGORIA_COLORS[l.categoria], border: `1px solid color-mix(in srgb, ${CATEGORIA_COLORS[l.categoria]} 40%, transparent)`, fontWeight: 700, fontSize: '0.66rem', background: 'transparent', cursor: 'pointer', padding: '0 2px' }}>
               <option value="material">Material</option><option value="mano_obra">Mano de obra</option><option value="servicio">Servicio</option><option value="operacion">Operación</option>
@@ -322,12 +321,12 @@ function FilaLinea({ l, esLigada, cols, calc, moneda, fila, ligadas, conMano, de
           {nueva && <span title="No está en la biblioteca: existe solo en esta cotización y no se agrega a la biblioteca."
             style={{ ...etiqueta, background: 'rgba(217,119,6,.15)', color: '#d97706', cursor: 'help' }}>Solo en esta cotización</span>}
           {l.ajustada && <span style={{ ...etiqueta, background: 'var(--y-soft)', color: 'var(--text)' }}
-            title="El costo o el margen se cambiaron en esta cotización; la biblioteca sigue igual">Ajustado aquí
+            title="El costo o la utilidad se cambiaron en esta cotización; la biblioteca sigue igual">Ajustado aquí
             {editable && l.itemId && <button type="button" onClick={() => acc.alCatalogo(l.id)} style={{ background: 'none', border: 'none', color: 'var(--y)', cursor: 'pointer', fontSize: '0.66rem', fontWeight: 400 }}>↺ volver al de la biblioteca</button>}
           </span>}
           {deAntes && <span style={{ ...etiqueta, background: 'var(--bg3)', fontWeight: 400 }}>Línea de antes</span>}
           {nueva && (l.costo || 0) > 0 && (l.ganancia === null || l.ganancia === undefined) &&
-            <span style={{ color: '#d97706' }} title="Ponle margen para que no se venda a costo">sin margen: se vende a costo</span>}
+            <span style={{ color: '#d97706' }} title="Ponle utilidad para que no se venda a costo">sin utilidad: se vende a costo</span>}
           {esLigada && (l.cantidadAMano ? (
             <span>Cantidad a mano {editable && <button type="button" onClick={() => acc.religar(l.id)} style={{ background: 'none', border: 'none', color: 'var(--y)', cursor: 'pointer', fontSize: '0.66rem' }}>↺ seguir al producto</button>}</span>
           ) : <span>{cantidadLegible(l.porUnidad || 1)} por cada {producto?.unidad || 'unidad'}</span>)}
@@ -343,8 +342,9 @@ function FilaLinea({ l, esLigada, cols, calc, moneda, fila, ligadas, conMano, de
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 4, paddingLeft: 4, alignItems: 'center', fontSize: '0.72rem', color: 'var(--muted)' }}>
             <span>Costo</span>
             <span style={{ width: 120 }}><CeldaNum valor={l.costo} onCambiar={v => acc.cambiar(l.id, { costo: v ?? 0 })} etiqueta="Costo unitario" prefijo={moneda === 'UF' ? 'UF' : '$'} decimales={moneda === 'UF' ? 4 : 0} /></span>
-            <span>Margen</span>
-            <span style={{ width: 84 }}><CeldaNum valor={l.ganancia} decimales={1} sufijo="%" vacio onCambiar={v => acc.cambiar(l.id, { ganancia: v })} etiqueta="Margen % sobre el costo" /></span>
+            <ConIva l={l} acc={acc} />
+            <span>Utilidad</span>
+            <span style={{ width: 84 }}><CeldaNum valor={c?.margenReal} decimales={1} sufijo="%" etiqueta="Utilidad %" onCambiar={v => { if (v !== null) acc.cambiar(l.id, { ganancia: gananciaParaUtilidad(v, l.descuento) }); }} /></span>
           </div>
         )}
       </div>
@@ -369,31 +369,21 @@ function FilaLinea({ l, esLigada, cols, calc, moneda, fila, ligadas, conMano, de
         <div>
           <CeldaNum valor={l.costo} etiqueta={conIvaAdentro ? 'Costo unitario con IVA incluido' : 'Costo unitario neto (no cambia la biblioteca)'} onCambiar={v => acc.ajustar(l.id, { costo: v ?? 0 })}
             prefijo={moneda === 'UF' ? 'UF' : '$'} decimales={moneda === 'UF' ? 4 : 0} />
-          {conIvaAdentro && <span style={{ ...nota, textAlign: 'right', marginTop: 2 }}>con IVA · neto {formatMonto((l.costo || 0) / 1.19, moneda, true)}</span>}
+          {nueva ? <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 3 }}><ConIva l={l} acc={acc} neto={conIvaAdentro ? formatMonto((l.costo || 0) / 1.19, moneda, true) : null} /></div>
+            : conIvaAdentro && <span style={{ ...nota, textAlign: 'right', marginTop: 2 }}>con IVA · neto {formatMonto((l.costo || 0) / 1.19, moneda, true)}</span>}
         </div>
-        <CeldaNum valor={l.fuera ? l.ganancia : c?.ganancia} decimales={1} sufijo="%" vacio={!!l.fuera} etiqueta="Margen: % que se suma al costo"
-          onCambiar={v => acc.ajustar(l.id, { ganancia: v })} />
-        <CeldaNum valor={c?.margenReal} decimales={1} sufijo="%" etiqueta="Utilidad: % de lo que paga el cliente que queda" color={bajoCosto ? 'var(--danger)' : undefined}
-          onCambiar={v => {
-            if (v === null) return;
-            // El margen que deja esa utilidad después del descuento de la línea.
-            const u = Math.min(v, 99) / 100;
-            const dto = Math.min(Math.max(l.descuento || 0, 0), 99.9) / 100;
-            acc.ajustar(l.id, { ganancia: (1 / ((1 - u) * (1 - dto)) - 1) * 100 });
-          }} />
+        <CeldaNum valor={c?.margenReal} decimales={1} sufijo="%" etiqueta="Utilidad: de lo que paga el cliente, qué parte queda para InnVolt" color={bajoCosto ? 'var(--danger)' : undefined}
+          onCambiar={v => { if (v !== null) acc.ajustar(l.id, { ganancia: gananciaParaUtilidad(v, l.descuento) }); }} />
       </> : <>
         <span style={{ ...der, color: 'var(--muted)' }}>{formatMonto(l.costo, moneda, true)}</span>
-        <span style={{ ...der, color: 'var(--muted)' }}>{porcentaje(c?.ganancia)}</span>
         <span style={{ ...der, color: bajoCosto ? 'var(--danger)' : 'var(--muted)', fontWeight: bajoCosto ? 700 : 400 }}>{porcentaje(c?.margenReal)}</span>
       </>) : (
-        <span style={der}>{formatMonto(c?.precio, moneda, true)}
-          {conIvaAdentro && <span style={nota}>neto · {formatMonto((c?.precio || 0) * 1.19, moneda, true)} c/IVA</span>}</span>
+        <span style={der}>{formatMonto(c?.precio, moneda, true)}</span>
       )}
 
-      {/* Subtotal: lo que suma la fila (neto, con su descuento) */}
-      <span style={{ ...der, fontWeight: esLigada ? 400 : 700, color: esLigada ? 'var(--muted)' : 'var(--text)' }}>
-        {formatMonto(netoFila, moneda)}
-        {(brutoFila || 0) > (netoFila || 0) && <span style={{ ...nota, textDecoration: 'line-through' }}>{formatMonto(brutoFila, moneda)}</span>}
+      {/* Subtotal: precio × cantidad, antes del descuento */}
+      <span style={{ ...der, color: esLigada ? 'var(--muted)' : 'var(--text)' }}>
+        {formatMonto(brutoFila, moneda)}
         {delGrupo && fila && <span style={nota}>con instalación</span>}
       </span>
 
@@ -410,17 +400,22 @@ function FilaLinea({ l, esLigada, cols, calc, moneda, fila, ligadas, conMano, de
         )}
       </span>
 
-      {/* IVA: en materiales, si el precio ya lo trae; en lo demás, si lleva IVA o es exento */}
+      {/* Total de la línea: con su descuento (neto; el IVA se suma al final de la cotización) */}
+      <span style={{ ...der, fontWeight: esLigada ? 400 : 700, color: esLigada ? 'var(--muted)' : 'var(--text)' }}>
+        {formatMonto(netoFila, moneda)}
+        {!exenta && !esLigada && <span style={nota}>+ IVA {formatMonto(qm(((netoFila || 0) * IVA) / 100, moneda), moneda)}</span>}
+      </span>
+
+      {/* IVA: lleva IVA (se suma al final) o es exento */}
       <label style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 1, paddingTop: '0.35rem', cursor: editable ? 'pointer' : 'default' }}
-        title={material
-          ? (exenta ? 'Exento de IVA (se cambia en ⋯)' : 'Material: marcado, el precio escrito ya trae el IVA incluido (se calcula el neto); sin marcar, es neto y se le suma el IVA')
-          : 'Marcado: lleva IVA (se le suma el 19 %). Sin marcar: exento (va al total sin IVA)'}>
-        <input type="checkbox" disabled={!editable || (material && exenta)} aria-label="IVA"
-          checked={material ? conIvaAdentro : !exenta}
-          onChange={e => acc.cambiar(l.id, material ? { ivaIncluido: e.target.checked } : { iva: e.target.checked ? 19 : 0 })}
+        title="Marcado: lleva IVA (se le suma el 19 % en el total). Sin marcar: exento (va al total sin IVA)">
+        <input type="checkbox" disabled={!editable} aria-label="Lleva IVA" checked={!exenta}
+          onChange={e => {
+            if (delGrupo) [l, ...ligadas].forEach(x => acc.cambiar(x.id, { iva: e.target.checked ? 19 : 0 }));
+            else acc.cambiar(l.id, { iva: e.target.checked ? 19 : 0 });
+          }}
           style={{ accentColor: 'var(--y-brand)', width: 16, height: 16 }} />
-        <span style={{ fontSize: '0.6rem', color: 'var(--muted)', whiteSpace: 'nowrap' }}>
-          {material ? (exenta ? 'exento' : conIvaAdentro ? 'incluido' : 'neto') : exenta ? 'exento' : '+19%'}</span>
+        <span style={{ fontSize: '0.6rem', color: 'var(--muted)', whiteSpace: 'nowrap' }}>{exenta ? 'exento' : 'con IVA'}</span>
       </label>
 
       {/* Más acciones */}
@@ -442,11 +437,6 @@ function FilaLinea({ l, esLigada, cols, calc, moneda, fila, ligadas, conMano, de
                   ))}
                 </div>
               )}
-              {material && (
-                <button type="button" style={{ ...opcion, borderTop: '1px solid var(--border2)' }}
-                  onClick={() => { cerrar(); acc.cambiar(l.id, exenta ? { iva: 19 } : { iva: 0, ivaIncluido: false }); }}>
-                  <Percent size={13} style={iconoMenu} /> {exenta ? 'Que lleve IVA' : 'Exento de IVA'}</button>
-              )}
               <button type="button" style={{ ...opcion, borderTop: '1px solid var(--border2)', color: 'var(--danger)' }} onClick={() => { cerrar(); acc.quitar(l.id); }}>
                 <Trash2 size={13} style={iconoMenu} /> {!esLigada && ligadas.length ? 'Quitar (con su instalación)' : 'Quitar'}</button>
             </>)}
@@ -454,6 +444,24 @@ function FilaLinea({ l, esLigada, cols, calc, moneda, fila, ligadas, conMano, de
         )}
       </span>
     </div>
+  );
+}
+
+/** La ganancia (lo que se suma al costo) que deja esa utilidad después del descuento de la línea. */
+function gananciaParaUtilidad(u: number, descuento?: number | null) {
+  const x = Math.min(Math.max(u, 0), 95) / 100;
+  const dto = Math.min(Math.max(descuento || 0, 0), 99.9) / 100;
+  return (1 / ((1 - x) * (1 - dto)) - 1) * 100;
+}
+
+/** «Costo con IVA»: el costo escrito es un precio de mercado con IVA; se calcula con su neto. */
+function ConIva({ l, acc, neto }: { l: Linea; acc: AccionesLinea; neto?: string | null }) {
+  return (
+    <label title="Marca si el costo que escribiste trae IVA (precio de mercado): se calcula con el neto (÷ 1,19)"
+      style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: '0.66rem', color: l.ivaIncluido ? 'var(--text)' : 'var(--muted)', cursor: 'pointer', whiteSpace: 'nowrap' }}>
+      <input type="checkbox" checked={!!l.ivaIncluido} onChange={e => acc.cambiar(l.id, { ivaIncluido: e.target.checked })} style={{ accentColor: 'var(--y-brand)', width: 13, height: 13 }} />
+      con IVA{neto ? ` · neto ${neto}` : ''}
+    </label>
   );
 }
 

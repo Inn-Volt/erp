@@ -9,8 +9,8 @@
  *   descuento = subtotal × % descuento                redondeado a la moneda
  *   neto      = subtotal − descuento
  *
- * IVA de cada línea: afecta (se le suma el 19 %) o exenta (iva 0). Un material con «IVA
- * incluido» trae el IVA adentro de su costo y su precio: se calcula con el neto (÷ 1,19).
+ * IVA de cada línea: afecta (se le suma el 19 %) o exenta (iva 0). Una línea con «costo con
+ * IVA» (precio de mercado) trae el IVA adentro de su costo y su precio: se calcula con el neto (÷ 1,19).
  * Totales: Subtotal − Descuento = Neto; IVA = afecto × 19 %; Neto + IVA = Total.
  * Cada pieza ya está redondeada y las cuentas son sumas: siempre cuadran.
  * En UF el precio unitario va a 0,0001 y los montos a 0,01.
@@ -39,7 +39,7 @@ export const qp = (v: number, m: Moneda) => q(v, CUANTO_PRECIO[m]);
 
 export const esExenta = (l: Linea) => (l.iva ?? IVA) === 0;
 /** Cuánto IVA traen adentro el costo y el precio escritos (1 = son netos). */
-export const factorIva = (l: Linea) => (l.ivaIncluido && l.categoria === 'material' && !esExenta(l) ? 1 + IVA / 100 : 1);
+export const factorIva = (l: Linea) => (l.ivaIncluido && !esExenta(l) ? 1 + IVA / 100 : 1);
 export const esFuera = (l: Linea) => !!l.fuera;
 export const esDelCatalogo = (l: Linea) => !!l.itemId && !l.fuera;
 export const esDeAntes = (l: Linea) => !l.itemId && !l.fuera;

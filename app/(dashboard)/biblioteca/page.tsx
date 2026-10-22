@@ -20,6 +20,11 @@ import { fetchConSesion } from '@/lib/fetchConSesion';
 import EditorReceta from '@/components/cotizador/EditorReceta';
 import { catalogoCotService, familiasService, recetasCotService } from '@/services/cotizador';
 import { precioCatalogo } from '@/lib/cotizador/calculo';
+import { gananciaDesdeUtilidad, utilidadDesdeGanancia } from '@/lib/cotizador/utilidad';
+
+/** En pantalla se habla de utilidad (% del precio que queda); por dentro se guarda la ganancia (lo que se suma al costo). */
+const util = (g: number | null | undefined) => (g === null || g === undefined ? null : Math.round(utilidadDesdeGanancia(g) * 10) / 10);
+const gan = (u: number) => Math.round(gananciaDesdeUtilidad(u) * 100) / 100;
 import type { ArticuloCatalogo, Familia } from '@/lib/cotizador/tipos';
 import type { RecetaCompleta } from '@/lib/cotizador/recetas';
 import PageHeader from '@/components/PageHeader';
@@ -37,7 +42,7 @@ const fieldLabel: React.CSSProperties = {
 };
 
 // ══════════════════════════════════════════════════════════════════════════════
-// MODAL: Ítem de catálogo (con familia de precio, ganancia propia y mano de obra ligada)
+// MODAL: Ítem de catálogo (con familia de precio, utilidad propia y mano de obra ligada)
 // ══════════════════════════════════════════════════════════════════════════════
 type ItemEdit = Partial<CatalogoItem> & {
   familia_precio_id?: string | null; ganancia_propia?: number | null; marca?: string | null; modelo?: string | null;
@@ -67,7 +72,7 @@ function ItemModal({ item, familias, manosDeObra, conFase4, onClose, onSaved }: 
     if (!form.descripcion?.trim()) { error('La descripción es obligatoria'); return; }
     let motivo: string | null = null;
     if (conFase4 && (item?.ganancia_propia ?? null) !== (form.ganancia_propia ?? null) && item?.id) {
-      motivo = prompt('¿Por qué cambias la ganancia propia de este producto?')?.trim() || null;
+      motivo = prompt('¿Por qué cambias la utilidad propia de este producto?')?.trim() || null;
       if (!motivo) return;
     }
     setSaving(true);
@@ -141,18 +146,18 @@ function ItemModal({ item, familias, manosDeObra, conFase4, onClose, onSaved }: 
                 <span style={fieldLabel}>Familia de precio</span>
                 <select style={field} value={form.familia_precio_id || ''} onChange={e => set('familia_precio_id', e.target.value || null)}>
                   <option value="">Sin familia (sin precio)</option>
-                  {familias.filter(f => f.catalogo === catalogoDe && (f.activo || f.id === form.familia_precio_id)).map(f => <option key={f.id} value={f.id}>{f.nombre} · {f.ganancia} %</option>)}
+                  {familias.filter(f => f.catalogo === catalogoDe && (f.activo || f.id === form.familia_precio_id)).map(f => <option key={f.id} value={f.id}>{f.nombre} · utilidad {util(f.ganancia)} %</option>)}
                 </select>
               </div>
               <div>
-                <span style={fieldLabel}>Ganancia propia % (opcional)</span>
-                <NumeroInput style={field} min={0} mostrarCero sufijo="%" value={form.ganancia_propia} placeholder={familia ? `La de la familia: ${familia.ganancia} %` : ''}
-                  onChange={v => set('ganancia_propia', v)} onVacio={() => set('ganancia_propia', null)} />
+                <span style={fieldLabel}>Utilidad propia % (opcional)</span>
+                <NumeroInput style={field} min={0} max={95} decimales={1} mostrarCero sufijo="%" value={util(form.ganancia_propia)} placeholder={familia ? `La de la familia: ${util(familia.ganancia)} %` : ''}
+                  onChange={v => set('ganancia_propia', v === null ? null : gan(Math.min(v, 95)))} onVacio={() => set('ganancia_propia', null)} />
               </div>
             </div>
             <div style={{ background: 'var(--bg3)', borderRadius: 8, padding: '0.55rem 0.75rem', fontSize: '0.84rem', color: 'var(--text)' }}>
-              Precio de venta: <b>{precio === null ? 'sin precio (ponle familia o ganancia)' : formatCLP(precio)}</b>
-              {precio !== null && <span style={{ color: 'var(--muted)' }}> = {formatCLP(cleanNumber(form.costo))} × (1 + {ganancia} %), hacia arriba a {familia?.redondeo === 1000 ? 'mil' : familia?.redondeo === 100 ? 'la centena' : familia?.redondeo === 10 ? 'la decena' : 'el peso'}</span>}
+              Precio de venta: <b>{precio === null ? 'sin precio (ponle familia o utilidad)' : formatCLP(precio)}</b>
+              {precio !== null && <span style={{ color: 'var(--muted)' }}> · costo {formatCLP(cleanNumber(form.costo))} con {util(ganancia)} % de utilidad, hacia arriba a {familia?.redondeo === 1000 ? 'mil' : familia?.redondeo === 100 ? 'la centena' : familia?.redondeo === 10 ? 'la decena' : 'el peso'}</span>}
             </div>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '0.6rem' }}>
               <div><span style={fieldLabel}>Marca</span><input style={field} value={form.marca || ''} onChange={e => set('marca', e.target.value)} /></div>
@@ -197,7 +202,7 @@ function ItemModal({ item, familias, manosDeObra, conFase4, onClose, onSaved }: 
 }
 
 // ══════════════════════════════════════════════════════════════════════════════
-// Familias de precio: % de ganancia (sobre el costo, incluye imprevistos) y redondeo
+// Familias de precio: utilidad % (en pantalla; se guarda como ganancia sobre el costo) y redondeo
 // ══════════════════════════════════════════════════════════════════════════════
 function FamiliasPrecio({ familias, items, editable, onCambio }: { familias: Familia[]; items: CatalogoItem[]; editable: boolean; onCambio: () => void }) {
   const { success, error } = useToast();
@@ -211,18 +216,18 @@ function FamiliasPrecio({ familias, items, editable, onCambio }: { familias: Fam
     try { await familiasService.guardar(f); success(ok); onCambio(); }
     catch (e) { error(e instanceof Error ? e.message : 'No se pudo guardar'); }
   };
-  const cambiarGanancia = (f: Familia, v: string) => {
-    const g = Number(v);
-    if (!(g >= 0) || g === f.ganancia) return;
-    const motivo = prompt(`Cambiar la ganancia de «${f.nombre}» de ${f.ganancia} % a ${g} % cambia al instante el precio de sus ${usos[f.id] || 0} productos (las cotizaciones guardadas no cambian). ¿Por qué?`);
+  const cambiarUtilidad = (f: Familia, v: string) => {
+    const u = Number(String(v).replace(',', '.'));
+    if (!(u >= 0) || u > 95 || u === util(f.ganancia)) { onCambio(); return; }
+    const motivo = prompt(`Cambiar la utilidad de «${f.nombre}» de ${util(f.ganancia)} % a ${u} % cambia al instante el precio de sus ${usos[f.id] || 0} productos (las cotizaciones guardadas no cambian). ¿Por qué?`);
     if (!motivo?.trim()) { onCambio(); return; }
-    guardar({ id: f.id, ganancia: g, ultimo_motivo: motivo.trim() }, 'Ganancia cambiada');
+    guardar({ id: f.id, ganancia: gan(u), ultimo_motivo: motivo.trim() }, 'Utilidad cambiada');
   };
   const REDONDEOS: [number, string][] = [[1, 'al peso'], [10, 'a la decena'], [100, 'a la centena'], [1000, 'al mil']];
   return (
     <div className="panel-y">
       <p style={{ padding: '0.8rem 1rem 0', margin: 0, fontSize: '0.8rem', color: 'var(--muted)' }}>
-        Precio de venta = costo × (1 + ganancia %), siempre hacia arriba al redondeo de su familia. Un producto puede tener su propia ganancia.
+        Utilidad = de lo que paga el cliente (neto), qué parte queda para InnVolt (costo $60.000 con 30 % → $85.714). El precio va hacia arriba al redondeo de su familia. Un producto puede tener su propia utilidad.
       </p>
       {(['bodega', 'servicios'] as const).map(cat => (
         <div key={cat} style={{ padding: '0.8rem 1rem' }}>
@@ -230,8 +235,9 @@ function FamiliasPrecio({ familias, items, editable, onCambio }: { familias: Fam
           {familias.filter(f => f.catalogo === cat).map(f => (
             <div key={f.id} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '0.35rem 0', borderBottom: '1px solid var(--border-soft)', opacity: f.activo ? 1 : 0.55, flexWrap: 'wrap' }}>
               <span style={{ flex: 1, minWidth: 160, fontSize: '0.88rem', color: 'var(--text)' }}>{f.nombre} <span style={{ fontSize: '0.72rem', color: 'var(--muted)' }}>· {usos[f.id] || 0} productos</span></span>
-              <input className="input" type="number" min={0} step="any" defaultValue={f.ganancia} disabled={!editable} key={`${f.id}-${f.ganancia}`}
-                onBlur={e => cambiarGanancia(f, e.target.value)} style={{ width: 90, textAlign: 'right' }} /> %
+              <input className="input" type="number" min={0} max={95} step="any" defaultValue={util(f.ganancia) ?? 0} disabled={!editable} key={`${f.id}-${f.ganancia}`}
+                aria-label={`Utilidad de ${f.nombre}`} title="Utilidad %: de lo que paga el cliente, qué parte queda"
+                onBlur={e => cambiarUtilidad(f, e.target.value)} style={{ width: 90, textAlign: 'right' }} /> % utilidad
               <select className="input" style={{ width: 140 }} disabled={!editable} value={f.redondeo} onChange={e => guardar({ id: f.id, redondeo: Number(e.target.value) }, 'Redondeo cambiado')}>
                 {REDONDEOS.map(([v, t]) => <option key={v} value={v}>{t}</option>)}
               </select>
@@ -248,10 +254,10 @@ function FamiliasPrecio({ familias, items, editable, onCambio }: { familias: Fam
             <option value="bodega">Materiales y equipos</option><option value="servicios">Servicios</option></select>
           <input className="input" style={{ flex: 1, minWidth: 160 }} value={nueva.nombre} onChange={e => setNueva({ ...nueva, nombre: e.target.value })} placeholder="Nombre: Equipos 25 %" />
           <NumeroInput className="input" envoltura={{ width: 90 }} min={0} mostrarCero value={nueva.ganancia === '' ? null : Number(String(nueva.ganancia).replace(',', '.'))}
-            onChange={v => setNueva({ ...nueva, ganancia: String(v) })} onVacio={() => setNueva({ ...nueva, ganancia: '' })} /> %
+            onChange={v => setNueva({ ...nueva, ganancia: String(Math.min(v, 95)) })} onVacio={() => setNueva({ ...nueva, ganancia: '' })} ariaLabel="Utilidad de la familia nueva" /> % utilidad
           <select className="input" style={{ width: 130 }} value={nueva.redondeo} onChange={e => setNueva({ ...nueva, redondeo: Number(e.target.value) })}>
             {REDONDEOS.map(([v, t]) => <option key={v} value={v}>{t}</option>)}</select>
-          <button className="btn btn-primary btn-sm" disabled={!nueva.nombre.trim()} onClick={() => { guardar({ catalogo: nueva.catalogo, nombre: nueva.nombre.trim(), ganancia: Number(nueva.ganancia) || 0, redondeo: nueva.redondeo }, 'Familia creada'); setNueva({ ...nueva, nombre: '' }); }}>
+          <button className="btn btn-primary btn-sm" disabled={!nueva.nombre.trim()} onClick={() => { guardar({ catalogo: nueva.catalogo, nombre: nueva.nombre.trim(), ganancia: gan(Number(nueva.ganancia) || 0), redondeo: nueva.redondeo }, 'Familia creada'); setNueva({ ...nueva, nombre: '' }); }}>
             <Plus size={13} /> Agregar familia</button>
         </div>
       )}
