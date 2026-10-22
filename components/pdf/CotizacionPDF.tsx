@@ -195,9 +195,16 @@ export default function CotizacionPDF(p: CotizacionPDFProps) {
         {empresa.rut ? <Text style={s.linea}>RUT: {empresa.rut}</Text> : null}
         {empresa.giro ? <Text style={s.linea}>Giro: {empresa.giro}</Text> : null}
         {empresa.direccion ? <Text style={s.linea}>{empresa.direccion}</Text> : null}
-        {/* El teléfono va una sola vez: junto al contacto; el de la empresa, solo si el contacto no trae uno. */}
-        <Text style={s.linea}>{[p.vendedor?.nombre && p.vendedor?.telefono ? null : empresa.telefono, empresa.email, empresa.website].filter(Boolean).join('  ·  ')}</Text>
-        {p.vendedor?.nombre ? <Text style={[s.linea, { color: INK }]}>Contacto: {p.vendedor.nombre}{p.vendedor.cargo ? ` (${p.vendedor.cargo})` : ''}{p.vendedor.telefono ? `  ·  ${p.vendedor.telefono}` : ''}</Text> : null}
+        {/* La empresa: solo correo y web. El teléfono va una vez, con el responsable (el de la
+            empresa si el responsable no tiene uno). */}
+        {empresa.email || empresa.website ? <Text style={s.linea}>{[empresa.email, empresa.website].filter(Boolean).join('  ·  ')}</Text> : null}
+        {p.vendedor?.nombre ? <>
+          <Text style={[s.linea, { color: INK, marginTop: 3 }]}>Responsable: <Text style={{ fontFamily: 'Helvetica-Bold' }}>{p.vendedor.nombre}</Text>{p.vendedor.cargo ? `  ·  ${p.vendedor.cargo}` : ''}</Text>
+          {(() => {
+            const datos = [p.vendedor.telefono || empresa.telefono, p.vendedor.email && p.vendedor.email !== empresa.email ? p.vendedor.email : null].filter(Boolean);
+            return datos.length ? <Text style={[s.linea, { color: INK }]}>{datos.join('  ·  ')}</Text> : null;
+          })()}
+        </> : empresa.telefono ? <Text style={s.linea}>{empresa.telefono}</Text> : null}
       </View>
       <View style={s.folio}>
         <Text style={[s.folioLbl, { color: acento }]}>{tituloDoc}</Text>

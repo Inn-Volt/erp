@@ -9,12 +9,14 @@ import type { Vendedor } from '@/types';
 export const vendedoresService = {
   async mapa(): Promise<Record<string, Vendedor>> {
     try {
-      const { data, error } = await supabase.from('profiles').select('id, nombre, email, cargo, telefono');
-      if (error) throw error;
-      return Object.fromEntries((data || []).map(p => [p.id as string, {
+      let r = await supabase.from('profiles').select('id, nombre, email, cargo, telefono, empresa_id, activo');
+      if (r.error) r = await supabase.from('profiles').select('id, nombre, email, cargo, telefono') as typeof r;
+      if (r.error) throw r.error;
+      return Object.fromEntries((r.data || []).map(p => [p.id as string, {
         id: p.id as string,
         nombre: (p.nombre as string) || (p.email as string) || '',
         cargo: p.cargo as string | null, telefono: p.telefono as string | null, email: p.email as string | null,
+        empresa_id: (p.empresa_id as string | null) ?? null, activo: p.activo !== false,
       }]));
     } catch {
       return {};
