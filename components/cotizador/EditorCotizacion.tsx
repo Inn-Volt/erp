@@ -81,7 +81,7 @@ function docVacio(): CotizacionDoc {
 const huella = (d: CotizacionDoc) => JSON.stringify([
   d.titulo, d.cliente_id, d.sucursal_id, d.contacto_id, d.empresa_id, d.plantilla_id, d.items, d.partidas, d.moneda, d.valor_uf,
   d.fecha_valor_uf, d.que_ve_cliente, d.titulo_valorizacion, d.descripcion_general, d.aclaraciones, d.secciones, d.valida_hasta,
-  d.valida_hasta_a_mano, d.incluir_fotos, d.proyecto_id,
+  d.valida_hasta_a_mano, d.incluir_fotos, d.proyecto_id, d.vendedor_id,
 ]);
 
 export default function EditorCotizacion({ id, clonarDe, clienteInicial, solicitudInicial, otInicial, visitaInicial, proyectoInicial }: {
@@ -148,10 +148,14 @@ export default function EditorCotizacion({ id, clonarDe, clienteInicial, solicit
   const cliente = useMemo(() => clientes.find(c => c.id === d.cliente_id) || d.clientes || null, [clientes, d.cliente_id, d.clientes]);
   const empresa = useMemo(() => empresas.find(e => e.id === d.empresa_id) || empresas.find(e => e.id === perfil?.empresa_id) || empresas[0] || null,
     [empresas, d.empresa_id, perfil?.empresa_id]);
+  // El responsable: quien la empezó, o el usuario que se elija; sus datos van en el PDF.
   const vendedor: Vendedor | null = useMemo(() => {
     const vid = d.vendedor_id || perfil?.id;
     return (vid && equipo[vid]) || null;
   }, [d.vendedor_id, perfil?.id, equipo]);
+  const usuarios = useMemo(() => Object.values(equipo)
+    .filter(u => u.activo !== false || u.id === vendedor?.id)
+    .sort((a, b) => a.nombre.localeCompare(b.nombre, 'es')), [equipo, vendedor?.id]);
   const contacto = contactos.find(c => c.id === d.contacto_id) || null;
   const sucursal = sitios.find(s => s.id === d.sucursal_id) || null;
   const hoy = fechaLocal();
@@ -468,6 +472,8 @@ export default function EditorCotizacion({ id, clonarDe, clienteInicial, solicit
     return {
       titulo: x.titulo.trim() || 'Cotización', cliente_id: x.cliente_id, sucursal_id: x.sucursal_id || null, contacto_id: x.contacto_id || null,
       empresa_id: x.empresa_id || empresa?.id || null, plantilla_id: x.plantilla_id || null, plantilla_version: x.plantilla_version || null,
+      // Sin valor, la base pone a quien la crea.
+      ...(x.vendedor_id || perfil?.id ? { vendedor_id: x.vendedor_id || perfil?.id } : {}),
       items, partidas: x.partidas, moneda: x.moneda, valor_uf: x.moneda === 'UF' ? x.valor_uf || null : null,
       fecha_valor_uf: x.moneda === 'UF' ? x.fecha_valor_uf || null : null,
       que_ve_cliente: x.que_ve_cliente, mostrar_detalle: x.que_ve_cliente === 'detalle', titulo_valorizacion: x.titulo_valorizacion || null,
@@ -823,7 +829,7 @@ export default function EditorCotizacion({ id, clonarDe, clienteInicial, solicit
             {d.revision > 0 && <span className="badge" style={{ background: 'var(--bg3)', color: 'var(--muted)', fontSize: '0.72rem' }}>Revisión {d.revision}</span>}
           </h1>
           <p className="pg-subtitle">
-            {cot ? [cliente?.nombre_cliente, `creada el ${formatDate(cot.created_at)}${vendedor ? ` por ${vendedor.nombre}` : ''}`, cot.origen_id ? 'copia de otra cotización' : ''].filter(Boolean).join(' · ')
+            {cot ? [cliente?.nombre_cliente, `creada el ${formatDate(cot.created_at)}`, vendedor ? `responsable: ${vendedor.nombre}` : '', cot.origen_id ? 'copia de otra cotización' : ''].filter(Boolean).join(' · ')
               : 'Todavía no tiene N°: lo toma al guardarla por primera vez.'}
           </p>
         </div>
@@ -942,11 +948,20 @@ export default function EditorCotizacion({ id, clonarDe, clienteInicial, solicit
                   <option value="">{contactos.length ? 'Sin contacto' : 'El cliente no tiene contactos'}</option>
                   {contactos.map(c => <option key={c.id} value={c.id}>{c.nombre}{c.email ? ` · ${c.email}` : ' · sin correo'}</option>)}
                 </select></label>
-              <label><span style={etiqueta}>Cotiza (empresa emisora)</span>
-                <select className="input" disabled={!editable} value={empresa?.id || ''} onChange={e => set({ empresa_id: e.target.value || null })}>
-                  {empresas.map(e => <option key={e.id} value={e.id}>{e.nombre}</option>)}
+              <label><span style={etiqueta}>Responsable (sus datos van en el PDF)</span>
+                <select className="input" disabled={!editable || usuarios.length === 0} value={vendedor?.id || ''}
+                  onChange={e => {
+                    const u = equipo[e.target.value];
+                    // La empresa emisora es la del usuario (Usuarios); si no tiene, sigue la que estaba.
+                    set({ vendedor_id: e.target.value || null, ...(u?.empresa_id ? { empresa_id: u.empresa_id } : {}) });
+                  }}>
+                  {!vendedor && <option value="">—</option>}
+                  {usuarios.map(u => <option key={u.id} value={u.id}>{u.nombre}{u.cargo ? ` · ${u.cargo}` : ''}{u.id === perfil?.id ? ' (tú)' : ''}</option>)}
                 </select>
-                {vendedor && <span style={{ fontSize: '0.74rem', color: 'var(--muted)' }}>Firma: {firmaVendedor(vendedor, empresa?.nombre || '')}</span>}
+                {vendedor && <span style={{ fontSize: '0.74rem', color: 'var(--muted)' }}>
+                  {[vendedor.telefono || 'sin teléfono (el PDF pone el de la empresa)', vendedor.email].filter(Boolean).join(' · ')}
+                  {empresas.length > 1 && empresa ? ` · ${empresa.nombre}` : ''}
+                </span>}
               </label>
               {(proyectos.length > 0 || d.proyecto_id) && (
                 <label><span style={etiqueta}>Proyecto</span>

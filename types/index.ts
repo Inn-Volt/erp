@@ -420,4 +420,7 @@ export interface Vendedor {
   cargo?: string | null;
   telefono?: string | null;
   email?: string | null;
+  /** Empresa emisora con la que cotiza (Usuarios). */
+  empresa_id?: string | null;
+  activo?: boolean;
 }
