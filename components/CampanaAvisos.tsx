@@ -37,6 +37,7 @@ const ICONO: Record<string, { Icon: React.ElementType; color: string }> = {
   visita_sin_cerrar: { Icon: HelpCircle, color: '#d97706' },
   visita_realizada: { Icon: CalendarCheck, color: 'var(--success)' },
   informe_visita: { Icon: ClipboardCheck, color: 'var(--success)' },
+  cotizacion_asignada: { Icon: UserPlus, color: 'var(--y)' },
 };
 
 /** Botón de la campana + lista. Los datos vienen de useAvisos (una sola suscripción). */

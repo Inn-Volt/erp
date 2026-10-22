@@ -19,6 +19,19 @@ export interface Aviso {
   created_at: string;
 }
 
+/**
+ * Con la app abierta en segundo plano, el aviso se muestra en el sistema. Si este equipo tiene
+ * los avisos al celular activos, ya lo muestra el push: no se repite.
+ */
+async function avisoDelSistema(a: Aviso): Promise<void> {
+  try {
+    if (!document.hidden || !('Notification' in window) || Notification.permission !== 'granted') return;
+    const reg = await navigator.serviceWorker?.getRegistration('/');
+    if (await reg?.pushManager?.getSubscription()) return;
+    new Notification(a.titulo, { body: a.cuerpo || '', icon: '/icon-192.png', tag: a.id });
+  } catch { /* sin notificaciones del sistema (Android solo las permite desde el service worker) */ }
+}
+
 export interface DatosAvisos {
   avisos: Aviso[];
   noLeidos: number;
@@ -45,11 +58,7 @@ export function useAvisos(userId: string | null): DatosAvisos {
         (p) => {
           const nuevo = p.new as Aviso;
           setAvisos(prev => (prev.some(a => a.id === nuevo.id) ? prev : [nuevo, ...prev].slice(0, 30)));
-          try {
-            if (document.hidden && 'Notification' in window && Notification.permission === 'granted') {
-              new Notification(nuevo.titulo, { body: nuevo.cuerpo || '', icon: '/icon-192.png' });
-            }
-          } catch { /* sin notificaciones del sistema */ }
+          avisoDelSistema(nuevo);
         })
       .subscribe();
     const t = setInterval(cargar, 60_000);
