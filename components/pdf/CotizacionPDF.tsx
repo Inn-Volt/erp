@@ -10,7 +10,8 @@
  *      totales, que siempre va con las últimas filas (nunca solo en una hoja).
  *   5. Cierre, en UN bloque que no se corta: aclaraciones y garantías, «Cómo aceptar», datos
  *      para transferir y firmas. Si cabe, sigue a los totales; si no, pasa entero a la hoja
- *      siguiente. Con aclaraciones largas, la letra se achica un poco para que quepa en una hoja.
+ *      siguiente. Con aclaraciones largas, la letra baja un poco (hasta 8 pt) para que quepa en una
+ *      hoja; si ni así, parte en hoja nueva y sigue en la siguiente.
  *   6. Registro fotográfico (si viene de un levantamiento con fotos).
  * Nunca imprime costos, márgenes ni el tipo de cada línea. Marca en diagonal: BORRADOR,
  * ANULADA o EJEMPLO.
@@ -143,12 +144,12 @@ function TextoFormato({ texto, estilo = s.texto, antes }: {
 
 /**
  * Alto aproximado (en puntos) de un texto con formato a ese tamaño de letra, en el ancho útil
- * de la hoja. Es una cota hacia arriba (Helvetica promedia ~0,5 em por letra; se usa 0,55).
+ * de la hoja. Es una cota hacia arriba: medido en el PDF, el texto promedia 0,445 em por letra; se usa 0,48.
  */
 function altoTexto(texto: string | null | undefined, tam: number, interlinea: number, ancho = 531): number {
   if (!(texto || '').trim()) return 0;
   const linea = tam * interlinea;
-  const filas = (t: string, w: number) => Math.max(1, Math.ceil(t.length / Math.max(20, Math.floor(w / (tam * 0.55)))));
+  const filas = (t: string, w: number) => Math.max(1, Math.ceil(t.length / Math.max(20, Math.floor(w / (tam * 0.48)))));
   const plano = (b: unknown) => ((b as { content?: { text?: string }[] }).content || []).map(n => n.text || '').join('');
   const lista = (l: Lista, w: number): number => (l.content || []).reduce((suma, it) => suma + 1.5 + (it.content || [])
     .reduce((a, b) => a + (esLista(b) ? lista(b, w - 12) : filas(plano(b), w - 13) * linea), 0), 0);
@@ -489,12 +490,15 @@ export default function CotizacionPDF(p: CotizacionPDFProps) {
   // El cierre (aclaraciones + cómo aceptar + transferencia + firmas) va en una sola hoja. Si las
   // aclaraciones son largas, con letra un poco menor; solo si ni así caben, se deja cortar.
   const fijoCierre = 32 + 14 + 100 + (ver('mostrar_firmas') ? 95 : 0);
-  const letraCierre = [{ fontSize: 8.3, lineHeight: 1.55 }, { fontSize: 7.6, lineHeight: 1.45 }, { fontSize: 7, lineHeight: 1.35 }]
+  // Letra de las aclaraciones: algo mayor que la del resto (se leen con atención) y, para que el
+  // cierre quepa en una hoja, baja a lo más a 8 pt; más chica cuesta leerla.
+  const LETRA_ACLARACIONES = { fontSize: 8.8, lineHeight: 1.5 };
+  const letraCierre = [LETRA_ACLARACIONES, { fontSize: 8.4, lineHeight: 1.45 }, { fontSize: 8, lineHeight: 1.4 }]
     .find(l => fijoCierre + altoTexto(doc.aclaraciones, l.fontSize, l.lineHeight) <= ALTO_UTIL);
   const HojaFinal = () => (
     <View wrap={!letraCierre}>
       {doc.aclaraciones?.trim() ? (<View style={{ marginBottom: 14 }}>
-        <TextoFormato texto={doc.aclaraciones} estilo={letraCierre ? { ...s.texto, ...letraCierre } : s.texto}
+        <TextoFormato texto={doc.aclaraciones} estilo={{ ...s.texto, ...(letraCierre || LETRA_ACLARACIONES) }}
           antes={<Text style={[s.bloqueTitulo, { borderBottomColor: acento }]}>ACLARACIONES Y GARANTÍAS</Text>} />
       </View>) : null}
       {/* «Cómo aceptar», la transferencia y las firmas van juntos: las firmas nunca quedan solas. */}
