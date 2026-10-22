@@ -52,6 +52,7 @@ const MENU: { grupo: string; icono: React.ElementType; items: Item[] }[] = [
     { href: '/cotizador', label: 'Nueva cotización', exacto: true, permisos: ['cotizaciones.crear'], sub: true },
     { href: '/cotizador/plantillas', label: 'Plantillas', permisos: ['cotizaciones.aprobar'], sub: true },
     { href: '/cotizador/ajustes', label: 'Ajustes', permisos: ['cotizaciones.aprobar'], sub: true },
+    { href: '/cotizador/utilidad', label: 'Utilidad', permisos: ['cotizaciones.aprobar'], sub: true },
     { href: '/clientes', label: 'Clientes', permisos: ['clientes.ver'] },
     { href: '/traslados', label: 'Traslados', permisos: ['traslados.ver', 'traslados.gestionar'] },
   ] },

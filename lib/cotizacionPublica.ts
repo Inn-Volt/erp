@@ -97,7 +97,7 @@ export function vigencia(cot: Pick<FilaCotizacion, 'created_at' | 'condiciones_c
 /** Quita todo dato interno de un ítem (costos, márgenes, imprevistos). */
 function itemPublico(i: CotizacionItem & { ligadoA?: string | null; porUnidad?: number; ivaIncluido?: boolean }, moneda: Moneda): CotizacionItem & { ligadoA?: string | null; porUnidad?: number; itemId?: string } {
   // Un material con IVA incluido guarda su precio con IVA: al cliente va el neto (el IVA se suma en el total).
-  const conIva = !!i.ivaIncluido && i.categoria === 'material' && i.iva !== 0;
+  const conIva = !!i.ivaIncluido && i.iva !== 0;
   return {
     id: i.id, descripcion: i.descripcion, categoria: i.categoria,
     cantidad: i.cantidad, unidad: i.unidad, precio: conIva ? qp((i.precio || 0) / (1 + IVA / 100), moneda) : i.precio,

@@ -85,7 +85,7 @@ export default function BuscadorCatalogo({ catalogo, moneda, valorUf, onElegir, 
         </div>
         <button type="button" className="btn btn-ghost" onClick={() => setEscanear(true)} title="Escanear código de barras o QR" aria-label="Escanear"><ScanLine size={15} /></button>
         <button type="button" className="btn btn-ghost" onClick={() => { onFuera(texto.trim()); setTexto(''); }}
-          title="Algo que no está en la biblioteca: escribes qué es, su costo y su ganancia, solo para esta cotización">
+          title="Algo que no está en la biblioteca: escribes qué es, su costo y su utilidad, solo para esta cotización">
           <Plus size={14} /> Nuevo</button>
       </div>
       {abierto && texto.trim() && (
@@ -100,7 +100,7 @@ export default function BuscadorCatalogo({ catalogo, moneda, valorUf, onElegir, 
                   <span style={{ display: 'block', fontSize: '0.85rem', color: 'var(--text)', fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{a.descripcion}</span>
                   <span style={{ display: 'block', fontSize: '0.7rem', color: 'var(--muted)' }}>
                     {CATEGORIA_LABELS[a.categoria]}{a.codigo ? ` · ${a.codigo}` : ''}{a.marca ? ` · ${a.marca}` : ''}{a.modelo ? ` ${a.modelo}` : ''}
-                    {sinPrecio ? ' · sin precio: ponle familia o ganancia en la Biblioteca' : ''}
+                    {sinPrecio ? ' · sin precio: ponle familia o utilidad en la Biblioteca' : ''}
                   </span>
                 </span>
                 <span style={{ fontSize: '0.84rem', fontWeight: 700, color: 'var(--text)', whiteSpace: 'nowrap' }}>

@@ -154,6 +154,7 @@ export const PERMISO_DE_RUTA: { prefijo: string; permisos: string[] }[] = [
   { prefijo: '/cotizador/historial', permisos: ['cotizaciones.ver'] },
   { prefijo: '/cotizador/plantillas', permisos: ['cotizaciones.aprobar'] },
   { prefijo: '/cotizador/ajustes', permisos: ['cotizaciones.aprobar'] },
+  { prefijo: '/cotizador/utilidad', permisos: ['cotizaciones.aprobar'] },
   { prefijo: '/cotizador', permisos: ['cotizaciones.crear', 'cotizaciones.ver'] },
   { prefijo: '/agenda', permisos: ['agenda.ver'] },
   { prefijo: '/clientes', permisos: ['clientes.ver'] },

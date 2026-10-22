@@ -16,6 +16,7 @@ import TrabajoPanel from '@/components/trabajos/TrabajoPanel';
 import PlanCobro from './PlanCobro';
 import NumeroInput from '@/components/NumeroInput';
 import { textoPlano, tituloCorto } from '@/lib/textoFormato';
+import { gananciaPorOmision } from '@/lib/cotizador/utilidad';
 import EditorFormato from '@/components/EditorFormato';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
@@ -65,7 +66,6 @@ import { fechaLocal, formatDate, sumarDias, borradorDesdeAnalisis, mejorMatchCat
 
 const VER_COSTOS = 'innvolt-cotizacion-ver-costos';
 const folioDe = (n: number) => `IV-${String(n || 0).padStart(4, '0')}`;
-const GANANCIA_POR_TIPO: Record<string, number> = { material: 33, mano_obra: 92, servicio: 41, operacion: 41 };
 
 type Bloque = 'cliente' | 'cotizacion' | 'descripcion' | 'presentacion' | 'aclaraciones';
 
@@ -404,7 +404,7 @@ export default function EditorCotizacion({ id, clonarDe, clienteInicial, solicit
           items.push({
             id: nuevoId(), partidaId: p.id, descripcion: c.descripcion, categoria: c.categoria, unidad: c.unidad || 'un',
             cantidad: c.cantidad ?? 1, costo: aMoneda(c.costo || 0, moneda, valorUf, true), imprevistos: 0, margen: 0, precio: 0,
-            iva: IVA, descuento: 0, fuera: true, ganancia: GANANCIA_POR_TIPO[c.categoria] ?? 33,
+            iva: IVA, descuento: 0, fuera: true, ganancia: gananciaPorOmision(ajustes?.utilidad_por_tipo, c.categoria),
           });
         }
       }
@@ -430,7 +430,8 @@ export default function EditorCotizacion({ id, clonarDe, clienteInicial, solicit
     const conv = convertirIA(partidasIA, catalogo, d.moneda, d.valor_uf);
     const r = calcular(conv.items, conv.partidas, d.moneda, d.valor_uf);
     return { neto: r.totales.neto, iva: r.totales.iva, total: r.totales.total, porPartida: conv.partidas.map(p => r.partidas.get(p.id)?.neto || 0) };
-  }, [catalogo, d.moneda, d.valor_uf]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- convertirIA se rehace en cada render; depende de lo que se lista
+  }, [catalogo, d.moneda, d.valor_uf, ajustes]);
   const insertarConversa = (partidasIA: PartidaIAResuelta[], supuestos: string[]) => {
     insertarIA(partidasIA);
     if (supuestos.length) {
@@ -965,7 +966,7 @@ export default function EditorCotizacion({ id, clonarDe, clienteInicial, solicit
                   {cambioMoneda && <>
                     <button type="button" className="btn btn-ghost" onClick={() => setCambioMoneda(null)}>Cancelar</button>
                     <button type="button" className="btn btn-primary" disabled={!(Number(d.valor_uf) > 0)} onClick={() => convertir(cambioMoneda)}>Convertir a {cambioMoneda === 'UF' ? 'UF' : 'pesos'}</button>
-                    <p style={{ width: '100%', fontSize: '0.74rem', color: 'var(--muted)', margin: 0 }}>Los costos y los precios se convierten con este valor; las ganancias no cambian. La vuelta no es exacta.</p>
+                    <p style={{ width: '100%', fontSize: '0.74rem', color: 'var(--muted)', margin: 0 }}>Los costos y los precios se convierten con este valor; las utilidades no cambian. La vuelta no es exacta.</p>
                   </>}
                 </div>
               )}
@@ -1046,7 +1047,7 @@ export default function EditorCotizacion({ id, clonarDe, clienteInicial, solicit
                   }),
                   onAgregarDebajo: t => agregarPartida(t, p.id),
                   onArticulo: a => agregarArticulo(p, a),
-                  onFuera: texto => agregarLineas(p.id, [{ ...lineaFuera(texto, p.id), ganancia: GANANCIA_POR_TIPO.material }]),
+                  onFuera: texto => agregarLineas(p.id, [{ ...lineaFuera(texto, p.id), ganancia: gananciaPorOmision(ajustes?.utilidad_por_tipo, 'material') }]),
                   onReceta: r => {
                     if (d.moneda === 'UF' && !(Number(d.valor_uf) > 0)) { warning('Está en UF: escribe el valor de la UF antes de agregar.'); return; }
                     setAsistente({ receta: r, partidaId: p.id });
