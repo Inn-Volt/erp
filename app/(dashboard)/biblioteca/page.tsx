@@ -109,7 +109,7 @@ function ItemModal({ item, familias, manosDeObra, conFase4, onClose, onSaved }: 
       <div className="modal-box" style={{ maxWidth: 560, maxHeight: '90vh', overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
         <div style={{ flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '1.1rem 1.4rem', borderBottom: '1px solid var(--border2)' }}>
           <span className="section-label" style={{ margin: 0, paddingTop: 0 }}><Package size={13} /> {item?.id ? 'Editar ítem' : 'Nuevo ítem'}</span>
-          <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--muted)' }}><X size={16} /></button>
+          <button aria-label="Cerrar" onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--muted)' }}><X size={16} /></button>
         </div>
         <div style={{ padding: '1.25rem 1.4rem', display: 'flex', flexDirection: 'column', gap: '0.85rem', flex: 1, overflowY: 'auto', minHeight: 0 }}>
           <div>

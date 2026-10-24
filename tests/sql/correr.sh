@@ -7,12 +7,19 @@ set -uo pipefail
 export MSYS_NO_PATHCONV=1
 cd "$(dirname "$0")/../.."
 C=innvolt_ci_db
-IMG=public.ecr.aws/supabase/postgres:17.6.1.139
 psql_c() { docker exec "$C" psql -U "${2:-postgres}" -h 127.0.0.1 -d postgres -v ON_ERROR_STOP=1 -q -f "/tmp/$1"; }
 fallo=0
 
+# La misma imagen está en Docker Hub y en el registro público de AWS (que a veces limita las
+# descargas desde GitHub): se usa la primera que baje.
+IMG=
+for i in supabase/postgres:17.6.1.139 public.ecr.aws/supabase/postgres:17.6.1.139; do
+  for _ in 1 2 3; do docker pull -q "$i" >/dev/null 2>&1 && IMG=$i && break 2; sleep 10; done
+done
+[ -n "$IMG" ] || { echo "::error::No se pudo bajar la imagen de Postgres de Supabase"; exit 1; }
+
 docker rm -f "$C" >/dev/null 2>&1
-docker run -d --name "$C" -e POSTGRES_PASSWORD=solo_para_pruebas "$IMG" >/dev/null
+docker run -d --name "$C" -e POSTGRES_PASSWORD=solo_para_pruebas "$IMG" >/dev/null || { echo "::error::No partió el contenedor de prueba"; exit 1; }
 for _ in $(seq 1 60); do docker exec "$C" pg_isready -U postgres -h 127.0.0.1 >/dev/null 2>&1 && break; sleep 2; done
 sleep 5
 

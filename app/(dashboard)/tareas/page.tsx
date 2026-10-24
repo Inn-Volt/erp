@@ -94,6 +94,10 @@ export default function TareasPage() {
     finally { setCargando(false); }
   }, [toastError]);
   useEffect(() => { cargar(); }, [cargar]);
+  // ?nueva=1 (accesos rápidos) abre el formulario.
+  useEffect(() => {
+    if (new URLSearchParams(window.location.search).get('nueva') === '1') { setNueva(true); window.history.replaceState(null, '', '/tareas'); }
+  }, []);
 
   const hoy = fechaLocal();
   const lista = useMemo(() => tareas

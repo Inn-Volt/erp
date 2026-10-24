@@ -29,7 +29,7 @@ export default function ToastContainer({ toasts, onRemove }: Props) {
         <div key={t.id} className="toast" style={{ borderColor: COLORS[t.type] }}>
           <span style={{ flexShrink: 0, marginTop: 1 }}>{ICONS[t.type]}</span>
           <span style={{ flex: 1, color: 'var(--text)', lineHeight: 1.4 }}>{t.message}</span>
-          <button
+          <button aria-label="Cerrar aviso"
             onClick={() => onRemove(t.id)}
             style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--muted)', flexShrink: 0 }}
           >

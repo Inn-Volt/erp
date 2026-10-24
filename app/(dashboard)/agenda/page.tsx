@@ -1,5 +1,6 @@
 'use client';
 
+import { filaClicable } from '@/lib/a11y';
 import type { EmpresaInfo } from '@/components/pdf/PresupuestoPDF';
 import { supabase } from '@/lib/supabase';
 import InformesDeVisita from '@/components/informes/InformesDeVisita';
@@ -256,7 +257,7 @@ function AgendaModal({ cita, clientes, createdBy, prefill, onClose, onSaved, onD
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '1.25rem 1.5rem', borderBottom: '1px solid var(--border2)' }}>
           <p className="section-label" style={{ margin: 0, flex: 1 }}><Calendar size={13} /> {cita ? 'Editar cita' : 'Nueva cita'}</p>
           {cita && <a href={`/visita/${cita.id}`} className="btn btn-ghost btn-sm" style={{ marginRight: 8 }} title="Lo que ve el técnico: información e informes">Panel de la visita</a>}
-          <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--muted)' }}><X size={16} /></button>
+          <button aria-label="Cerrar" onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--muted)' }}><X size={16} /></button>
         </div>
 
         <form onSubmit={submit} style={{ display: 'flex', flexDirection: 'column', minHeight: 0, flex: 1 }}>
@@ -607,7 +608,9 @@ function AgendaContent() {
                   const tecnico = c.tecnico_id ? tecnicos[c.tecnico_id] : null;
                   const em = ESTADO_AGENDA_META[c.estado];
                   return (
-                    <div key={c.id} onClick={() => { if (puedeAgendar) setModal({ open: true, cita: c }); }}
+                    // Quien gestiona la agenda edita la cita; el resto (el técnico) abre el panel de la visita.
+                    <div key={c.id} {...filaClicable} onClick={() => { if (puedeAgendar) setModal({ open: true, cita: c }); else router.push(`/visita/${c.id}`); }}
+                      aria-label={`${c.titulo}, ${etiquetaDia(c.fecha)}${c.hora_inicio ? ` a las ${hhmm(c.hora_inicio)}` : ''}`}
                       style={{ display: 'flex', gap: '0.85rem', padding: '0.8rem 1rem', borderTop: '1px solid var(--border2)', cursor: 'pointer', alignItems: 'flex-start' }}>
                       <div style={{ minWidth: 52, textAlign: 'center', flexShrink: 0 }}>
                         <div style={{ fontFamily: 'var(--font-display)', fontWeight: 800, fontSize: '0.95rem', color: 'var(--text)' }}>{hhmm(c.hora_inicio) || '—'}</div>

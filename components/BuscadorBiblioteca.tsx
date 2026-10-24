@@ -206,7 +206,7 @@ export default function BuscadorBiblioteca({ supuestos, onInsertar, onInsertarRe
         {/* Header */}
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '1rem 1.3rem', borderBottom: '1px solid var(--border2)' }}>
           <span className="section-label" style={{ margin: 0, paddingTop: 0 }}><Search size={13} /> Insertar desde biblioteca</span>
-          <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--muted)' }}><X size={16} /></button>
+          <button aria-label="Cerrar" onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--muted)' }}><X size={16} /></button>
         </div>
 
         {/* Tabs + búsqueda */}
