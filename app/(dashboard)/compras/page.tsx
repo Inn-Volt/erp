@@ -164,7 +164,8 @@ function ComprasContent() {
   const [proveedores, setProveedores] = useState<{ nombre: string; rut: string | null }[]>([]);
   const [cargando, setCargando] = useState(true);
   const [falta, setFalta] = useState(false);
-  const [form, setForm] = useState<{ compra: Compra | null } | null>(null);
+  // ?nueva=1 (accesos rápidos) abre el formulario.
+  const [form, setForm] = useState<{ compra: Compra | null } | null>(() => (params.get('nueva') === '1' ? { compra: null } : null));
 
   const cargar = useCallback(async () => {
     try {

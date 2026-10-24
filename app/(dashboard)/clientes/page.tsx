@@ -1,5 +1,6 @@
 'use client';
 
+import { filaClicable } from '@/lib/a11y';
 import { useState, useEffect, useCallback } from 'react';
 import { Users, Plus, Search, Edit3, Trash2, X, Loader2, ChevronRight, Building2, Phone, Mail, MapPin, FileText } from 'lucide-react';
 import { clientesService } from '@/services/clientes';
@@ -56,7 +57,7 @@ function ClienteModal({ cliente, onClose, onSave }: {
           <p className="section-label" style={{ margin: 0 }}>
             <Users size={13} /> {cliente?.id ? 'Editar cliente' : 'Nuevo cliente'}
           </p>
-          <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--muted)' }}>
+          <button aria-label="Cerrar" onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--muted)' }}>
             <X size={16} />
           </button>
         </div>
@@ -182,6 +183,19 @@ export default function ClientesPage() {
 
   useEffect(() => { load(); }, [load]);
 
+  // Enlaces directos (buscador y accesos rápidos): ?nuevo=1 abre el formulario; ?ver=<id>, la ficha.
+  const [pedido, setPedido] = useState<{ nuevo: boolean; ver: string | null } | null>(null);
+  useEffect(() => {
+    const q = new URLSearchParams(window.location.search);
+    if (q.get('nuevo') || q.get('ver')) { setPedido({ nuevo: q.get('nuevo') === '1', ver: q.get('ver') }); window.history.replaceState(null, '', '/clientes'); }
+  }, []);
+  useEffect(() => {
+    if (!pedido || loading) return;
+    if (pedido.nuevo && puede('clientes.crear')) setModal({ open: true, cliente: null });
+    if (pedido.ver) { const c = clientes.find(x => x.id === pedido.ver); if (c) setSelected(c); }
+    setPedido(null);
+  }, [pedido, loading, clientes, puede]);
+
   const filtered = clientes.filter(c =>
     !search ||
     c.nombre_cliente.toLowerCase().includes(search.toLowerCase()) ||
@@ -243,7 +257,7 @@ export default function ClientesPage() {
           <div className="cliente-detail-panel-mobile" onClick={e => e.stopPropagation()}>
             <div style={{ padding: '1rem 1.25rem', borderBottom: '1px solid var(--border2)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
               <p className="section-label" style={{ margin: 0 }}><Users size={12} /> Detalle</p>
-              <button onClick={() => setSelected(null)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--muted)' }}>
+              <button aria-label="Cerrar" onClick={() => setSelected(null)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--muted)' }}>
                 <X size={14} />
               </button>
             </div>
@@ -345,6 +359,7 @@ export default function ClientesPage() {
               {filtered.map(c => (
                 <div
                   key={c.id}
+                  {...filaClicable}
                   onClick={() => setSelected(selected?.id === c.id ? null : c)}
                   className={`clientes-list-row${selected?.id === c.id ? ' active' : ''}`}
                   style={{
@@ -386,7 +401,7 @@ export default function ClientesPage() {
             <style dangerouslySetInnerHTML={{__html: `@media (min-width: 769px) { #cliente-detail-desktop { display: flex !important; flex-direction: column; } }`}} />
             <div style={{ padding: '1rem 1.25rem', borderBottom: '1px solid var(--border2)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
               <p className="section-label" style={{ margin: 0 }}><Users size={12} /> Detalle</p>
-              <button onClick={() => setSelected(null)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--muted)' }}>
+              <button aria-label="Cerrar" onClick={() => setSelected(null)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--muted)' }}>
                 <X size={14} />
               </button>
             </div>

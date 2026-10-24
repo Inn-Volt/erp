@@ -238,7 +238,7 @@ export default function EmpresaModal({ empresa, onSave, onClose }: Props) {
             <Building2 size={13} />
             {form.id ? 'Editar Empresa' : 'Nueva Empresa Emisora'}
           </span>
-          <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--muted)' }}>
+          <button aria-label="Cerrar" onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--muted)' }}>
             <X size={16} />
           </button>
         </div>

@@ -15,6 +15,8 @@
  *    panel con sus opciones, así se sigue navegando con el menú escondido.
  *  · Celular: la misma barra con el botón del cajón lateral.
  *  · Salir de una sección pregunta si hay cambios sin guardar (cotizador).
+ *  · Buscador global (Ctrl+K o «/»): clientes, cotizaciones, secciones y «crear…». Esc cierra
+ *    la ventana emergente de arriba (y pregunta si se escribió algo en ella).
  */
 
 import { encendido, rutaApagada } from '@/lib/modulos';
@@ -28,6 +30,8 @@ import {
 import ThemeToggle from '@/components/ThemeToggle';
 import { LogoImg } from '@/components/Logo';
 import CampanaAvisos from '@/components/CampanaAvisos';
+import BuscadorGlobal from '@/components/BuscadorGlobal';
+import CerrarConEscape from '@/components/CerrarConEscape';
 import { useAvisos } from '@/hooks/useAvisos';
 import { marcarInsignia, resincronizarPush } from '@/lib/push';
 import { confirmarSalida } from '@/hooks/useSinGuardar';
@@ -125,6 +129,8 @@ export default function AppShell({ userName, userId, onLogout, children }: {
     .map(g => ({ ...g, items: g.items.filter(it => (!it.modulo || encendido(it.modulo)) && (!it.permisos || puedeAlguno(it.permisos))) }))
     .filter(g => g.items.length > 0), [puedeAlguno]);
   const primeraPermitida = menu[0]?.items[0]?.href || null;
+  // Las secciones a las que se puede saltar desde el buscador (las mismas del menú).
+  const paginas = useMemo(() => menu.flatMap(g => g.items.map(it => ({ href: it.href, label: it.label, grupo: g.grupo }))), [menu]);
   const requeridos = permisosDeRuta(pathname);
   const sinAccesoARuta = !cargando && !!requeridos && !puedeAlguno(requeridos);
 
@@ -322,6 +328,7 @@ export default function AppShell({ userName, userId, onLogout, children }: {
 
   return (
     <div className="flex h-dvh overflow-hidden bg-surface-2">
+      <CerrarConEscape />
       {/* Menú lateral (escritorio): fijo a la altura de la pantalla; solo el contenido hace scroll */}
       <aside className={`hidden h-full w-64 shrink-0 flex-col overflow-y-auto border-r border-line bg-surface ${plegado ? '' : 'md:flex'}`}
         style={{ paddingTop: 'env(safe-area-inset-top, 0px)' }}>
@@ -417,6 +424,7 @@ export default function AppShell({ userName, userId, onLogout, children }: {
             )}
           </div>
           <div className="flex shrink-0 items-center gap-1.5">
+            {!cargando && !error && <BuscadorGlobal paginas={paginas} />}
             {campana}
             <ThemeToggle />
             <Link href="/mi-cuenta" onClick={e => guardia(e, '/mi-cuenta')} title={`${nombreVisible} · Mi cuenta`} aria-label="Mi cuenta"

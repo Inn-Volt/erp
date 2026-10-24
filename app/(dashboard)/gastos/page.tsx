@@ -63,6 +63,7 @@ export default function GastosPage() {
     const q = new URLSearchParams(window.location.search);
     const d = q.get('cotizacion') ? `cot:${q.get('cotizacion')}` : q.get('proyecto') ? `proy:${q.get('proyecto')}` : q.get('ot') ? `ot:${q.get('ot')}` : '';
     if (d) { setDestinoInicial(d); setNuevo(true); }
+    else if (q.get('nuevo') === '1') { setNuevo(true); window.history.replaceState(null, '', '/gastos'); }
   }, []);
   useEffect(() => { if (paga) setVista('todos'); }, [paga]);
 

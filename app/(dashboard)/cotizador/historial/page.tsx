@@ -6,6 +6,7 @@
  * Una cotización no se borra: se anula desde su ficha.
  */
 
+import { filaClicable } from '@/lib/a11y';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
@@ -149,7 +150,7 @@ export default function HistorialCotizacionesPage() {
                 </tr></thead>
                 <tbody>
                   {lista.map(c => (
-                    <tr key={c.id} onClick={() => router.push(`/cotizador?edit=${c.id}`)} style={{ cursor: 'pointer', borderTop: '1px solid var(--border2)' }}>
+                    <tr key={c.id} {...filaClicable} role="link" onClick={() => router.push(`/cotizador?edit=${c.id}`)} style={{ cursor: 'pointer', borderTop: '1px solid var(--border2)' }}>
                       <td style={{ padding: '0.65rem 0.9rem', fontWeight: 700, color: 'var(--y)', whiteSpace: 'nowrap' }}>{folioDe(c.folio)}{c.revision > 0 && <span style={{ display: 'block', fontSize: '0.68rem', color: 'var(--muted)', fontWeight: 400 }}>Rev. {c.revision}</span>}</td>
                       <td style={{ padding: '0.65rem 0.9rem', maxWidth: 380 }}>
                         <span style={{ display: 'block', fontWeight: 600, color: 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{c.titulo}</span>

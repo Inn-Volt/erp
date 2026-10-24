@@ -175,7 +175,7 @@ export default function PersonasPage() {
           <div className="modal-box" style={{ maxWidth: 440, width: '95%', padding: '1.1rem 1.25rem', display: 'flex', flexDirection: 'column', gap: 10 }}>
             <div style={{ display: 'flex', justifyContent: 'space-between' }}>
               <p className="section-label" style={{ margin: 0 }}>{editando.usuario.nombre}</p>
-              <button onClick={() => setEditando(null)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--muted)' }}><X size={16} /></button>
+              <button aria-label="Cerrar" onClick={() => setEditando(null)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--muted)' }}><X size={16} /></button>
             </div>
             <label><span className="label-muted">Competencia</span>
               <select className="input" disabled={!!editando.uc.id} value={editando.uc.competencia_id || ''} onChange={e => setEditando({ ...editando, uc: { ...editando.uc, competencia_id: e.target.value } })}>

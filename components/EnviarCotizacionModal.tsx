@@ -91,7 +91,7 @@ export default function EnviarCotizacionModal({ cot, empresaNombre, vendedor, on
       <div className="modal-box" style={{ maxWidth: 440, width: '92%' }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '1.1rem 1.4rem', borderBottom: '1px solid var(--border2)' }}>
           <p className="section-label" style={{ margin: 0 }}><Send size={13} /> {esSeguimiento ? 'Seguimiento' : 'Enviar al cliente'} · {folio}</p>
-          <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--muted)' }}><X size={16} /></button>
+          <button aria-label="Cerrar" onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--muted)' }}><X size={16} /></button>
         </div>
 
         <div style={{ padding: '1.2rem 1.4rem', display: 'flex', flexDirection: 'column', gap: '0.7rem' }}>

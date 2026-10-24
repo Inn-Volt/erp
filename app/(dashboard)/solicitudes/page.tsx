@@ -1,5 +1,6 @@
 'use client';
 
+import { filaClicable } from '@/lib/a11y';
 import { encendido } from '@/lib/modulos';
 import { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
@@ -156,7 +157,7 @@ function SolicitudModal({ solicitud, clientes, createdBy, onClose, onSaved }: {
       <div className="modal-box" style={{ maxWidth: 560, maxHeight: '92vh', display: 'flex', flexDirection: 'column' }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '1.25rem 1.5rem', borderBottom: '1px solid var(--border2)' }}>
           <p className="section-label" style={{ margin: 0 }}><Inbox size={13} /> {solicitud ? 'Editar solicitud' : 'Nueva solicitud'}</p>
-          <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--muted)' }}><X size={16} /></button>
+          <button aria-label="Cerrar" onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--muted)' }}><X size={16} /></button>
         </div>
         <form onSubmit={submit} style={{ display: 'flex', flexDirection: 'column', minHeight: 0, flex: 1 }}>
           <div style={{ padding: '1.5rem', display: 'flex', flexDirection: 'column', gap: '1rem', overflowY: 'auto' }}>
@@ -382,7 +383,7 @@ function DetalleSolicitud({ sol, onClose, onChange, onEdit, onDelete }: {
       <div className="sol-detail-panel" onClick={e => e.stopPropagation()}>
         <div style={{ padding: '1rem 1.25rem', borderBottom: '1px solid var(--border2)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
           <p className="section-label" style={{ margin: 0 }}><Inbox size={12} /> {folioSol(sol)}</p>
-          <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--muted)' }}><X size={14} /></button>
+          <button aria-label="Cerrar" onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--muted)' }}><X size={14} /></button>
         </div>
 
         <div style={{ padding: '1.25rem', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
@@ -594,6 +595,19 @@ export default function SolicitudesPage() {
 
   useEffect(() => { load(); }, [load]);
 
+  // Enlaces directos (buscador y accesos rápidos): ?nueva=1 abre el formulario; ?ver=<id>, la solicitud.
+  const [pedido, setPedido] = useState<{ nueva: boolean; ver: string | null } | null>(null);
+  useEffect(() => {
+    const q = new URLSearchParams(window.location.search);
+    if (q.get('nueva') || q.get('ver')) { setPedido({ nueva: q.get('nueva') === '1', ver: q.get('ver') }); window.history.replaceState(null, '', '/solicitudes'); }
+  }, []);
+  useEffect(() => {
+    if (!pedido || loading) return;
+    if (pedido.nueva && puedeSol('solicitudes.crear')) setModal({ open: true, sol: null });
+    if (pedido.ver) { const s = solicitudes.find(x => x.id === pedido.ver); if (s) setDetalle(s); }
+    setPedido(null);
+  }, [pedido, loading, solicitudes, puedeSol]);
+
   const handleDelete = async (s: Solicitud) => {
     if (!confirm(`¿Eliminar la solicitud ${folioSol(s)}? No se puede deshacer.`)) return;
     try {
@@ -678,7 +692,7 @@ export default function SolicitudesPage() {
         ) : (
           <div>
             {filtered.map(s => (
-              <div key={s.id} onClick={() => setDetalle(s)} className="clientes-list-row" style={{ cursor: 'pointer', gridTemplateColumns: '1fr auto auto auto', gap: '1rem' }}>
+              <div key={s.id} {...filaClicable} onClick={() => setDetalle(s)} className="clientes-list-row" style={{ cursor: 'pointer', gridTemplateColumns: '1fr auto auto auto', gap: '1rem' }}>
                 <div style={{ minWidth: 0 }}>
                   <p style={{ fontWeight: 500, fontSize: '0.875rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                     <span style={{ fontFamily: 'monospace', color: 'var(--muted)', marginRight: 6 }}>{folioSol(s)}</span>
