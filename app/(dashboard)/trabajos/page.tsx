@@ -12,7 +12,8 @@ import { Check, Loader2, Play, Search } from 'lucide-react';
 import PageHeader from '@/components/PageHeader';
 import FaltaSQL from '@/components/FaltaSQL';
 import { ChipTrabajo, margenPct } from '@/components/trabajos/TrabajoPanel';
-import { faltaFase7, trabajosService, type Trabajo } from '@/services/trabajos';
+import { costoReal, faltaFase7, trabajosService, type Trabajo } from '@/services/trabajos';
+import { useIniciarTrabajo } from '@/components/trabajos/IniciarTrabajo';
 import { ESTADOS_TRABAJO, type EstadoTrabajo } from '@/lib/cotizador/tipos';
 import { usePermisos } from '@/hooks/usePermisos';
 import { useToast } from '@/hooks/useToast';
@@ -38,6 +39,8 @@ export default function TrabajosPage() {
     finally { setCargando(false); }
   }, [toastError]);
   useEffect(() => { cargar(); }, [cargar]);
+  // Iniciar pide el motivo si el anticipo no está pagado (fase 15).
+  const { iniciar, modal: modalAnticipo, ocupado: iniciando } = useIniciarTrabajo(cargar);
 
   const mover = async (t: Trabajo, e: EstadoTrabajo) => {
     if (e === 'terminado' && !confirm(`¿Marcar IV-${String(t.folio).padStart(4, '0')} como terminado? Los cobros «al terminar» pasan a Por facturar.`)) return;
@@ -56,13 +59,17 @@ export default function TrabajosPage() {
 
   const cuenta = (e: EstadoTrabajo) => lista.filter(t => (t.trabajo_estado || 'por_iniciar') === e).length;
   const porCobrar = lista.reduce((s, t) => s + Math.max(0, Number(t.total_clp ?? t.total ?? 0) - Number(t.resultado?.cobrado || 0)), 0);
-  const ventaTot = lista.reduce((s, t) => s + Number(t.resultado?.venta_neta || 0), 0);
-  const gastosTot = lista.reduce((s, t) => s + Number(t.resultado?.gastos || 0), 0);
+  // El margen de todos se calcula solo con los trabajos que ya tienen costos cargados
+  // (sin costos, el margen saldría 100 % y engaña).
+  const conCostos = lista.filter(t => costoReal(t.resultado) > 0);
+  const ventaTot = conCostos.reduce((s, t) => s + Number(t.resultado?.venta_neta || 0), 0);
+  const gastosTot = conCostos.reduce((s, t) => s + costoReal(t.resultado), 0);
 
   if (falta) return <div className="anim-in"><PageHeader eyebrow="Seguimiento" title="Trabajos" /><FaltaSQL archivo="supabase_fase7_flujo.sql" /></div>;
 
   return (
     <div className="anim-in">
+      {modalAnticipo}
       <PageHeader eyebrow="Seguimiento" title="Trabajos"
         subtitle="Cada cotización aprobada es un trabajo: síguelo hasta terminarlo y cobrarlo, con sus gastos reales." />
 
@@ -73,7 +80,7 @@ export default function TrabajosPage() {
           </button>
         ))}
         <div className="kpi-card"><p className="label-muted">Por cobrar</p><p className="kpi-value">{formatCLP(porCobrar)}</p></div>
-        {verCostos && <div className="kpi-card"><p className="label-muted">Margen real (todos)</p><p className="kpi-value">{pct(margenPct(ventaTot, gastosTot))}</p></div>}
+        {verCostos && <div className="kpi-card" title="Solo los trabajos con gastos, compras u horas cargados"><p className="label-muted">Margen real ({conCostos.length} con costos)</p><p className="kpi-value">{pct(margenPct(ventaTot, gastosTot))}</p></div>}
       </div>
 
       <div className="panel-y">
@@ -96,7 +103,7 @@ export default function TrabajosPage() {
             const r = t.resultado;
             const total = Number(t.total_clp ?? t.total ?? 0);
             const cobrado = Number(r?.cobrado || 0);
-            const venta = Number(r?.venta_neta || 0), cotizado = Number(r?.costo_cotizado || 0), real = Number(r?.gastos || 0);
+            const venta = Number(r?.venta_neta || 0), cotizado = Number(r?.costo_cotizado || 0), real = costoReal(r);
             const estado = t.trabajo_estado || 'por_iniciar';
             return (
               <div key={t.id} style={{ display: 'flex', gap: 12, padding: '0.85rem 1rem', borderTop: '1px solid var(--border2)', alignItems: 'center', flexWrap: 'wrap' }}>
@@ -118,18 +125,23 @@ export default function TrabajosPage() {
                   </span>
                 </span>
                 {verCostos && (
-                  <span style={{ minWidth: 150, fontSize: '0.8rem', color: 'var(--muted)' }} title="Margen sobre la venta neta">
-                    gastos {formatCLP(real)}{cotizado > 0 ? ` de ${formatCLP(cotizado)}` : ''}
-                    <span style={{ display: 'block', color: real > cotizado && cotizado > 0 ? 'var(--danger)' : 'var(--text)', fontWeight: 600 }}>
-                      margen {pct(margenPct(venta, real))} <span style={{ color: 'var(--muted)', fontWeight: 400 }}>(cotizado {pct(margenPct(venta, cotizado))})</span>
-                    </span>
+                  <span style={{ minWidth: 150, fontSize: '0.8rem', color: 'var(--muted)' }}
+                    title={`Margen sobre la venta neta. Costo real = gastos ${formatCLP(Number(r?.gastos || 0))} + compras ${formatCLP(Number(r?.compras || 0))} + horas ${formatCLP(Number(r?.costo_horas || 0))}`}>
+                    costo real {formatCLP(real)}{cotizado > 0 ? ` de ${formatCLP(cotizado)}` : ''}
+                    {real > 0
+                      ? <span style={{ display: 'block', color: real > cotizado && cotizado > 0 ? 'var(--danger)' : 'var(--text)', fontWeight: 600 }}>
+                          margen {pct(margenPct(venta, real))} <span style={{ color: 'var(--muted)', fontWeight: 400 }}>(cotizado {pct(margenPct(venta, cotizado))})</span>
+                        </span>
+                      : <span style={{ display: 'block', color: estado === 'por_iniciar' ? 'var(--muted)' : 'var(--y)' }}>
+                          sin costos cargados <span style={{ color: 'var(--muted)' }}>(cotizado {pct(margenPct(venta, cotizado))})</span>
+                        </span>}
                   </span>
                 )}
                 {mueve && (
                   <span style={{ display: 'flex', gap: 6 }}>
-                    {estado === 'por_iniciar' && <button className="btn btn-ghost btn-sm" disabled={ocupado === t.id} onClick={() => mover(t, 'en_ejecucion')}><Play size={13} /> Iniciar</button>}
+                    {estado === 'por_iniciar' && <button className="btn btn-ghost btn-sm" disabled={ocupado === t.id || iniciando === t.id} onClick={() => iniciar(t)}><Play size={13} /> Iniciar</button>}
                     {estado === 'en_ejecucion' && <button className="btn btn-ghost btn-sm" disabled={ocupado === t.id} onClick={() => mover(t, 'terminado')}><Check size={13} /> Terminar</button>}
-                    {ocupado === t.id && <Loader2 size={14} className="iv-spin" />}
+                    {(ocupado === t.id || iniciando === t.id) && <Loader2 size={14} className="iv-spin" />}
                   </span>
                 )}
               </div>

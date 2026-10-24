@@ -11,6 +11,9 @@ import PageHeader from '@/components/PageHeader';
 import LinksMapa from '@/components/LinksMapa';
 import SucursalesCliente from '@/components/SucursalesCliente';
 import { usePermisos } from '@/hooks/usePermisos';
+import { useFase } from '@/lib/fases';
+import { avisoRut, formatearRut } from '@/lib/rut';
+import { ORIGENES } from '@/types/solicitud';
 
 const EMPTY_CLIENTE: Omit<Cliente, 'id' | 'created_at' | 'updated_at'> = {
   nombre_cliente: '',
@@ -30,6 +33,8 @@ function ClienteModal({ cliente, onClose, onSave }: {
 }) {
   const [form, setForm] = useState({ ...EMPTY_CLIENTE, ...cliente });
   const [saving, setSaving] = useState(false);
+  // Fase 15: ficha tributaria, origen y «cliente de confianza». Sin la fase no se mandan.
+  const fase15 = useFase(15);
 
   const set = (k: keyof typeof form) => (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) =>
     setForm(p => ({ ...p, [k]: e.target.value }));
@@ -38,13 +43,15 @@ function ClienteModal({ cliente, onClose, onSave }: {
     e.preventDefault();
     if (!form.nombre_cliente.trim()) return;
     setSaving(true);
-    await onSave(form as Omit<Cliente, 'id' | 'created_at' | 'updated_at'>);
+    const datos = { ...form, rut: form.rut ? formatearRut(form.rut) : form.rut };
+    if (!fase15) for (const k of ['giro', 'comuna', 'ciudad', 'correo_dte', 'tipo_persona', 'origen', 'sin_anticipo'] as const) delete (datos as Record<string, unknown>)[k];
+    await onSave(datos as Omit<Cliente, 'id' | 'created_at' | 'updated_at'>);
     setSaving(false);
   };
 
   return (
     <div className="modal-overlay">
-      <div className="modal-box" style={{ maxWidth: 520 }}>
+      <div className="modal-box" style={{ maxWidth: 560, maxHeight: '92vh', overflowY: 'auto' }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '1.25rem 1.5rem', borderBottom: '1px solid var(--border2)' }}>
           <p className="section-label" style={{ margin: 0 }}>
             <Users size={13} /> {cliente?.id ? 'Editar cliente' : 'Nuevo cliente'}
@@ -66,7 +73,8 @@ function ClienteModal({ cliente, onClose, onSave }: {
             </div>
             <div>
               <label className="label-muted" style={{ display: 'block', marginBottom: '0.4rem' }}>RUT</label>
-              <input className="input" value={form.rut} onChange={set('rut')} placeholder="12.345.678-9" />
+              <input className="input" value={form.rut} onChange={set('rut')} onBlur={() => form.rut && setForm(p => ({ ...p, rut: formatearRut(p.rut) }))} placeholder="12.345.678-9" />
+              {avisoRut(form.rut) && <span style={{ fontSize: '0.72rem', color: 'var(--danger)' }}>{avisoRut(form.rut)}</span>}
             </div>
             <div>
               <label className="label-muted" style={{ display: 'block', marginBottom: '0.4rem' }}>Teléfono</label>
@@ -80,6 +88,43 @@ function ClienteModal({ cliente, onClose, onSave }: {
               <label className="label-muted" style={{ display: 'block', marginBottom: '0.4rem' }}>Dirección</label>
               <input className="input" value={form.direccion || ''} onChange={set('direccion')} placeholder="Av. Ejemplo 123, Santiago" />
             </div>
+            {fase15 && <>
+              <p className="label-muted" style={{ gridColumn: '1/-1', margin: '0.4rem 0 -0.4rem', fontWeight: 700 }}>Datos para facturar</p>
+              <div>
+                <label className="label-muted" style={{ display: 'block', marginBottom: '0.4rem' }}>Giro</label>
+                <input className="input" value={form.giro || ''} onChange={e => setForm(p => ({ ...p, giro: e.target.value }))} placeholder="Servicios odontológicos" />
+              </div>
+              <div>
+                <label className="label-muted" style={{ display: 'block', marginBottom: '0.4rem' }}>Es</label>
+                <select className="input" value={form.tipo_persona || ''} onChange={e => setForm(p => ({ ...p, tipo_persona: (e.target.value || null) as Cliente['tipo_persona'] }))}>
+                  <option value="">Sin indicar</option><option value="empresa">Empresa (factura)</option><option value="persona">Persona (boleta o factura)</option>
+                </select>
+              </div>
+              <div>
+                <label className="label-muted" style={{ display: 'block', marginBottom: '0.4rem' }}>Comuna</label>
+                <input className="input" value={form.comuna || ''} onChange={e => setForm(p => ({ ...p, comuna: e.target.value }))} placeholder="Providencia" />
+              </div>
+              <div>
+                <label className="label-muted" style={{ display: 'block', marginBottom: '0.4rem' }}>Ciudad</label>
+                <input className="input" value={form.ciudad || ''} onChange={e => setForm(p => ({ ...p, ciudad: e.target.value }))} placeholder="Santiago" />
+              </div>
+              <div style={{ gridColumn: '1/-1' }}>
+                <label className="label-muted" style={{ display: 'block', marginBottom: '0.4rem' }}>Correo para la factura (intercambio DTE)</label>
+                <input className="input" type="email" value={form.correo_dte || ''} onChange={e => setForm(p => ({ ...p, correo_dte: e.target.value }))} placeholder="dte@empresa.cl (si es otro)" />
+              </div>
+              <p className="label-muted" style={{ gridColumn: '1/-1', margin: '0.4rem 0 -0.4rem', fontWeight: 700 }}>Comercial</p>
+              <div>
+                <label className="label-muted" style={{ display: 'block', marginBottom: '0.4rem' }}>¿Cómo llegó?</label>
+                <select className="input" value={form.origen || ''} onChange={e => setForm(p => ({ ...p, origen: e.target.value || null }))}>
+                  <option value="">Sin indicar</option>
+                  {ORIGENES.map(o => <option key={o} value={o}>{o}</option>)}
+                </select>
+              </div>
+              <label style={{ display: 'flex', gap: 8, alignItems: 'center', fontSize: '0.84rem', color: 'var(--text)', cursor: 'pointer', alignSelf: 'end', paddingBottom: '0.5rem' }}>
+                <input type="checkbox" checked={!!form.sin_anticipo} onChange={e => setForm(p => ({ ...p, sin_anticipo: e.target.checked }))} style={{ accentColor: 'var(--y-brand)', width: 16, height: 16 }} />
+                Cliente de confianza: puede partir sin anticipo
+              </label>
+            </>}
             {cliente?.estado_pago !== undefined && (
               <div style={{ gridColumn: '1/-1', display: 'grid', gridTemplateColumns: '180px 1fr', gap: '0.6rem' }}>
                 <div>
@@ -212,7 +257,9 @@ export default function ClientesPage() {
                 { Icon: Building2, label: 'RUT',       val: selected.rut       || '—', href: '' },
                 { Icon: Phone,     label: 'Teléfono',  val: selected.telefono  || '—', href: selected.telefono ? `tel:${selected.telefono.replace(/[^\d+]/g, '')}` : '' },
                 { Icon: Mail,      label: 'Correo',    val: selected.email     || '—', href: selected.email ? `mailto:${selected.email}` : '' },
-                { Icon: MapPin,    label: 'Dirección', val: selected.direccion || '—', href: '' },
+                { Icon: MapPin,    label: 'Dirección', val: [selected.direccion, selected.comuna, selected.ciudad].filter(Boolean).join(', ') || '—', href: '' },
+                ...(selected.giro || selected.correo_dte ? [{ Icon: FileText, label: 'Para facturar', val: [selected.giro, selected.correo_dte].filter(Boolean).join(' · '), href: '' }] : []),
+                ...(selected.origen ? [{ Icon: Users, label: 'Llegó por', val: selected.origen, href: '' }] : []),
               ].map(({ Icon, label, val, href }) => (
                 <div key={label} style={{ display: 'flex', gap: '0.75rem', alignItems: 'flex-start' }}>
                   <span style={{ color: 'var(--muted)', marginTop: 3, flexShrink: 0, display: 'flex' }}><Icon size={14} /></span>
@@ -225,6 +272,8 @@ export default function ClientesPage() {
                   </div>
                 </div>
               ))}
+              {selected.rut && avisoRut(selected.rut) && <p style={{ margin: 0, fontSize: '0.78rem', color: 'var(--danger)' }}>{avisoRut(selected.rut)} Corrígelo antes de facturar.</p>}
+              {selected.sin_anticipo && <p style={{ margin: 0, fontSize: '0.78rem', color: 'var(--success)' }}>Cliente de confianza: sus trabajos pueden partir sin anticipo.</p>}
               {selected.notas && (
                 <div style={{ background: 'var(--bg3)', padding: '0.75rem', borderRadius: 10 }}>
                   <p className="label-muted" style={{ marginBottom: '0.35rem' }}>Notas</p>
@@ -351,7 +400,9 @@ export default function ClientesPage() {
                 { Icon: Building2, label: 'RUT',       val: selected.rut       || '—', href: '' },
                 { Icon: Phone,     label: 'Teléfono',  val: selected.telefono  || '—', href: selected.telefono ? `tel:${selected.telefono.replace(/[^\d+]/g, '')}` : '' },
                 { Icon: Mail,      label: 'Correo',    val: selected.email     || '—', href: selected.email ? `mailto:${selected.email}` : '' },
-                { Icon: MapPin,    label: 'Dirección', val: selected.direccion || '—', href: '' },
+                { Icon: MapPin,    label: 'Dirección', val: [selected.direccion, selected.comuna, selected.ciudad].filter(Boolean).join(', ') || '—', href: '' },
+                ...(selected.giro || selected.correo_dte ? [{ Icon: FileText, label: 'Para facturar', val: [selected.giro, selected.correo_dte].filter(Boolean).join(' · '), href: '' }] : []),
+                ...(selected.origen ? [{ Icon: Users, label: 'Llegó por', val: selected.origen, href: '' }] : []),
               ].map(({ Icon, label, val, href }) => (
                 <div key={label} style={{ display: 'flex', gap: '0.75rem', alignItems: 'flex-start' }}>
                   <span style={{ color: 'var(--muted)', marginTop: 3, flexShrink: 0, display: 'flex' }}><Icon size={14} /></span>
@@ -364,6 +415,8 @@ export default function ClientesPage() {
                   </div>
                 </div>
               ))}
+              {selected.rut && avisoRut(selected.rut) && <p style={{ margin: 0, fontSize: '0.78rem', color: 'var(--danger)' }}>{avisoRut(selected.rut)} Corrígelo antes de facturar.</p>}
+              {selected.sin_anticipo && <p style={{ margin: 0, fontSize: '0.78rem', color: 'var(--success)' }}>Cliente de confianza: sus trabajos pueden partir sin anticipo.</p>}
               {selected.notas && (
                 <div style={{ background: 'var(--bg3)', padding: '0.75rem', borderRadius: 10 }}>
                   <p className="label-muted" style={{ marginBottom: '0.35rem' }}>Notas</p>

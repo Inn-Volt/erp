@@ -61,7 +61,7 @@ self.addEventListener('push', (event) => {
     self.registration.showNotification(data.titulo || 'InnVolt', opciones),
     (async () => {
       if (typeof data.pendientes !== 'number' || !self.navigator || !self.navigator.setAppBadge) return;
-      try { if (data.pendientes > 0) await self.navigator.setAppBadge(data.pendientes); else await self.navigator.clearAppBadge(); } catch (e) { /* no soportado */ }
+      try { if (data.pendientes > 0) await self.navigator.setAppBadge(data.pendientes); else await self.navigator.clearAppBadge(); } catch { /* no soportado */ }
     })(),
   ]));
 });

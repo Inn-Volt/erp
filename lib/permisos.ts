@@ -29,6 +29,7 @@ const TODO: AreaDef[] = [
       { clave: 'cotizaciones.aprobar', nombre: 'Anotar la respuesta del cliente', ayuda: 'Aprobada o rechazada; también plantillas y ajustes de cotización' },
       { clave: 'cotizaciones.ver_costos', nombre: 'Ver costos y márgenes' },
       { clave: 'cotizaciones.anular', nombre: 'Anular (heredado)', ayuda: 'Anular lo hace «Crear»; una aprobada pide «Crear» y «Aprobar»' },
+      { clave: 'cotizaciones.autorizar', nombre: 'Autorizar descuentos y utilidad baja', ayuda: 'Aprueba el envío cuando una cotización pasa los límites de Ajustes' },
     ] },
     { modulo: 'clientes', nombre: 'Clientes', permisos: [
       { clave: 'clientes.ver', nombre: 'Ver' },
@@ -77,6 +78,10 @@ const TODO: AreaDef[] = [
       { clave: 'gastos.crear', nombre: 'Rendir mis gastos (en una OT)' },
       { clave: 'gastos.ver_todos', nombre: 'Ver los de todos' },
       { clave: 'gastos.aprobar', nombre: 'Pagar rendiciones y entregar anticipos' },
+    ] },
+    { modulo: 'compras', nombre: 'Compras y contabilidad', permisos: [
+      { clave: 'compras.ver', nombre: 'Ver compras, libros e IVA del mes' },
+      { clave: 'compras.gestionar', nombre: 'Registrar facturas de proveedores' },
     ] },
   ] },
   { area: 'Mi empresa', modulos: [
@@ -129,11 +134,13 @@ export const PLANTILLAS_BASE: Record<string, string[]> = {
     'biblioteca.ver', 'biblioteca.editar', 'plantillas.gestionar', 'ia.usar',
     'ot.ver', 'ot.crear', 'ot.cerrar', 'facturacion.ver', 'facturacion.gestionar', 'bodega.ver', 'bodega.mover',
     'bodega.ajustar', 'gastos.crear', 'gastos.ver_todos', 'gastos.aprobar', 'tareas.ver', 'tareas.gestionar',
-    'proyectos.ver', 'proyectos.gestionar', 'personas.ver', 'personas.gestionar', 'traslados.ver', 'traslados.gestionar'],
+    'proyectos.ver', 'proyectos.gestionar', 'personas.ver', 'personas.gestionar', 'traslados.ver', 'traslados.gestionar',
+    'compras.ver', 'compras.gestionar'],
   tecnico: ['solicitudes.ver', 'cotizaciones.ver', 'clientes.ver', 'agenda.ver', 'agenda.gestionar',
     'levantamientos.ver', 'levantamientos.crear', 'biblioteca.ver', 'ot.ejecutar', 'bodega.ver', 'bodega.mover', 'gastos.crear', 'traslados.ver'],
   solo_lectura: ['solicitudes.ver', 'cotizaciones.ver', 'clientes.ver', 'agenda.ver', 'levantamientos.ver',
-    'biblioteca.ver', 'dashboard.ver', 'ot.ver', 'facturacion.ver', 'bodega.ver', 'tareas.ver', 'proyectos.ver', 'personas.ver', 'traslados.ver'],
+    'biblioteca.ver', 'dashboard.ver', 'ot.ver', 'facturacion.ver', 'bodega.ver', 'tareas.ver', 'proyectos.ver', 'personas.ver', 'traslados.ver',
+    'compras.ver'],
 };
 
 /** ¿La lista de permisos incluye la clave? ('*' = todos). */
@@ -163,6 +170,8 @@ export const PERMISO_DE_RUTA: { prefijo: string; permisos: string[] }[] = [
   { prefijo: '/ordenes', permisos: ['ot.ver', 'ot.ejecutar'] },
   { prefijo: '/mis-ot', permisos: ['ot.ejecutar', 'ot.ver', 'ot.crear'] },
   { prefijo: '/facturacion', permisos: ['facturacion.ver', 'facturacion.gestionar'] },
+  { prefijo: '/compras', permisos: ['compras.ver', 'compras.gestionar'] },
+  { prefijo: '/contabilidad', permisos: ['compras.ver', 'compras.gestionar', 'facturacion.gestionar'] },
   { prefijo: '/bodega', permisos: ['bodega.ver', 'bodega.mover'] },
   { prefijo: '/gastos', permisos: ['gastos.crear', 'gastos.ver_todos', 'gastos.aprobar'] },
   { prefijo: '/usuarios', permisos: ['usuarios.ver', 'usuarios.gestionar'] },

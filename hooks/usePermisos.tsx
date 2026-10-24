@@ -61,34 +61,38 @@ export function PermisosProvider({ userId, children }: { userId: string | null; 
   const recargar = useCallback(async () => {
     if (!userId) { setCargando(false); return; }
     setError(null);
-    try {
-      const [rp, rpf, rr] = await Promise.all([
-        supabase.rpc('mis_permisos'),
-        supabase.from('profiles').select('id, nombre, email, activo, telefono, cargo, empresa_id').eq('id', userId).maybeSingle(),
-        supabase.from('usuario_roles').select('activo, roles(nombre, activo)').eq('usuario_id', userId),
-      ]);
-      if (faltaMigracion(rp.error) || faltaMigracion(rpf.error)) {
-        setSinMigracion(true);
-        setPermisos(['*']);
-        setPerfil(null);
-        setRoles([]);
-        return;
+    // Un fallo pasajero (red, sesión recién renovada) se reintenta una vez antes de mostrar el error.
+    for (let intento = 0; intento < 2; intento++) {
+      try {
+        const [rp, rpf, rr] = await Promise.all([
+          supabase.rpc('mis_permisos'),
+          supabase.from('profiles').select('id, nombre, email, activo, telefono, cargo, empresa_id').eq('id', userId).maybeSingle(),
+          supabase.from('usuario_roles').select('activo, roles(nombre, activo)').eq('usuario_id', userId),
+        ]);
+        if (faltaMigracion(rp.error) || faltaMigracion(rpf.error)) {
+          setSinMigracion(true);
+          setPermisos(['*']);
+          setPerfil(null);
+          setRoles([]);
+          break;
+        }
+        if (rp.error) throw rp.error;
+        setSinMigracion(false);
+        setPermisos((rp.data as string[] | null) || []);
+        setPerfil((rpf.data as Perfil | null) || null);
+        type FilaRol = { activo: boolean; roles: { nombre: string; activo: boolean } | { nombre: string; activo: boolean }[] | null };
+        setRoles(((rr.data as FilaRol[] | null) || [])
+          .filter(f => f.activo)
+          .flatMap(f => (Array.isArray(f.roles) ? f.roles : f.roles ? [f.roles] : []))
+          .filter(r => r.activo)
+          .map(r => r.nombre));
+        break;
+      } catch (e) {
+        if (intento === 0) { await new Promise(r => setTimeout(r, 1500)); continue; }
+        setError(e instanceof Error ? e.message : 'No se pudieron cargar tus permisos.');
       }
-      if (rp.error) throw rp.error;
-      setSinMigracion(false);
-      setPermisos((rp.data as string[] | null) || []);
-      setPerfil((rpf.data as Perfil | null) || null);
-      type FilaRol = { activo: boolean; roles: { nombre: string; activo: boolean } | { nombre: string; activo: boolean }[] | null };
-      setRoles(((rr.data as FilaRol[] | null) || [])
-        .filter(f => f.activo)
-        .flatMap(f => (Array.isArray(f.roles) ? f.roles : f.roles ? [f.roles] : []))
-        .filter(r => r.activo)
-        .map(r => r.nombre));
-    } catch (e) {
-      setError(e instanceof Error ? e.message : 'No se pudieron cargar tus permisos.');
-    } finally {
-      setCargando(false);
     }
+    setCargando(false);
   }, [userId]);
 
   useEffect(() => { setCargando(true); recargar(); }, [recargar]);

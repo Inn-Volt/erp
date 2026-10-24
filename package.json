@@ -6,7 +6,9 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint ."
+    "lint": "eslint .",
+    "test": "node --experimental-strip-types --no-warnings --test \"tests/unit/*.test.ts\"",
+    "test:db": "bash tests/sql/correr.sh"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.117.1",
@@ -19,13 +21,13 @@
     "@zxing/library": "^0.21.3",
     "file-saver": "^2.0.5",
     "lucide-react": "^0.475.0",
-    "next": "^16.2.6",
+    "next": "^16.4.3",
     "postcss": "^8.5.15",
     "react": "^19.2.6",
     "react-dom": "^19.2.6",
     "recharts": "^2.15.0",
     "web-push": "3.6.7",
-    "xlsx": "^0.18.5",
+    "xlsx": "https://cdn.sheetjs.com/xlsx-0.20.3/xlsx-0.20.3.tgz",
     "zustand": "^5.0.3"
   },
   "devDependencies": {

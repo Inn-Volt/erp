@@ -13,6 +13,9 @@
 import { fotosDeInforme, resumenInforme, type InformeLleno } from '@/services/informes';
 import DesdeLevantamiento, { type TextosLevantamiento } from '@/components/cotizador/DesdeLevantamiento';
 import TrabajoPanel from '@/components/trabajos/TrabajoPanel';
+import { BannerAprobacion, PedirAprobacion, aprobacionRequerida, revisarAprobacion } from '@/components/cotizador/AprobacionGerente';
+import { useFase } from '@/lib/fases';
+import { correoAutomatico, enviarCorreo } from '@/lib/correo';
 import PlanCobro from './PlanCobro';
 import NumeroInput from '@/components/NumeroInput';
 import { textoPlano, tituloCorto } from '@/lib/textoFormato';
@@ -90,6 +93,10 @@ export default function EditorCotizacion({ id, clonarDe, clienteInicial, solicit
   const router = useRouter();
   const { perfil, puede } = usePermisos();
   const { success, error: toastError, warning } = useToast();
+  // Fase 15: descuento o utilidad fuera de rango → aprobación del gerente antes de enviar.
+  const fase15 = useFase(15);
+  const autoriza = puede('cotizaciones.autorizar');
+  const [pedirAprobacion, setPedirAprobacion] = useState<string | null>(null);
   const puedeEditar = puede('cotizaciones.crear');
   const puedeAprobar = puede('cotizaciones.aprobar');
   const puedeCostos = puede('cotizaciones.ver_costos') || puedeEditar;
@@ -600,7 +607,16 @@ export default function EditorCotizacion({ id, clonarDe, clienteInicial, solicit
   });
 
   const abrirRevisar = async () => {
-    if (sucio || !cot) { const g = await guardar(true); if (!g) return; }
+    let id = cot?.id;
+    if (sucio || !cot) { const g = await guardar(true); if (!g) return; id = g.id; }
+    if (fase15 && !autoriza && id) {
+      const r = await revisarAprobacion(id);
+      if (r?.motivo && r.estado !== 'aprobada') {
+        if (r.estado === 'pendiente') { warning('Sigue esperando la aprobación de gerencia; te llega el aviso cuando respondan.'); return; }
+        setPedirAprobacion(r.motivo);
+        return;
+      }
+    }
     setModal('revisar');
   };
 
@@ -619,12 +635,26 @@ export default function EditorCotizacion({ id, clonarDe, clienteInicial, solicit
         window.open(`https://wa.me/${tel}?text=${encodeURIComponent(llenarMensaje(datos.mensajeWhatsapp, m))}`, '_blank');
       }
       if (canal === 'correo' || canal === 'ambos') {
-        window.location.href = `mailto:${encodeURIComponent(datos.para)}?subject=${encodeURIComponent(llenarMensaje(datos.asunto, m))}&body=${encodeURIComponent(llenarMensaje(datos.mensajeCorreo, m))}`;
+        const asunto = llenarMensaje(datos.asunto, m), cuerpo = llenarMensaje(datos.mensajeCorreo, m);
+        // Con el correo automático configurado sale solo, con el PDF adjunto; si no (o si falla), se abre el correo del usuario.
+        let salio = false;
+        if (datos.para && await correoAutomatico()) {
+          try {
+            await enviarCorreo({ para: datos.para, asunto, texto: cuerpo, responderA: vendedor?.email, pdf: { nombre: nombrePDF(doc, cliente?.nombre_cliente), blob } });
+            salio = true;
+            success(`Correo enviado a ${datos.para} con el PDF adjunto`);
+          } catch (e) { warning(`No salió el correo automático (${e instanceof Error ? e.message : 'error'}): se abre tu correo.`); }
+        }
+        if (!salio) window.location.href = `mailto:${encodeURIComponent(datos.para)}?subject=${encodeURIComponent(asunto)}&body=${encodeURIComponent(cuerpo)}`;
       }
       setModal(null);
       cotizadorService.envios(cot.id).then(setEnvios).catch(() => {});
       success(modal === 'reenviar' ? 'Reenvío anotado' : `${folioDe(doc.folio)} enviada`);
-    } catch (e) { toastError(e instanceof Error ? e.message : 'No se pudo enviar'); }
+    } catch (e) {
+      const motivo = aprobacionRequerida(e);
+      if (motivo) { setModal(null); setPedirAprobacion(motivo); return; }
+      toastError(e instanceof Error ? e.message : (e as { message?: string } | null)?.message || 'No se pudo enviar');
+    }
   };
 
   const recargar = async () => { if (cot) await cargarDoc(cot.id); setModal(null); };
@@ -860,10 +890,13 @@ export default function EditorCotizacion({ id, clonarDe, clienteInicial, solicit
 
       {cot && d.estado === 'Aprobada' && 'trabajo_estado' in cot && (
         <TrabajoPanel cot={{ id: cot.id, folio: cot.folio, titulo: d.titulo, total: Number(cot.total_clp ?? cot.total ?? 0), trabajo_estado: cot.trabajo_estado,
-          trabajo_inicio: cot.trabajo_inicio, trabajo_termino: cot.trabajo_termino }} plan={planDe(cot)} onCambio={() => cargarDoc(cot.id)}
+          trabajo_inicio: cot.trabajo_inicio, trabajo_termino: cot.trabajo_termino, inicio_sin_anticipo: cot.inicio_sin_anticipo }} plan={planDe(cot)} onCambio={() => cargarDoc(cot.id)}
           cliente={(() => { const c = clientes.find(x => x.id === cot.cliente_id) || cot.clientes; return c ? { nombre: c.nombre_cliente, rut: c.rut, direccion: sitios.find(s => s.id === cot.sucursal_id)?.direccion || c.direccion } : undefined; })()}
           responsable={vendedor?.nombre || null} />
       )}
+      {cot && fase15 && <BannerAprobacion cot={cot} autoriza={autoriza} onCambio={() => cargarDoc(cot.id)} />}
+      {pedirAprobacion && cot && <PedirAprobacion cotId={cot.id} folio={folioDe(cot.folio)} motivo={pedirAprobacion}
+        onCerrar={() => setPedirAprobacion(null)} onListo={() => { setPedirAprobacion(null); cargarDoc(cot.id); }} />}
       {cot && d.estado !== 'Borrador' && <EstadoActual d={d} envios={envios} equipo={equipo} onAbrir={async p => { const u = await cotizadorService.urlArchivo(p); if (u) window.open(u, '_blank'); }} />}
       {!puedeEditar && <p style={{ fontSize: '0.84rem', color: 'var(--muted)', marginBottom: 10 }}>Solo lectura: no tienes permiso para editar cotizaciones.</p>}
 

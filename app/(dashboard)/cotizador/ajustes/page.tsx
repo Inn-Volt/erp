@@ -15,6 +15,7 @@ import Link from 'next/link';
 import { ArrowLeft, Loader2, Save } from 'lucide-react';
 import PageHeader from '@/components/PageHeader';
 import FaltaSQL from '@/components/FaltaSQL';
+import NumeroInput from '@/components/NumeroInput';
 import { ajustesService, faltaFase4 } from '@/services/cotizador';
 import { useToast } from '@/hooks/useToast';
 import type { AjustesCot } from '@/lib/cotizador/tipos';
@@ -46,6 +47,10 @@ export default function AjustesCotPage() {
         asunto_correo: a.asunto_correo, mensaje_correo: a.mensaje_correo, mensaje_whatsapp: a.mensaje_whatsapp,
         ...('plan_cobro' in a ? { plan_cobro: a.plan_cobro && a.plan_cobro.length ? a.plan_cobro : PLAN_COBRO_BASE } : {}),
         ...('pdf_diseno' in a ? { pdf_diseno: a.pdf_diseno || {} } : {}),
+        ...('exigir_anticipo' in a ? {
+          exigir_anticipo: a.exigir_anticipo !== false, costo_hora: Math.max(0, Number(a.costo_hora) || 0),
+          descuento_max: a.descuento_max ?? null, utilidad_min: a.utilidad_min ?? null,
+        } : {}),
       });
       success('Ajustes guardados. Las cotizaciones ya hechas no cambian.');
     } catch (e) { toastError(e instanceof Error ? e.message : 'No se pudo guardar'); }
@@ -84,6 +89,23 @@ export default function AjustesCotPage() {
           <div><span className="label-muted">Forma de pago de las cotizaciones nuevas (cobros por hitos; cada cotización la puede cambiar)</span>
             <PlanCobro plan={a.plan_cobro && a.plan_cobro.length ? a.plan_cobro : PLAN_COBRO_BASE} onCambiar={p => setA({ ...a, plan_cobro: p })} /></div>
         )}
+        {'exigir_anticipo' in a && <>
+          <p className="section-label" style={{ margin: '6px 0 0' }}>Control del negocio</p>
+          <label style={{ display: 'flex', gap: 8, alignItems: 'center', color: 'var(--text)' }}>
+            <input type="checkbox" checked={a.exigir_anticipo !== false} onChange={e => setA({ ...a, exigir_anticipo: e.target.checked })} style={{ accentColor: 'var(--y-brand)', width: 16, height: 16 }} />
+            Un trabajo no parte sin el anticipo pagado (se puede partir igual indicando el motivo; los clientes de confianza no lo piden)</label>
+          <div style={fila}>
+            <label><span className="label-muted">Costo por hora general (sueldo + leyes ÷ horas)</span>
+              <NumeroInput className="input" prefijo="$" value={a.costo_hora ?? 0} onChange={v => setA({ ...a, costo_hora: v })} placeholder="Ej.: 9.500" />
+              <span style={{ fontSize: '0.74rem', color: 'var(--muted)' }}>Para las horas de quien no tiene un costo propio (en Usuarios).</span></label>
+            <label><span className="label-muted">Descuento máximo sin aprobación (%)</span>
+              <NumeroInput className="input" sufijo="%" value={a.descuento_max ?? null} onChange={v => setA({ ...a, descuento_max: v })} onVacio={() => setA({ ...a, descuento_max: null })} placeholder="Sin límite" />
+              <span style={{ fontSize: '0.74rem', color: 'var(--muted)' }}>Sobre esto, el vendedor pide aprobación antes de enviar.</span></label>
+            <label><span className="label-muted">Utilidad mínima sin aprobación (%)</span>
+              <NumeroInput className="input" sufijo="%" value={a.utilidad_min ?? null} onChange={v => setA({ ...a, utilidad_min: v })} onVacio={() => setA({ ...a, utilidad_min: null })} placeholder="Sin mínimo" />
+              <span style={{ fontSize: '0.74rem', color: 'var(--muted)' }}>Bajo esto, también se pide aprobación. Aprueba quien tiene el permiso «Autorizar descuentos y utilidad baja».</span></label>
+          </div>
+        </>}
         <div style={fila}>
           <label style={{ display: 'flex', gap: 8, alignItems: 'center', color: 'var(--text)' }}>
             <input type="checkbox" checked={a.usa_presentacion} onChange={e => setA({ ...a, usa_presentacion: e.target.checked })} style={{ accentColor: 'var(--y-brand)', width: 16, height: 16 }} />

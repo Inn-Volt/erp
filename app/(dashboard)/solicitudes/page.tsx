@@ -5,7 +5,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import {
   Inbox, Plus, Search, X, Loader2, Sparkles, Wand2, CalendarPlus,
-  FileText, ExternalLink, Edit3, Trash2, ChevronRight, ClipboardList, HelpCircle,
+  FileText, ExternalLink, Edit3, Trash2, ChevronRight, ClipboardList, HelpCircle, UserPlus, Phone, Mail, MapPin, MessageCircle,
 } from 'lucide-react';
 import { solicitudesService } from '@/services/solicitudes';
 import { clientesService } from '@/services/clientes';
@@ -17,8 +17,10 @@ import type { Cliente } from '@/types';
 import type { Solicitud, EstadoSolicitud, PrioridadSolicitud, TipoServicio, AnalisisIA } from '@/types/solicitud';
 import {
   TIPO_SERVICIO_OPCIONES, TIPO_SERVICIO_LABEL, PRIORIDAD_META,
-  ESTADO_SOLICITUD_META, ESTADOS_SOLICITUD,
+  ESTADO_SOLICITUD_META, ESTADOS_SOLICITUD, ORIGENES,
 } from '@/types/solicitud';
+import { useFase } from '@/lib/fases';
+import { avisoRut, formatearRut } from '@/lib/rut';
 import { fetchConSesion } from '@/lib/fetchConSesion';
 import PageHeader from '@/components/PageHeader';
 import { usePermisos } from '@/hooks/usePermisos';
@@ -55,16 +57,32 @@ function SolicitudModal({ solicitud, clientes, createdBy, onClose, onSaved }: {
   const [infoAdic, setInfoAdic] = useState(solicitud?.info_adicional || '');
   const [obs, setObs] = useState(solicitud?.observaciones || '');
   const [saving, setSaving] = useState(false);
+  // Fase 15: cómo llegó y cómo ubicar al contacto. Sin la fase, solo sirven para crear al cliente.
+  const fase15 = useFase(15);
+  const [origen, setOrigen] = useState(solicitud?.origen || '');
+  const [telefono, setTelefono] = useState(solicitud?.contacto_telefono || '');
+  const [email, setEmail] = useState(solicitud?.contacto_email || '');
+  const [direccion, setDireccion] = useState(solicitud?.direccion || '');
+  // Cliente nuevo: se crea junto con la solicitud (así el nombre escrito nunca se pierde).
+  const [nuevo, setNuevo] = useState<{ nombre: string; empresa: string; rut: string } | null>(null);
 
   const toggleTipo = (t: TipoServicio) =>
     setTipos(prev => prev.includes(t) ? prev.filter(x => x !== t) : [...prev, t]);
 
-  // Selección desde el buscador: fija cliente y autocompleta contacto si está vacío.
+  // Selección desde el buscador: fija cliente y autocompleta lo que esté vacío.
   const elegirCliente = (c: Cliente) => {
     setClienteId(c.id);
     setClienteSearch(c.nombre_cliente);
     setShowClienteDrop(false);
+    setNuevo(null);
     if (!contacto && c.contacto_nombre) setContacto(c.contacto_nombre);
+    if (!telefono && c.telefono) setTelefono(c.telefono);
+    if (!email && c.email) setEmail(c.email);
+    if (!direccion && c.direccion) setDireccion(c.direccion);
+  };
+  const crearNuevo = () => {
+    setNuevo({ nombre: clienteSearch.trim(), empresa: '', rut: '' });
+    setShowClienteDrop(false);
   };
 
   const clientesFiltrados = (() => {
@@ -81,10 +99,33 @@ function SolicitudModal({ solicitud, clientes, createdBy, onClose, onSaved }: {
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (descripcion.trim().length < 10) { toastError('Describe el requerimiento con más detalle'); return; }
+    // Un nombre escrito que no es cliente: se ofrece crearlo en vez de perderlo.
+    if (clienteSearch.trim() && !clienteId && !nuevo) {
+      crearNuevo();
+      toastError(`«${clienteSearch.trim()}» no está en tus clientes: revisa sus datos abajo para crearlo, o elige uno de la lista.`);
+      return;
+    }
+    if (nuevo && !nuevo.nombre.trim()) { toastError('Escribe el nombre del cliente nuevo.'); return; }
     setSaving(true);
     try {
+      let idCliente = clienteId;
+      if (nuevo) {
+        const creado = await clientesService.create({
+          nombre_cliente: nuevo.nombre.trim(), empresa: nuevo.empresa.trim() || undefined, rut: formatearRut(nuevo.rut.trim()) || '',
+          telefono: telefono.trim() || undefined, email: email.trim() || undefined, direccion: direccion.trim() || undefined,
+          contacto_nombre: contacto.trim() || undefined, estado: 'activo',
+          ...(fase15 && origen ? { origen } : {}),
+        } as Omit<Cliente, 'id' | 'created_at' | 'updated_at'>);
+        idCliente = creado.id;
+        // El contacto queda en la ficha del cliente (para la cotización y la visita).
+        if (contacto.trim()) {
+          await supabase.from('cliente_contactos').insert({ cliente_id: creado.id, nombre: contacto.trim(), telefono: telefono.trim() || null,
+            email: email.trim() || null, principal: true }).then(() => undefined, () => undefined);
+        }
+        success(`Cliente «${creado.nombre_cliente}» creado`);
+      }
       const base = {
-        cliente_id: clienteId || null,
+        cliente_id: idCliente || null,
         contacto: contacto.trim() || null,
         descripcion: descripcion.trim(),
         tipos_servicio: tipos,
@@ -92,6 +133,7 @@ function SolicitudModal({ solicitud, clientes, createdBy, onClose, onSaved }: {
         fecha_requerida: fechaReq || null,
         info_adicional: infoAdic.trim() || null,
         observaciones: obs.trim() || null,
+        ...(fase15 ? { origen: origen || null, contacto_telefono: telefono.trim() || null, contacto_email: email.trim() || null, direccion: direccion.trim() || null } : {}),
       };
       if (solicitud) {
         await solicitudesService.update(solicitud.id, base);
@@ -126,7 +168,7 @@ function SolicitudModal({ solicitud, clientes, createdBy, onClose, onSaved }: {
                 <input
                   className="input"
                   value={clienteSearch}
-                  onChange={e => { setClienteSearch(e.target.value); setShowClienteDrop(true); if (!e.target.value) setClienteId(''); }}
+                  onChange={e => { setClienteSearch(e.target.value); setShowClienteDrop(true); setClienteId(''); if (nuevo) setNuevo({ ...nuevo, nombre: e.target.value }); }}
                   onFocus={() => setShowClienteDrop(true)}
                   onBlur={() => setTimeout(() => setShowClienteDrop(false), 150)}
                   placeholder="Nombre, empresa o RUT…"
@@ -140,7 +182,7 @@ function SolicitudModal({ solicitud, clientes, createdBy, onClose, onSaved }: {
                   </button>
                 )}
               </div>
-              {showClienteDrop && clientesFiltrados.length > 0 && (
+              {showClienteDrop && (clientesFiltrados.length > 0 || (clienteSearch.trim() && !clienteId)) && (
                 <div style={{ position: 'absolute', top: '100%', left: 0, right: 0, zIndex: 20, marginTop: 2, background: 'var(--bg2)', border: '1px solid var(--border2)', borderRadius: 'var(--r)', boxShadow: '0 8px 24px rgba(0,0,0,0.35)', maxHeight: 240, overflowY: 'auto' }}>
                   {clientesFiltrados.map(c => (
                     <button key={c.id} type="button" onMouseDown={() => elegirCliente(c)}
@@ -149,6 +191,12 @@ function SolicitudModal({ solicitud, clientes, createdBy, onClose, onSaved }: {
                       {(c.empresa || c.rut) && <span style={{ fontSize: '0.72rem', color: 'var(--muted)', marginLeft: 6 }}>{[c.empresa, c.rut].filter(Boolean).join(' · ')}</span>}
                     </button>
                   ))}
+                  {clienteSearch.trim() && !clienteId && !clientes.some(c => c.nombre_cliente.trim().toLowerCase() === clienteSearch.trim().toLowerCase()) && (
+                    <button type="button" onMouseDown={crearNuevo}
+                      style={{ display: 'flex', alignItems: 'center', gap: 6, width: '100%', textAlign: 'left', padding: '0.55rem 0.7rem', background: 'transparent', border: 'none', borderTop: '1px solid var(--border2)', cursor: 'pointer', color: 'var(--y)', fontSize: '0.84rem', fontWeight: 600 }}>
+                      <UserPlus size={14} /> Crear «{clienteSearch.trim()}» como cliente nuevo
+                    </button>
+                  )}
                 </div>
               )}
             </div>
@@ -156,6 +204,49 @@ function SolicitudModal({ solicitud, clientes, createdBy, onClose, onSaved }: {
               <label className="label-muted" style={{ display: 'block', marginBottom: '0.4rem' }}>Contacto</label>
               <input className="input" value={contacto} onChange={e => setContacto(e.target.value)} placeholder="Nombre de contacto" />
             </div>
+          </div>
+
+          {nuevo && (
+            <div style={{ border: '1px solid var(--y-brand)', borderRadius: 10, padding: '0.8rem', display: 'grid', gap: '0.6rem', background: 'var(--y-soft)' }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+                <span style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: '0.84rem', fontWeight: 700, color: 'var(--text)' }}><UserPlus size={14} /> Cliente nuevo (se crea al guardar)</span>
+                <button type="button" className="btn btn-ghost btn-xs" onClick={() => setNuevo(null)}>No crear</button>
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: '0.6rem' }}>
+                <input className="input" value={nuevo.nombre} onChange={e => setNuevo({ ...nuevo, nombre: e.target.value })} placeholder="Nombre *" aria-label="Nombre del cliente nuevo" />
+                <input className="input" value={nuevo.empresa} onChange={e => setNuevo({ ...nuevo, empresa: e.target.value })} placeholder="Empresa (razón social)" aria-label="Empresa" />
+                <div>
+                  <input className="input" value={nuevo.rut} onChange={e => setNuevo({ ...nuevo, rut: e.target.value })} onBlur={() => nuevo.rut && setNuevo({ ...nuevo, rut: formatearRut(nuevo.rut) })}
+                    placeholder="RUT (opcional)" aria-label="RUT" />
+                  {avisoRut(nuevo.rut) && <span style={{ fontSize: '0.7rem', color: 'var(--danger)' }}>{avisoRut(nuevo.rut)}</span>}
+                </div>
+              </div>
+              <span style={{ fontSize: '0.72rem', color: 'var(--muted)' }}>Teléfono, correo y dirección se toman de los campos de abajo.</span>
+            </div>
+          )}
+
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: '1rem' }}>
+            <div>
+              <label className="label-muted" style={{ display: 'block', marginBottom: '0.4rem' }}>Teléfono / WhatsApp</label>
+              <input className="input" type="tel" value={telefono} onChange={e => setTelefono(e.target.value)} placeholder="+56 9 …" />
+            </div>
+            <div>
+              <label className="label-muted" style={{ display: 'block', marginBottom: '0.4rem' }}>Correo</label>
+              <input className="input" type="email" value={email} onChange={e => setEmail(e.target.value)} placeholder="contacto@empresa.cl" />
+            </div>
+            {fase15 && (
+              <div>
+                <label className="label-muted" style={{ display: 'block', marginBottom: '0.4rem' }}>¿Cómo llegó?</label>
+                <select className="input" value={origen} onChange={e => setOrigen(e.target.value)}>
+                  <option value="">Sin indicar</option>
+                  {ORIGENES.map(o => <option key={o} value={o}>{o}</option>)}
+                </select>
+              </div>
+            )}
+          </div>
+          <div>
+            <label className="label-muted" style={{ display: 'block', marginBottom: '0.4rem' }}>Dirección del trabajo</label>
+            <input className="input" value={direccion} onChange={e => setDireccion(e.target.value)} placeholder="Calle, número, comuna" />
           </div>
 
           <div>
@@ -306,6 +397,17 @@ function DetalleSolicitud({ sol, onClose, onChange, onEdit, onDelete }: {
           <div>
             <p className="label-muted" style={{ fontSize: '0.55rem', marginBottom: '0.15rem' }}>Cliente</p>
             <p style={{ fontSize: '0.9rem', color: 'var(--text)', fontWeight: 600 }}>{sol.clientes?.nombre_cliente || 'Sin cliente'}{sol.contacto ? ` · ${sol.contacto}` : ''}</p>
+            {(sol.contacto_telefono || sol.contacto_email || sol.direccion || sol.origen) && (
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.35rem 0.8rem', marginTop: 6, fontSize: '0.8rem' }}>
+                {sol.contacto_telefono && <>
+                  <a href={`tel:${sol.contacto_telefono.replace(/\s/g, '')}`} style={{ display: 'inline-flex', alignItems: 'center', gap: 4, color: 'var(--text)' }}><Phone size={12} /> {sol.contacto_telefono}</a>
+                  <a href={`https://wa.me/${sol.contacto_telefono.replace(/\D/g, '')}`} target="_blank" rel="noreferrer" style={{ display: 'inline-flex', alignItems: 'center', gap: 4, color: 'var(--success)' }}><MessageCircle size={12} /> WhatsApp</a>
+                </>}
+                {sol.contacto_email && <a href={`mailto:${sol.contacto_email}`} style={{ display: 'inline-flex', alignItems: 'center', gap: 4, color: 'var(--text)' }}><Mail size={12} /> {sol.contacto_email}</a>}
+                {sol.direccion && <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, color: 'var(--muted)' }}><MapPin size={12} /> {sol.direccion}</span>}
+                {sol.origen && <span style={{ color: 'var(--muted)' }}>Llegó por: <b style={{ color: 'var(--text)' }}>{sol.origen}</b></span>}
+              </div>
+            )}
           </div>
 
           <div>
@@ -446,7 +548,7 @@ function DetalleSolicitud({ sol, onClose, onChange, onEdit, onDelete }: {
               <CalendarPlus size={13} /> Crear OT de visita técnica
             </button>
           )}
-          <button onClick={() => router.push(`/agenda?solicitud=${sol.id}${sol.cliente_id ? `&cliente=${sol.cliente_id}` : ''}`)} className="btn btn-ghost btn-sm" style={{ width: '100%', justifyContent: 'center' }}>
+          <button onClick={() => router.push(`/agenda?solicitud=${sol.id}${sol.cliente_id ? `&cliente=${sol.cliente_id}` : ''}${sol.contacto ? `&contacto=${encodeURIComponent(sol.contacto)}` : ''}${sol.contacto_telefono ? `&telefono=${encodeURIComponent(sol.contacto_telefono)}` : ''}${sol.direccion ? `&direccion=${encodeURIComponent(sol.direccion)}` : ''}`)} className="btn btn-ghost btn-sm" style={{ width: '100%', justifyContent: 'center' }}>
             <CalendarPlus size={13} /> Agendar visita
           </button>
           {sol.cotizacion_id && (

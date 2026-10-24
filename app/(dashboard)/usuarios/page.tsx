@@ -13,6 +13,9 @@ import PageHeader from '@/components/PageHeader';
 import { usuariosService, type Usuario, type Rol, type UsuarioRol, type EnlaceDeAcceso, type EmpresaBreve } from '@/services/usuarios';
 import { usePermisos } from '@/hooks/usePermisos';
 import { useToast } from '@/hooks/useToast';
+import NumeroInput from '@/components/NumeroInput';
+import { supabase } from '@/lib/supabase';
+import { useFase } from '@/lib/fases';
 
 const iniciales = (u: Usuario) =>
   (u.nombre || u.email || '?').split(/[\s._@-]+/).filter(Boolean).slice(0, 2).map(s => s[0]).join('').toUpperCase();
@@ -121,6 +124,37 @@ function InvitarModal({ roles, onClose, onListo }: { roles: Rol[]; onClose: () =
   );
 }
 
+/** Fase 15: costo por hora de la persona (para el costo real de los trabajos). Solo lo ve y edita quien gestiona usuarios. */
+function CostoHora({ usuarioId }: { usuarioId: string }) {
+  const { success, error: toastError } = useToast();
+  const [valor, setValor] = useState<number | null>(null);
+  const [guardado, setGuardado] = useState<number | null>(null);
+  const [guardando, setGuardando] = useState(false);
+  useEffect(() => {
+    supabase.from('costos_hora').select('costo_hora').eq('usuario_id', usuarioId).maybeSingle()
+      .then(({ data }) => { const v = (data as { costo_hora: number } | null)?.costo_hora ?? null; setValor(v === null ? null : Number(v)); setGuardado(v === null ? null : Number(v)); });
+  }, [usuarioId]);
+  const guardar = async () => {
+    setGuardando(true);
+    const { error } = valor
+      ? await supabase.from('costos_hora').upsert({ usuario_id: usuarioId, costo_hora: valor, actualizado_at: new Date().toISOString() })
+      : await supabase.from('costos_hora').delete().eq('usuario_id', usuarioId);
+    setGuardando(false);
+    if (error) { toastError(error.message); return; }
+    setGuardado(valor); success('Costo por hora guardado');
+  };
+  return (
+    <div style={{ display: 'flex', gap: 8, alignItems: 'flex-end', flexWrap: 'wrap' }}>
+      <label style={{ display: 'flex', flexDirection: 'column', gap: 6, maxWidth: 220 }}>
+        <span className="label-muted">Costo por hora (sueldo + leyes ÷ horas)</span>
+        <NumeroInput className="input" prefijo="$" value={valor} onChange={setValor} onVacio={() => setValor(null)} placeholder="El general de los ajustes" />
+      </label>
+      {valor !== guardado && <button className="btn btn-primary btn-sm" onClick={guardar} disabled={guardando}>{guardando ? <Loader2 size={13} className="iv-spin" /> : null} Guardar costo</button>}
+      <span style={{ fontSize: '0.74rem', color: 'var(--muted)', flex: '1 1 200px' }}>Con esto, las horas que registre en los trabajos suman a su costo real. Solo lo ve quien gestiona usuarios o ve costos.</span>
+    </div>
+  );
+}
+
 function FichaUsuario({ u, roles, asignaciones, empresas, esYo, puedeGestionar, onCambio }: {
   u: Usuario; roles: Rol[]; asignaciones: UsuarioRol[]; empresas: EmpresaBreve[]; esYo: boolean; puedeGestionar: boolean; onCambio: () => void;
 }) {
@@ -129,6 +163,7 @@ function FichaUsuario({ u, roles, asignaciones, empresas, esYo, puedeGestionar, 
   const [ocupado, setOcupado] = useState<string | null>(null);
   const [enlace, setEnlace] = useState<string | null>(null);
   const editable = puedeGestionar || esYo;
+  const fase15 = useFase(15);
   const cambiado = datos.nombre !== (u.nombre || '') || datos.cargo !== (u.cargo || '') || datos.telefono !== (u.telefono || '')
     || datos.empresa_id !== (u.empresa_id || '');
 
@@ -163,6 +198,7 @@ function FichaUsuario({ u, roles, asignaciones, empresas, esYo, puedeGestionar, 
       <p style={{ fontSize: '0.78rem', color: 'var(--muted)', marginTop: -6 }}>
         En el cotizador, «quién cotiza» se toma de esta cuenta: su empresa emisora y su nombre, cargo, teléfono y correo van en el PDF y en el mensaje al cliente.
       </p>
+      {puedeGestionar && fase15 && <CostoHora usuarioId={u.id} />}
       {editable && cambiado && (
         <div><button className="btn btn-primary btn-sm" disabled={ocupado === 'datos'}
           onClick={() => correr('datos', () => usuariosService.guardarDatos(u.id, { nombre: datos.nombre.trim() || null, cargo: datos.cargo.trim() || null, telefono: datos.telefono.trim() || null, empresa_id: datos.empresa_id || null }), 'Datos guardados')}>

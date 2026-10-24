@@ -16,6 +16,14 @@ export interface Cliente {
   /** Fase 5: al día, atrasado o bloqueado (bloqueado no recibe cotizaciones). */
   estado_pago?: 'al_dia' | 'atrasado' | 'bloqueado';
   nota_pago?: string | null;
+  /** Fase 15: ficha tributaria, origen y si puede partir sin anticipo. */
+  giro?: string | null;
+  comuna?: string | null;
+  ciudad?: string | null;
+  correo_dte?: string | null;
+  tipo_persona?: 'empresa' | 'persona' | null;
+  origen?: string | null;
+  sin_anticipo?: boolean;
 }
 
 export type CategoriaItem = 'material' | 'mano_obra' | 'servicio' | 'operacion';
@@ -345,7 +353,7 @@ export interface ConfiguracionEmpresa {
 
 export interface KpiData {
   total_cotizaciones: number;
-  /** Solo ventas concretadas (Aceptado/Realizado/Entregado), en CLP. */
+  /** Solo ventas concretadas (Aceptado/Realizado/Entregado), en CLP NETO (sin IVA). Todos los montos van netos. */
   venta_acumulada: number;
   pendiente_pipeline: number;
   aceptadas: number;

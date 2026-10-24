@@ -35,6 +35,9 @@ export interface Agendamiento {
   informe?: import('@/services/informes').InformeLleno | null;
   /** Fase 10: el técnico encargado (usuario): la ve en Inicio y llena sus informes. */
   tecnico_id?: string | null;
+  /** Fase 15: quién recibe en el lugar (si no es el contacto del cliente). */
+  contacto_sitio?: string | null;
+  telefono_sitio?: string | null;
   created_by: string | null;
   created_at: string;
   updated_at: string;

@@ -8,6 +8,7 @@ export type EstadoSolicitud =
   | 'EN_REVISION'
   | 'ANALIZADA_IA'
   | 'PENDIENTE_INFO'
+  | 'VISITA_AGENDADA'
   | 'LISTA_COTIZAR'
   | 'COTIZACION_GENERADA'
   | 'CERRADA'
@@ -54,6 +55,11 @@ export interface Solicitud {
   analisis_ia: AnalisisIA | null;
   cotizacion_id: string | null;
   cotizaciones?: { id: string; folio: number; estado: string } | null; // join
+  /** Fase 15: cómo llegó, y cómo ubicar al contacto. */
+  origen?: string | null;
+  contacto_telefono?: string | null;
+  contacto_email?: string | null;
+  direccion?: string | null;
   historial: HistorialEntry[];
   created_by: string | null;
   created_at: string;
@@ -90,6 +96,7 @@ export const ESTADO_SOLICITUD_META: Record<EstadoSolicitud, { label: string; col
   EN_REVISION:         { label: 'En revisión',          color: 'var(--y)',       bg: 'var(--y-soft)' },
   ANALIZADA_IA:        { label: 'Analizada por IA',      color: 'var(--y)',       bg: 'var(--y-soft)' },
   PENDIENTE_INFO:      { label: 'Pendiente de info',     color: 'var(--danger)',  bg: 'rgba(220,38,38,0.08)' },
+  VISITA_AGENDADA:     { label: 'Visita agendada',       color: 'var(--info)',    bg: 'var(--info-soft)' },
   LISTA_COTIZAR:       { label: 'Lista para cotizar',    color: 'var(--success)', bg: 'var(--success-soft)' },
   COTIZACION_GENERADA: { label: 'Cotización generada',   color: 'var(--success)', bg: 'var(--success-soft)' },
   CERRADA:             { label: 'Cerrada',               color: 'var(--muted)',   bg: 'var(--hover-bg)' },
@@ -99,6 +106,10 @@ export const ESTADO_SOLICITUD_META: Record<EstadoSolicitud, { label: string; col
 
 /** Orden de estados para el selector (flujo natural). */
 export const ESTADOS_SOLICITUD: EstadoSolicitud[] = [
-  'NUEVA', 'EN_REVISION', 'ANALIZADA_IA', 'PENDIENTE_INFO',
+  'NUEVA', 'EN_REVISION', 'ANALIZADA_IA', 'PENDIENTE_INFO', 'VISITA_AGENDADA',
   'LISTA_COTIZAR', 'COTIZACION_GENERADA', 'CERRADA', 'CANCELADA', 'NO_VIABLE',
 ];
+
+/** Cómo llegó el cliente (para saber qué publicidad trae clientes). */
+export const ORIGENES = ['Instagram', 'Facebook', 'Google', 'Página web', 'WhatsApp', 'Llamada', 'Referido',
+  'Cliente antiguo', 'Licitación', 'Otro'] as const;
