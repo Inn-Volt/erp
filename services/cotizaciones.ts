@@ -181,7 +181,7 @@ export const cotizacionesService = {
    */
   async getKpis(): Promise<KpiData> {
     // Paginado: Supabase devuelve como máximo 1.000 filas por consulta.
-    type Fila = { total: number; total_clp: number | null; estado: EstadoCotizacion; created_at: string; aceptada_at?: string | null };
+    type Fila = { total: number; total_clp: number | null; subtotal?: number | null; estado: EstadoCotizacion; created_at: string; aceptada_at?: string | null };
     const all: Fila[] = [];
     for (let desde = 0; ; desde += 1000) {
       const { data, error } = await supabase
@@ -192,7 +192,12 @@ export const cotizacionesService = {
       all.push(...((data || []) as Fila[]));
       if (!data || data.length < 1000) break;
     }
-    const montoCLP = (r: { total?: number; total_clp?: number | null }) => r.total_clp ?? r.total ?? 0;
+    // Los indicadores van en NETO (sin IVA): el IVA no es venta, se le paga al SII.
+    const montoCLP = (r: Fila) => {
+      const conIva = Number(r.total_clp ?? r.total ?? 0), total = Number(r.total || 0);
+      if (total > 0 && r.subtotal != null) return Math.round(Number(r.subtotal) * (conIva / total));
+      return Math.round(conIva / 1.19);
+    };
     const ventas = all.filter(r => ESTADOS_VENTA.includes(r.estado));
     const pendientes = all.filter(r => ESTADOS_ESPERA.includes(r.estado));
     const rechazadas = all.filter(r => ESTADOS_RECHAZO.includes(r.estado));

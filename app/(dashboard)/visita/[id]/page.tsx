@@ -15,6 +15,8 @@ import PageHeader from '@/components/PageHeader';
 import LinksMapa from '@/components/LinksMapa';
 import InformesDeVisita from '@/components/informes/InformesDeVisita';
 import { supabase } from '@/lib/supabase';
+import { useFase } from '@/lib/fases';
+import { informesVisitaService } from '@/services/informes';
 import { usePermisos } from '@/hooks/usePermisos';
 import { useToast } from '@/hooks/useToast';
 import type { Cliente } from '@/types';
@@ -37,6 +39,10 @@ export default function VisitaPage() {
   const [v, setV] = useState<Visita | null>(null);
   const [cargando, setCargando] = useState(true);
   const [cerrando, setCerrando] = useState(false);
+  // Fase 15: cerrar sin un informe completado pide el motivo (queda en las notas de la visita).
+  const fase15 = useFase(15);
+  const [pideMotivo, setPideMotivo] = useState(false);
+  const [motivo, setMotivo] = useState('');
 
   const cargar = useCallback(async () => {
     const conTecnico = await supabase.from('agendamientos')
@@ -69,15 +75,25 @@ export default function VisitaPage() {
   const direccion = v.direccion || cli?.direccion || '';
   const meta = ESTADO_AGENDA_META[v.estado];
   const tel = cli?.telefono?.replace(/[^\d+]/g, '');
+  const telSitio = v.telefono_sitio?.replace(/[^\d+]/g, '');
   const cerrada = v.estado === 'Realizada' || v.estado === 'Cancelada';
 
   const marcarRealizada = async () => {
-    if (!confirm('¿Marcar la visita como realizada? Se avisa para cotizar.')) return;
     setCerrando(true);
     try {
-      const { error } = await supabase.rpc('visita_realizada', { p_agenda: v.id });
+      const informes = fase15 ? await informesVisitaService.deVisita(v.id).catch(() => null) : null;
+      const sinInforme = !!informes && !informes.some(i => i.estado === 'completado');
+      if (sinInforme && !motivo.trim()) {
+        setPideMotivo(true);
+        toastError('Falta un informe completado: complétalo o escribe por qué se cierra sin él.');
+        return;
+      }
+      if (!sinInforme && !confirm('¿Marcar la visita como realizada? Se avisa para cotizar.')) return;
+      const { error } = sinInforme
+        ? await supabase.rpc('visita_cerrar', { p_agenda: v.id, p_motivo: motivo.trim() })
+        : await supabase.rpc('visita_realizada', { p_agenda: v.id });
       if (error) throw new Error(/visita_realizada|schema cache/i.test(error.message) ? 'Falta ejecutar supabase_fase10_visita_tecnico.sql en Supabase.' : error.message);
-      success('Visita realizada'); cargar();
+      success('Visita realizada'); setPideMotivo(false); cargar();
     } catch (e) { toastError(e instanceof Error ? e.message : 'No se pudo cerrar la visita'); }
     finally { setCerrando(false); }
   };
@@ -105,6 +121,16 @@ export default function VisitaPage() {
           {direccion && (
             <div style={fila}><MapPin size={16} style={icono} />
               <span style={{ flex: 1 }}>{direccion}<span style={{ display: 'block', marginTop: 6 }}><LinksMapa direccion={direccion} /></span></span></div>
+          )}
+          {(v.contacto_sitio || telSitio) && (
+            <div style={fila}><Phone size={16} style={icono} />
+              <span style={{ flex: 1 }}>{v.contacto_sitio || 'Contacto en el lugar'}
+                <span style={sub}>Recibe en el lugar{v.telefono_sitio ? ` · ${v.telefono_sitio}` : ''}</span>
+                {telSitio && <span style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 6 }}>
+                  <a href={`tel:${telSitio}`} className="btn btn-ghost btn-sm"><Phone size={13} /> Llamar</a>
+                  <a href={`https://wa.me/${telSitio.replace(/^\+/, '')}`} target="_blank" rel="noreferrer" className="btn btn-ghost btn-sm">WhatsApp</a>
+                </span>}
+              </span></div>
           )}
           {cli && (
             <div style={fila}><User size={16} style={icono} />
@@ -141,14 +167,21 @@ export default function VisitaPage() {
         <p style={{ margin: 0, fontSize: '0.8rem', color: 'var(--muted)' }}>Elige la planilla (levantamiento, checklist…), llénala por pasos y agrega las fotos dentro del informe.</p>
         <InformesDeVisita agendaId={v.id} editable={puedeTrabajar} tiposServicio={v.tipos_servicio}
           datos={() => ({ fecha: v.fecha, titulo: v.titulo, responsable: v.tecnico?.nombre || v.tecnico?.email || RESPONSABLE_LABEL[v.responsable],
-            hora: v.hora_inicio?.slice(0, 5) || null, contacto: cli?.contacto_nombre || null, telefono: cli?.telefono,
+            hora: v.hora_inicio?.slice(0, 5) || null, contacto: v.contacto_sitio || cli?.contacto_nombre || null, telefono: v.telefono_sitio || cli?.telefono,
             motivo: v.solicitudes?.descripcion?.trim() || v.notas?.trim() || null,
             cliente: { nombre: cli?.nombre_cliente || 'Sin cliente', rut: cli?.rut, direccion } })} />
       </div>
 
+      {puedeTrabajar && !cerrada && pideMotivo && (
+        <div className="panel-y" style={{ padding: '1rem', marginTop: 12, display: 'flex', flexDirection: 'column', gap: 6, background: 'var(--y-soft)' }}>
+          <label className="label-muted" style={{ color: 'var(--text)' }}>No hay un informe completado. ¿Por qué se cierra sin él?</label>
+          <textarea className="input" rows={2} autoFocus value={motivo} onChange={e => setMotivo(e.target.value)}
+            placeholder="Ej.: el cliente no estaba; solo se tomaron medidas; se hará el levantamiento en otra visita…" style={{ resize: 'vertical' }} />
+        </div>
+      )}
       {puedeTrabajar && !cerrada && (
-        <button className="btn btn-primary" style={{ marginTop: 12, width: '100%', justifyContent: 'center', height: 46 }} onClick={marcarRealizada} disabled={cerrando}>
-          {cerrando ? <Loader2 size={15} className="iv-spin" /> : <CheckCircle2 size={15} />} Marcar visita realizada</button>
+        <button className="btn btn-primary" style={{ marginTop: 12, width: '100%', justifyContent: 'center', height: 46 }} onClick={marcarRealizada} disabled={cerrando || (pideMotivo && !motivo.trim())}>
+          {cerrando ? <Loader2 size={15} className="iv-spin" /> : <CheckCircle2 size={15} />} {pideMotivo ? 'Cerrar sin informe' : 'Marcar visita realizada'}</button>
       )}
     </div>
   );

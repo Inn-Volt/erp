@@ -13,6 +13,7 @@ import { vendedoresService } from '@/services/vendedores';
 import { ESTADO_COLORS, INNVOLT_INFO } from '@/types';
 import { formatCLP, formatMoneda, formatFolio, formatDate, fechaLocal } from '@/utils';
 import PageHeader from '@/components/PageHeader';
+import PanelDinero from '@/components/PanelDinero';
 
 /** Embudo comercial: cuántos casos hay en cada etapa del flujo. */
 interface Embudo { solicitudes: number | null; citas: number | null; pendientes: number; ventas: number; }
@@ -115,13 +116,16 @@ export default function DashboardPage() {
           Array.from({ length: 4 }).map((_, i) => <Skeleton key={i} h={110} />)
         ) : (
           <>
-            <KpiCard label="Ventas del mes" value={formatCLP(kpis?.venta_mes || 0)} sub={`Acumulado: ${formatCLP(kpis?.venta_acumulada || 0)}`} icon={TrendingUp} accent="var(--success)" />
-            <KpiCard label="Pipeline pendiente" value={formatCLP(kpis?.pendiente_pipeline || 0)} sub={`${kpis?.pendientes || 0} cotizaciones esperando respuesta`} icon={Clock} accent="var(--orange)" />
+            <KpiCard label="Ventas del mes (neto)" value={formatCLP(kpis?.venta_mes || 0)} sub={`Acumulado neto: ${formatCLP(kpis?.venta_acumulada || 0)}`} icon={TrendingUp} accent="var(--success)" />
+            <KpiCard label="Pipeline (neto)" value={formatCLP(kpis?.pendiente_pipeline || 0)} sub={`${kpis?.pendientes || 0} cotizaciones esperando respuesta`} icon={Clock} accent="var(--orange)" />
             <KpiCard label="Tasa de cierre" value={kpis?.tasa_cierre != null ? `${kpis.tasa_cierre}%` : '—'} sub={`${kpis?.aceptadas || 0} ganadas · ${kpis?.rechazadas || 0} perdidas`} icon={Target} accent="var(--info)" />
-            <KpiCard label="Ticket promedio" value={formatCLP(kpis?.ticket_promedio || 0)} sub={`${kpis?.total_cotizaciones || 0} cotizaciones emitidas`} icon={Zap} />
+            <KpiCard label="Ticket promedio (neto)" value={formatCLP(kpis?.ticket_promedio || 0)} sub={`${kpis?.total_cotizaciones || 0} cotizaciones emitidas`} icon={Zap} />
           </>
         )}
       </div>
+
+      {/* Dinero: cobrado, por cobrar, caja, margen real y punto de equilibrio (según permisos) */}
+      {!loading && <PanelDinero ventaNetaMes={kpis?.venta_mes || 0} />}
 
       {/* Embudo comercial: del requerimiento a la venta */}
       {!loading && embudo && (

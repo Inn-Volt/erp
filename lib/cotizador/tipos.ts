@@ -128,6 +128,14 @@ export interface CotizacionDoc {
   trabajo_estado?: EstadoTrabajo | null;
   trabajo_inicio?: string | null;
   trabajo_termino?: string | null;
+  /** Fase 15: por qué se partió sin el anticipo pagado. */
+  inicio_sin_anticipo?: string | null;
+  /** Fase 15: aprobación del gerente (descuento o utilidad fuera de rango). */
+  aprobacion_estado?: 'pendiente' | 'aprobada' | 'rechazada' | null;
+  aprobacion_motivo?: string | null;
+  aprobacion_nota?: string | null;
+  aprobacion_por?: string | null;
+  aprobacion_at?: string | null;
   incluir_fotos?: boolean;
   proyecto_id?: string | null;
   plantilla_id?: string | null;
@@ -225,6 +233,13 @@ export interface AjustesCot {
   estructura_costos?: Partial<import('@/lib/cotizador/utilidad').EstructuraCostos> | null;
   /** Fase 13: utilidad % por omisión de lo nuevo, por tipo. */
   utilidad_por_tipo?: import('@/lib/cotizador/utilidad').UtilidadPorTipo | null;
+  /** Fase 15: el trabajo no parte con el anticipo impago (salvo motivo o cliente de confianza). */
+  exigir_anticipo?: boolean;
+  /** Fase 15: costo por hora general (para las horas de quien no tiene uno propio). */
+  costo_hora?: number;
+  /** Fase 15: sobre este % de descuento o bajo esta utilidad %, se pide aprobación (vacío: nunca). */
+  descuento_max?: number | null;
+  utilidad_min?: number | null;
 }
 
 export interface Plantilla {

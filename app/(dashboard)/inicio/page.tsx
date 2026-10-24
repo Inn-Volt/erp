@@ -21,6 +21,8 @@ import { anticiposService, type Anticipo } from '@/services/fase5';
 import type { Tarea } from '@/services/operacion';
 import { usePermisos } from '@/hooks/usePermisos';
 import { fechaLocal, formatCLP, formatDate, sumarDias } from '@/utils';
+import { vendedoresService } from '@/services/vendedores';
+import { ESTADO_SOLICITUD_META, type EstadoSolicitud } from '@/types/solicitud';
 
 function Caja({ titulo, icono, href, children, vacio }: { titulo: string; icono: React.ReactNode; href?: string; children: React.ReactNode; vacio?: boolean }) {
   return (
@@ -34,7 +36,7 @@ function Caja({ titulo, icono, href, children, vacio }: { titulo: string; icono:
   );
 }
 
-interface Cita { id: string; titulo: string; fecha: string; hora_inicio: string | null; direccion: string | null; estado: string; responsable: string; clientes?: { nombre_cliente: string } | null }
+interface Cita { id: string; titulo: string; fecha: string; hora_inicio: string | null; direccion: string | null; estado: string; responsable: string; tecnico_id?: string | null; clientes?: { nombre_cliente: string } | null }
 interface Sol { id: string; folio: number; descripcion: string; prioridad: string; estado: string; created_at: string; clientes?: { nombre_cliente: string } | null }
 interface CotEsp { id: string; folio: number; titulo: string | null; total: number; total_clp: number | null; enviada_at: string | null; vista_at: string | null; valida_hasta: string | null; clientes?: { nombre_cliente: string } | null }
 interface TrabajoFila { id: string; folio: number; titulo: string | null; trabajo_estado: string | null; clientes?: { nombre_cliente: string } | null }
@@ -52,7 +54,12 @@ export default function MiDiaPage() {
   const [cobros, setCobros] = useState<Cobro[]>([]);
   const [tareas, setTareas] = useState<Tarea[]>([]);
   const [anticipos, setAnticipos] = useState<Anticipo[]>([]);
+  const [nombres, setNombres] = useState<Record<string, string>>({});
   const hoy = fechaLocal();
+  // Mi día según el rol: lo comercial (solicitudes, cotizaciones esperando, agenda de todos) a quien
+  // vende o administra; el técnico ve sus visitas, sus trabajos, sus tareas y sus anticipos.
+  const comercial = puede('solicitudes.crear') || puede('cotizaciones.crear') || puede('configuracion.gestionar');
+  useEffect(() => { vendedoresService.mapa().then(m => setNombres(Object.fromEntries(Object.entries(m).map(([k, v]) => [k, v.nombre.split(' ')[0]])))); }, []);
 
   useEffect(() => {
     if (!perfil) return;
@@ -62,19 +69,20 @@ export default function MiDiaPage() {
       .eq('tecnico_id', uid).gte('fecha', sumarDias(hoy, -1)).neq('estado', 'Cancelada')
       .order('fecha').order('hora_inicio', { nullsFirst: true }).limit(20)
       .then(({ data, error }) => { if (!error) setMisVisitas((data || []) as unknown as Cita[]); });
-    if (puede('agenda.ver')) {
-      supabase.from('agendamientos').select('id, titulo, fecha, hora_inicio, direccion, estado, responsable, clientes(nombre_cliente)')
+    if (puede('agenda.ver') && comercial) {
+      supabase.from('agendamientos').select('id, titulo, fecha, hora_inicio, direccion, estado, responsable, tecnico_id, clientes(nombre_cliente)')
         .gte('fecha', hoy).lte('fecha', sumarDias(hoy, 7)).not('estado', 'in', '(Cancelada,Realizada)')
         .order('fecha').order('hora_inicio', { nullsFirst: true })
         .then(({ data }) => setCitas((data || []) as unknown as Cita[]));
     }
-    if (puede('solicitudes.ver')) {
+    if (puede('solicitudes.ver') && comercial) {
+      // Primero las que ya tuvieron visita: son las que hay que cotizar.
       supabase.from('solicitudes').select('id, folio, descripcion, prioridad, estado, created_at, clientes(nombre_cliente)')
-        .in('estado', ['NUEVA', 'EN_REVISION', 'PENDIENTE_INFO', 'LISTA_COTIZAR']).order('created_at', { ascending: false }).limit(10)
-        .then(({ data }) => setSols((data || []) as unknown as Sol[]));
+        .in('estado', ['NUEVA', 'EN_REVISION', 'ANALIZADA_IA', 'PENDIENTE_INFO', 'VISITA_AGENDADA', 'LISTA_COTIZAR']).order('created_at', { ascending: false }).limit(12)
+        .then(({ data }) => setSols(((data || []) as unknown as Sol[]).sort((a, b) => Number(b.estado === 'LISTA_COTIZAR') - Number(a.estado === 'LISTA_COTIZAR'))));
     }
     if (puede('cotizaciones.ver')) {
-      supabase.from('cotizaciones').select('id, folio, titulo, total, total_clp, enviada_at, vista_at, valida_hasta, clientes(nombre_cliente)')
+      if (comercial) supabase.from('cotizaciones').select('id, folio, titulo, total, total_clp, enviada_at, vista_at, valida_hasta, clientes(nombre_cliente)')
         .eq('estado', 'Enviada').order('enviada_at', { ascending: true }).limit(10)
         .then(({ data }) => setEsperando((data || []) as unknown as CotEsp[]));
       supabase.from('cotizaciones').select('id, folio, titulo, trabajo_estado, clientes(nombre_cliente)')
@@ -89,7 +97,7 @@ export default function MiDiaPage() {
     supabase.from('tareas').select('*').eq('asignado_id', uid).in('estado', ['pendiente', 'en_progreso']).order('fecha_limite', { ascending: true, nullsFirst: false })
       .then(({ data }) => setTareas((data || []) as Tarea[]));
     anticiposService.listar(uid).then(a => setAnticipos(a.filter(x => x.estado === 'entregado'))).catch(() => {});
-  }, [perfil, hoy, puede]);
+  }, [perfil, hoy, puede, comercial]);
 
   const fila: React.CSSProperties = { display: 'flex', gap: 8, alignItems: 'flex-start', fontSize: '0.86rem', color: 'var(--text)', borderBottom: '1px solid var(--border2)', paddingBottom: 6, textDecoration: 'none' };
   const sub: React.CSSProperties = { display: 'block', fontSize: '0.76rem', color: 'var(--muted)' };
@@ -103,7 +111,7 @@ export default function MiDiaPage() {
       <span style={{ fontWeight: 700, minWidth: 64 }}>{c.fecha === hoy ? 'Hoy' : formatDate(c.fecha).slice(0, 5)}{c.hora_inicio ? ` ${c.hora_inicio.slice(0, 5)}` : ''}</span>
       <span style={{ flex: 1 }}>
         <Link href={`/visita/${c.id}`} style={{ fontWeight: 600 }}>{c.titulo}</Link>
-        <span style={sub}>{c.clientes?.nombre_cliente || ''}{c.direccion ? ` · ${c.direccion}` : ''} · {c.responsable}</span>
+        <span style={sub}>{c.clientes?.nombre_cliente || ''}{c.direccion ? ` · ${c.direccion}` : ''}{c.tecnico_id && nombres[c.tecnico_id] ? ` · ${nombres[c.tecnico_id]}` : ''}</span>
         {c.direccion && <LinksMapa direccion={c.direccion} compacto />}
       </span>
     </div>
@@ -126,7 +134,7 @@ export default function MiDiaPage() {
             ))}
           </Caja>
         )}
-        {puede('agenda.ver') && <>
+        {puede('agenda.ver') && comercial && <>
           <Caja titulo={`Agenda de hoy (${deHoy.length})`} icono={<CalendarDays size={15} />} href="/agenda" vacio={!deHoy.length}>
             {deHoy.map(c => <CitaFila key={c.id} c={c} />)}
           </Caja>
@@ -135,20 +143,25 @@ export default function MiDiaPage() {
           </Caja>
         </>}
 
-        {puede('solicitudes.ver') && (
+        {puede('solicitudes.ver') && comercial && (
           <Caja titulo={`Solicitudes por atender (${sols.length})`} icono={<Inbox size={15} />} href="/solicitudes" vacio={!sols.length}>
-            {sols.map(s => (
-              <Link key={s.id} href="/solicitudes" style={fila}>
-                <span style={{ fontWeight: 700, color: 'var(--y)', minWidth: 64 }}>SOL-{String(s.folio).padStart(4, '0')}</span>
-                <span style={{ flex: 1 }}>{s.descripcion.slice(0, 80)}
-                  <span style={sub}>{s.clientes?.nombre_cliente || 'Sin cliente'} · {s.prioridad} · hace {diasDesde(s.created_at)} d</span></span>
-              </Link>
-            ))}
+            {sols.map(s => {
+              const m = ESTADO_SOLICITUD_META[s.estado as EstadoSolicitud];
+              return (
+                <Link key={s.id} href="/solicitudes" style={fila}>
+                  <span style={{ fontWeight: 700, color: 'var(--y)', minWidth: 64 }}>SOL-{String(s.folio).padStart(4, '0')}</span>
+                  <span style={{ flex: 1 }}>{s.descripcion.slice(0, 80)}
+                    <span style={sub}>{s.clientes?.nombre_cliente || 'Sin cliente'} · {s.prioridad} · hace {diasDesde(s.created_at)} d</span></span>
+                  {m && <span style={{ fontSize: '0.68rem', fontWeight: 700, color: m.color, background: m.bg, borderRadius: 6, padding: '0.1rem 0.4rem', whiteSpace: 'nowrap' }}>
+                    {s.estado === 'LISTA_COTIZAR' ? 'Por cotizar' : m.label}</span>}
+                </Link>
+              );
+            })}
           </Caja>
         )}
 
         {puede('cotizaciones.ver') && <>
-          <Caja titulo={`Esperando al cliente (${esperando.length})`} icono={<FileText size={15} />} href="/cotizador/historial" vacio={!esperando.length}>
+          {comercial && <Caja titulo={`Esperando al cliente (${esperando.length})`} icono={<FileText size={15} />} href="/cotizador/historial" vacio={!esperando.length}>
             {esperando.map(c => {
               const d = diasDesde(c.enviada_at);
               const vence = c.valida_hasta && c.valida_hasta <= sumarDias(hoy, 3);
@@ -163,7 +176,7 @@ export default function MiDiaPage() {
               );
             })}
             {esperando.length > 0 && <p style={{ margin: 0, fontSize: '0.74rem', color: 'var(--muted)' }}>Las más antiguas primero: son las que piden un llamado de seguimiento.</p>}
-          </Caja>
+          </Caja>}
           <Caja titulo={`Trabajos en curso (${trabajos.length})`} icono={<ClipboardCheck size={15} />} href="/trabajos" vacio={!trabajos.length}>
             {trabajos.map(t => (
               <Link key={t.id} href={`/cotizador?edit=${t.id}`} style={fila}>
@@ -188,12 +201,15 @@ export default function MiDiaPage() {
         )}
 
         <Caja titulo={`Mis tareas (${tareas.length})`} icono={<ListTodo size={15} />} href="/tareas" vacio={!tareas.length}>
-          {tareas.slice(0, 8).map(t => (
-            <div key={t.id} style={fila}>
+          {tareas.slice(0, 8).map(t => {
+            // Las tareas de seguimiento traen el enlace a su cotización.
+            const enlace = (t.descripcion || '').match(/\/cotizador\?edit=[0-9a-f-]{36}/)?.[0];
+            const contenido = <>
               <span style={{ flex: 1 }}>{t.titulo}</span>
               {t.fecha_limite && <span style={{ fontSize: '0.76rem', color: t.fecha_limite < hoy ? 'var(--danger)' : 'var(--muted)' }}>{formatDate(t.fecha_limite)}</span>}
-            </div>
-          ))}
+            </>;
+            return enlace ? <Link key={t.id} href={enlace} style={fila}>{contenido}</Link> : <div key={t.id} style={fila}>{contenido}</div>;
+          })}
         </Caja>
         {anticipos.length > 0 && (
           <Caja titulo="Anticipos por rendir" icono={<HandCoins size={15} />} href="/gastos">

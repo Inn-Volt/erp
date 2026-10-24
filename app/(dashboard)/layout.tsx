@@ -5,6 +5,7 @@ import { useToastProvider } from '@/hooks/useToast';
 import { PermisosProvider } from '@/hooks/usePermisos';
 import ToastContainer from '@/components/ToastContainer';
 import AppShell from '@/components/AppShell';
+import CapturaErrores from '@/components/CapturaErrores';
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
   const { user, logout, userName, loading } = useAuth(true);
@@ -22,6 +23,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     <PermisosProvider userId={user?.id ?? null}>
       <AppShell userName={userName} userId={user?.id ?? null} onLogout={logout}>{children}</AppShell>
       <ToastContainer toasts={toasts} onRemove={removeToast} />
+      {user && <CapturaErrores />}
     </PermisosProvider>
   );
 }

@@ -73,8 +73,10 @@ export interface PorFacturar {
   monto_pagado: number; fecha_pago: string | null; notas: string | null; created_at: string;
   /** Fase 7: el hito del plan de cobro («Anticipo», «Saldo») y su porcentaje. */
   hito?: string | null; porcentaje?: number | null;
+  /** Fase 15: la factura electrónica emitida (OpenFactura). */
+  dte_tipo?: number | null; dte_folio?: string | null; dte_estado?: string | null; dte_pdf?: string | null; dte_emitido_at?: string | null;
   cotizaciones?: { folio: number; titulo: string | null } | null;
-  clientes?: { nombre_cliente: string } | null;
+  clientes?: { nombre_cliente: string; telefono?: string | null; email?: string | null; contacto_nombre?: string | null } | null;
   ordenes_trabajo?: { folio: number } | null;
 }
 
@@ -235,7 +237,7 @@ export const informesService = {
 export const facturacionService = {
   async listar(): Promise<PorFacturar[]> {
     const { data, error } = await supabase.from('por_facturar')
-      .select('*, clientes(nombre_cliente), ordenes_trabajo(folio), cotizaciones(folio, titulo)').order('created_at', { ascending: false });
+      .select('*, clientes(nombre_cliente, telefono, email, contacto_nombre), ordenes_trabajo(folio), cotizaciones(folio, titulo)').order('created_at', { ascending: false });
     lanzar(error); return (data || []) as PorFacturar[];
   },
   async actualizar(id: string, patch: Partial<PorFacturar>) {

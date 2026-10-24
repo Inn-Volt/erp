@@ -28,6 +28,8 @@ import PageHeader from '@/components/PageHeader';
 import LinksMapa from '@/components/LinksMapa';
 import { tipoDia } from '@/lib/feriados';
 import { usePermisos } from '@/hooks/usePermisos';
+import { useFase } from '@/lib/fases';
+import { informesVisitaService } from '@/services/informes';
 
 // ─── Utilidades de fecha ──────────────────────────────────────────────────────
 const DIAS = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'];
@@ -57,11 +59,14 @@ const btnCal: React.CSSProperties = {
 };
 
 // ─── Modal crear / editar ─────────────────────────────────────────────────────
+// Lo que llega desde una solicitud («Agendar visita»): cliente, contacto y dirección.
+type Prefill = { cliente_id?: string; solicitud_id?: string; contacto?: string; telefono?: string; direccion?: string };
+
 function AgendaModal({ cita, clientes, createdBy, prefill, onClose, onSaved, onDeleted }: {
   cita: Agendamiento | null;
   clientes: Cliente[];
   createdBy: string;
-  prefill?: { cliente_id?: string; solicitud_id?: string };
+  prefill?: Prefill;
   onClose: () => void;
   onSaved: () => void;
   onDeleted: () => void;
@@ -75,11 +80,13 @@ function AgendaModal({ cita, clientes, createdBy, prefill, onClose, onSaved, onD
   });
   const [showDrop, setShowDrop] = useState(false);
   const [titulo, setTitulo] = useState(cita?.titulo || 'Visita técnica');
-  const [direccion, setDireccion] = useState(cita?.direccion || (clientes.find(c => c.id === initCliente)?.direccion || ''));
+  const [direccion, setDireccion] = useState(cita?.direccion || prefill?.direccion || (clientes.find(c => c.id === initCliente)?.direccion || ''));
   const [fecha, setFecha] = useState(cita?.fecha || hoyStr());
   const [horaIni, setHoraIni] = useState(hhmm(cita?.hora_inicio));
   const [horaFin, setHoraFin] = useState(hhmm(cita?.hora_fin));
-  const [responsable, setResponsable] = useState<ResponsableAgenda>(cita?.responsable || 'Ambos');
+  // «Responsable» (César / Joaquín / Ambos) es el campo antiguo: se conserva tal cual; hoy se asigna
+  // al técnico encargado (cualquier usuario).
+  const [responsable] = useState<ResponsableAgenda>(cita?.responsable || 'Ambos');
   const [tipos, setTipos] = useState<TipoServicio[]>(cita?.tipos_servicio || []);
   const [estado, setEstado] = useState<EstadoAgenda>(cita?.estado || 'Agendada');
   const [notas, setNotas] = useState(cita?.notas || '');
@@ -91,6 +98,19 @@ function AgendaModal({ cita, clientes, createdBy, prefill, onClose, onSaved, onD
       .then(({ data }) => setUsuarios(((data || []) as { id: string; nombre: string | null; email: string | null; activo: boolean | null }[]).filter(u => u.activo !== false)));
   }, []);
   const [saving, setSaving] = useState(false);
+  // Fase 15: quién recibe en el lugar (si no es el contacto del cliente).
+  const fase15 = useFase(15);
+  const [contactoSitio, setContactoSitio] = useState(cita?.contacto_sitio || prefill?.contacto || '');
+  const [telefonoSitio, setTelefonoSitio] = useState(cita?.telefono_sitio || prefill?.telefono || '');
+  // Desde una solicitud: lo que pidió el cliente pasa a las notas (y al motivo del informe).
+  useEffect(() => {
+    if (cita || !prefill?.solicitud_id) return;
+    supabase.from('solicitudes').select('descripcion').eq('id', prefill.solicitud_id).maybeSingle()
+      .then(({ data }) => { const d = (data as { descripcion?: string | null } | null)?.descripcion?.trim(); if (d) setNotas(n => n || d); });
+  }, [cita, prefill?.solicitud_id]);
+  // Cerrar la visita sin informe completado pide el motivo (queda en las notas de la visita).
+  const [motivoCierre, setMotivoCierre] = useState('');
+  const [pideMotivo, setPideMotivo] = useState(false);
   // Fase 7: lo que se vio en la visita (notas y fotos), que pasa a la cotización.
   const conVisita = !!cita && 'fotos' in cita;
   const [notasVisita, setNotasVisita] = useState(cita?.notas_visita || '');
@@ -106,7 +126,7 @@ function AgendaModal({ cita, clientes, createdBy, prefill, onClose, onSaved, onD
     const cli = clientes.find(c => c.id === clienteId);
     const tecnico = usuarios.find(u => u.id === tecnicoId);
     return { fecha, titulo, hora: horaIni || null, responsable: tecnico?.nombre || tecnico?.email || RESPONSABLE_LABEL[responsable],
-      contacto: cli?.contacto_nombre || null, telefono: cli?.telefono, motivo: notas.trim() || null,
+      contacto: contactoSitio.trim() || cli?.contacto_nombre || null, telefono: telefonoSitio.trim() || cli?.telefono, motivo: notas.trim() || null,
       cliente: { nombre: cli?.nombre_cliente || 'Sin cliente', rut: cli?.rut, direccion: direccion || cli?.direccion } };
   };
   const pdfVisita = async () => {
@@ -124,7 +144,7 @@ function AgendaModal({ cita, clientes, createdBy, prefill, onClose, onSaved, onD
       const blob = await pdf(
         <InformeGeneralPDF empresa={empresa} tipo="visita" folio={`VT-${String(cita.folio).padStart(4, '0')}`} fecha={fecha}
           cliente={{ nombre: cli?.nombre_cliente || 'Sin cliente', rut: cli?.rut, direccion: direccion || cli?.direccion }}
-          referencia={titulo} responsable={RESPONSABLE_LABEL[responsable]}
+          referencia={titulo} responsable={datosPDF().responsable}
           informe={{ campos: [], respuestas: {}, checklist: [] }}
           observaciones={notasVisita} fotos={fotos.filter(f => urls[f.path]).map(f => ({ url: urls[f.path], caption: f.caption }))} />,
       ).toBlob();
@@ -174,8 +194,24 @@ function AgendaModal({ cita, clientes, createdBy, prefill, onClose, onSaved, onD
     e.preventDefault();
     if (!titulo.trim()) { toastError('Ponle un título a la cita'); return; }
     if (!fecha) { toastError('Selecciona una fecha'); return; }
+    const estadoFinal: EstadoAgenda = cotizarDespues.current ? 'Realizada' : estado;
     setSaving(true);
     try {
+      // Al cerrar la visita, que quede su informe; si no lo hay, por qué.
+      let notaCierre = '';
+      if (cita && conVisita && estadoFinal === 'Realizada' && cita.estado !== 'Realizada') {
+        const informes = await informesVisitaService.deVisita(cita.id).catch(() => null);
+        if (informes && !informes.some(i => i.estado === 'completado')) {
+          if (!motivoCierre.trim()) {
+            setPideMotivo(true);
+            cotizarDespues.current = false;
+            toastError('La visita no tiene un informe completado: complétalo o escribe por qué se cierra sin él.');
+            return;
+          }
+          notaCierre = `Cerrada sin informe: ${motivoCierre.trim()}`;
+        }
+      }
+      const notasFinales = [notasVisita.trim(), notaCierre].filter(Boolean).join('\n\n');
       const payload = {
         cliente_id: clienteId || null,
         solicitud_id: cita?.solicitud_id || prefill?.solicitud_id || null,
@@ -186,11 +222,12 @@ function AgendaModal({ cita, clientes, createdBy, prefill, onClose, onSaved, onD
         hora_fin: horaFin || null,
         responsable,
         tipos_servicio: tipos,
-        estado: cotizarDespues.current ? 'Realizada' as EstadoAgenda : estado,
+        estado: estadoFinal,
         notas: notas.trim() || null,
         ...(tecnicoId || (cita && 'tecnico_id' in cita) ? { tecnico_id: tecnicoId || null } : {}),
+        ...(fase15 ? { contacto_sitio: contactoSitio.trim() || null, telefono_sitio: telefonoSitio.trim() || null } : {}),
         created_by: cita?.created_by || createdBy,
-        ...(conVisita ? { notas_visita: notasVisita.trim() || null, fotos } : {}),
+        ...(conVisita ? { notas_visita: notasFinales || null, fotos } : {}),
       };
       if (cita) { await agendaService.update(cita.id, payload); success('Cita actualizada'); }
       else { await agendaService.create(payload); success('Cita agendada'); }
@@ -257,6 +294,21 @@ function AgendaModal({ cita, clientes, createdBy, prefill, onClose, onSaved, onD
               {direccion.trim() && <div style={{ marginTop: '0.45rem' }}><LinksMapa direccion={direccion} compacto /></div>}
             </div>
 
+            {fase15 && (
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 200px), 1fr))', gap: '0.75rem' }}>
+                <div>
+                  <label className="label-muted" style={{ display: 'block', marginBottom: '0.4rem' }}>Quién recibe en el lugar</label>
+                  <input className="input" value={contactoSitio} onChange={e => setContactoSitio(e.target.value)}
+                    placeholder={clientes.find(c => c.id === clienteId)?.contacto_nombre || 'Nombre del contacto'} />
+                </div>
+                <div>
+                  <label className="label-muted" style={{ display: 'block', marginBottom: '0.4rem' }}>Teléfono en el lugar</label>
+                  <input className="input" type="tel" value={telefonoSitio} onChange={e => setTelefonoSitio(e.target.value)}
+                    placeholder={clientes.find(c => c.id === clienteId)?.telefono || '+56 9 …'} />
+                </div>
+              </div>
+            )}
+
             <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr 1fr', gap: '0.75rem' }}>
               <div>
                 <label className="label-muted" style={{ display: 'block', marginBottom: '0.4rem' }}>Fecha *</label>
@@ -278,11 +330,12 @@ function AgendaModal({ cita, clientes, createdBy, prefill, onClose, onSaved, onD
               </p>
             )}
 
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 200px), 1fr))', gap: '0.75rem' }}>
               <div>
-                <label className="label-muted" style={{ display: 'block', marginBottom: '0.4rem' }}>Responsable</label>
-                <select className="input" value={responsable} onChange={e => setResponsable(e.target.value as ResponsableAgenda)}>
-                  {RESPONSABLE_OPCIONES.map(r => <option key={r.key} value={r.key}>{r.label}</option>)}
+                <label className="label-muted" style={{ display: 'block', marginBottom: '0.4rem' }}>Técnico encargado</label>
+                <select className="input" value={tecnicoId} onChange={e => setTecnicoId(e.target.value)}>
+                  <option value="">Sin asignar</option>
+                  {usuarios.map(u => <option key={u.id} value={u.id}>{u.nombre || u.email}</option>)}
                 </select>
               </div>
               <div>
@@ -292,15 +345,10 @@ function AgendaModal({ cita, clientes, createdBy, prefill, onClose, onSaved, onD
                 </select>
               </div>
             </div>
-
-            <div>
-              <label className="label-muted" style={{ display: 'block', marginBottom: '0.4rem' }}>Técnico encargado</label>
-              <select className="input" value={tecnicoId} onChange={e => setTecnicoId(e.target.value)}>
-                <option value="">Sin asignar</option>
-                {usuarios.map(u => <option key={u.id} value={u.id}>{u.nombre || u.email}</option>)}
-              </select>
-              <p style={{ margin: '0.3rem 0 0', fontSize: '0.74rem', color: 'var(--muted)' }}>Le llega el aviso al celular y la ve en su Inicio, con la dirección y para hacer los informes.</p>
-            </div>
+            <p style={{ margin: '-0.5rem 0 0', fontSize: '0.74rem', color: 'var(--muted)' }}>
+              Al técnico le llega el aviso al celular y la ve en su Inicio, con la dirección y para hacer los informes.
+              {!tecnicoId && responsable !== 'Ambos' && <> Antes estaba a cargo de {RESPONSABLE_LABEL[responsable]}.</>}
+            </p>
 
             <div>
               <label className="label-muted" style={{ display: 'block', marginBottom: '0.4rem' }}>Tipos de servicio</label>
@@ -370,6 +418,13 @@ function AgendaModal({ cita, clientes, createdBy, prefill, onClose, onSaved, onD
             </div>
           </div>
 
+          {pideMotivo && (
+            <div style={{ padding: '0.8rem 1.5rem', borderTop: '1px solid var(--border2)', background: 'var(--y-soft)', display: 'flex', flexDirection: 'column', gap: 6 }}>
+              <label className="label-muted" style={{ color: 'var(--text)' }}>La visita no tiene un informe completado. ¿Por qué se cierra sin él?</label>
+              <textarea className="input" rows={2} autoFocus value={motivoCierre} onChange={e => setMotivoCierre(e.target.value)}
+                placeholder="Ej.: el cliente solo quería un presupuesto referencial; se reagendó el levantamiento…" style={{ resize: 'vertical' }} />
+            </div>
+          )}
           <div style={{ padding: '1rem 1.5rem', borderTop: '1px solid var(--border2)', display: 'flex', gap: '0.5rem', justifyContent: 'space-between', alignItems: 'center' }}>
             {cita
               ? <button type="button" onClick={eliminar} className="btn btn-danger btn-sm"><Trash2 size={13} /> Eliminar</button>
@@ -398,14 +453,23 @@ function AgendaContent() {
   const searchParams = useSearchParams();
   const prefillCliente = searchParams.get('cliente') || undefined;
   const prefillSolicitud = searchParams.get('solicitud') || undefined;
+  const prefillContacto = searchParams.get('contacto') || undefined;
+  const prefillTelefono = searchParams.get('telefono') || undefined;
+  const prefillDireccion = searchParams.get('direccion') || undefined;
   const abrirNueva = searchParams.get('nueva') === '1' || !!prefillSolicitud || !!prefillCliente;
   const abrirCita = searchParams.get('cita');
 
   const [citas, setCitas] = useState<Agendamiento[]>([]);
   const [clientes, setClientes] = useState<Cliente[]>([]);
   const [loading, setLoading] = useState(true);
-  const [modal, setModal] = useState<{ open: boolean; cita: Agendamiento | null; prefill?: { cliente_id?: string; solicitud_id?: string } }>({ open: false, cita: null });
-  const [fResp, setFResp] = useState<ResponsableAgenda | ''>('');
+  const [modal, setModal] = useState<{ open: boolean; cita: Agendamiento | null; prefill?: Prefill }>({ open: false, cita: null });
+  // Filtro por técnico (usuario); las citas antiguas sin técnico se filtran por su responsable.
+  const [fResp, setFResp] = useState('');
+  const [tecnicos, setTecnicos] = useState<Record<string, string>>({});
+  useEffect(() => {
+    supabase.from('profiles').select('id, nombre, email').order('nombre')
+      .then(({ data }) => setTecnicos(Object.fromEntries(((data || []) as { id: string; nombre: string | null; email: string | null }[]).map(u => [u.id, u.nombre || u.email || 'Usuario']))));
+  }, []);
   const [fEstado, setFEstado] = useState<EstadoAgenda | ''>('');
   const [rango, setRango] = useState<'proximas' | 'hoy' | 'semana' | 'todas'>('proximas');
 
@@ -427,7 +491,7 @@ function AgendaContent() {
   // Abrir "nueva cita" prellenada al llegar con ?solicitud/&cliente/&nueva.
   useEffect(() => {
     if (abrirNueva && !loading) {
-      setModal({ open: true, cita: null, prefill: { cliente_id: prefillCliente, solicitud_id: prefillSolicitud } });
+      setModal({ open: true, cita: null, prefill: { cliente_id: prefillCliente, solicitud_id: prefillSolicitud, contacto: prefillContacto, telefono: prefillTelefono, direccion: prefillDireccion } });
       // limpia la query para no reabrir al recargar
       router.replace('/agenda');
     }
@@ -446,8 +510,14 @@ function AgendaContent() {
   const hoy = hoyStr();
   const finSemana = (() => { const d = new Date(); d.setDate(d.getDate() + 7); return fechaLocal(d); })();
 
+  // Responsables antiguos que siguen en citas sin técnico (para no perder ese filtro).
+  const antiguos = RESPONSABLE_OPCIONES.filter(r => r.key !== 'Ambos' && citas.some(c => !c.tecnico_id && c.responsable === r.key));
+  const conTecnico = Object.entries(tecnicos).filter(([id]) => citas.some(c => c.tecnico_id === id));
+
   const filtradas = citas.filter(c => {
-    if (fResp && c.responsable !== fResp) return false;
+    if (fResp === '-' && c.tecnico_id) return false;
+    if (fResp.startsWith('u:') && c.tecnico_id !== fResp.slice(2)) return false;
+    if (fResp.startsWith('r:') && (c.tecnico_id || c.responsable !== fResp.slice(2))) return false;
     if (fEstado && c.estado !== fEstado) return false;
     if (rango === 'hoy' && c.fecha !== hoy) return false;
     if (rango === 'semana' && (c.fecha < hoy || c.fecha > finSemana)) return false;
@@ -479,7 +549,7 @@ function AgendaContent() {
       <PageHeader
         eyebrow="Visitas y citas"
         title="Agenda"
-        subtitle="Visitas técnicas y citas de César y Joaquín"
+        subtitle="Visitas técnicas y citas del equipo"
         actions={<>
 {puedeAgendar && <button onClick={() => setModal({ open: true, cita: null })} className="btn btn-primary"><Plus size={14} /> Nueva cita</button>}
         </>}
@@ -496,9 +566,11 @@ function AgendaContent() {
               </button>
             ))}
           </div>
-          <select className="input" value={fResp} onChange={e => setFResp(e.target.value as ResponsableAgenda | '')} style={{ maxWidth: 150 }}>
-            <option value="">Todos</option>
-            {RESPONSABLE_OPCIONES.map(r => <option key={r.key} value={r.key}>{r.label}</option>)}
+          <select className="input" value={fResp} onChange={e => setFResp(e.target.value)} style={{ maxWidth: 190 }} aria-label="Filtrar por técnico">
+            <option value="">Todos los técnicos</option>
+            {conTecnico.map(([id, nombre]) => <option key={id} value={`u:${id}`}>{nombre}</option>)}
+            <option value="-">Sin técnico asignado</option>
+            {antiguos.map(r => <option key={r.key} value={`r:${r.key}`}>{r.label} (antes)</option>)}
           </select>
           <select className="input" value={fEstado} onChange={e => setFEstado(e.target.value as EstadoAgenda | '')} style={{ maxWidth: 160 }}>
             <option value="">Todos los estados</option>
@@ -514,7 +586,7 @@ function AgendaContent() {
           <div style={{ textAlign: 'center', padding: '3rem', color: 'var(--muted)' }}>
             <Calendar size={36} style={{ margin: '0 auto 1rem', opacity: 0.3 }} />
             <p style={{ fontSize: '0.875rem' }}>No hay citas {rango === 'todas' ? '' : 'en este rango'}</p>
-            <button onClick={() => setModal({ open: true, cita: null })} className="btn btn-ghost" style={{ marginTop: '1rem' }}><Plus size={13} /> Agendar la primera</button>
+            {puedeAgendar && <button onClick={() => setModal({ open: true, cita: null })} className="btn btn-ghost" style={{ marginTop: '1rem' }}><Plus size={13} /> Agendar {rango === 'todas' ? 'la primera' : 'una cita'}</button>}
           </div>
         ) : (
           <div style={{ padding: '0.5rem 0' }}>
@@ -531,7 +603,8 @@ function AgendaContent() {
                   })()}
                 </div>
                 {g.items.map(c => {
-                  const rm = RESPONSABLE_META[c.responsable];
+                  const rm = RESPONSABLE_META[c.responsable] || RESPONSABLE_META.Ambos;
+                  const tecnico = c.tecnico_id ? tecnicos[c.tecnico_id] : null;
                   const em = ESTADO_AGENDA_META[c.estado];
                   return (
                     <div key={c.id} onClick={() => { if (puedeAgendar) setModal({ open: true, cita: c }); }}
@@ -547,7 +620,9 @@ function AgendaContent() {
                           {c.direccion && <span style={{ display: 'inline-flex', alignItems: 'center', gap: 3, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 240 }}><MapPin size={11} /> {c.direccion}</span>}
                         </div>
                         <div style={{ display: 'flex', gap: '0.35rem', marginTop: '0.4rem', flexWrap: 'wrap', alignItems: 'center' }}>
-                          <span style={{ fontSize: '0.72rem', fontWeight: 600, padding: '0.15rem 0.5rem', borderRadius: 999, background: rm.bg, color: rm.color }}>{RESPONSABLE_LABEL[c.responsable]}</span>
+                          {tecnico
+                            ? <span style={{ fontSize: '0.72rem', fontWeight: 600, padding: '0.15rem 0.5rem', borderRadius: 999, background: 'var(--info-soft)', color: 'var(--info)', display: 'inline-flex', alignItems: 'center', gap: 3 }}><User size={10} /> {tecnico}</span>
+                            : <span style={{ fontSize: '0.72rem', fontWeight: 600, padding: '0.15rem 0.5rem', borderRadius: 999, background: rm.bg, color: rm.color }}>{c.responsable === 'Ambos' ? 'Sin técnico' : RESPONSABLE_LABEL[c.responsable]}</span>}
                           <span style={{ fontSize: '0.72rem', fontWeight: 600, padding: '0.15rem 0.5rem', borderRadius: 999, background: em.bg, color: em.color }}>{c.estado}</span>
                           {c.solicitudes?.folio && <span style={{ fontSize: '0.7rem', color: 'var(--faint)', display: 'inline-flex', alignItems: 'center', gap: 3 }}><Inbox size={10} /> SOL #{String(c.solicitudes.folio).padStart(4, '0')}</span>}
                           {c.direccion && c.estado !== 'Realizada' && c.estado !== 'Cancelada' && <LinksMapa direccion={c.direccion} compacto />}

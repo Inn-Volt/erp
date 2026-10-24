@@ -7,6 +7,7 @@ import { useToast } from '@/hooks/useToast';
 import { INNVOLT_INFO } from '@/types';
 import IAEstadoCard from '@/components/IAEstadoCard';
 import AvisosCelularAdmin from '@/components/AvisosCelularAdmin';
+import AdminSistema from '@/components/AdminSistema';
 import Link from 'next/link';
 import PageHeader from '@/components/PageHeader';
 
@@ -208,6 +209,9 @@ export default function ConfiguracionPage() {
 
         {/* Avisos al celular (push): configurarlos y revisar que lleguen */}
         <AvisosCelularAdmin />
+
+        {/* Respaldo en Excel y errores recientes de la app */}
+        <AdminSistema />
 
         {/* Inteligencia artificial: proveedores y prueba */}
         <IAEstadoCard />

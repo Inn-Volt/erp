@@ -9,6 +9,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
+import { useFase } from '@/lib/fases';
 import { Camera, Check, Plus, Trash2 } from 'lucide-react';
 import PageHeader from '@/components/PageHeader';
 import FaltaSQL from '@/components/FaltaSQL';
@@ -40,6 +41,7 @@ const porPagar = (g: Gasto) => ['rendido', 'aprobado', 'pendiente'].includes(g.e
 
 export default function GastosPage() {
   const { perfil, puede, puedeAlguno } = usePermisos();
+  const fase15 = useFase(15);
   const { success, error: toastError } = useToast();
   const verTodos = puedeAlguno(['gastos.ver_todos', 'gastos.aprobar']);
   const paga = puede('gastos.aprobar');
@@ -126,6 +128,10 @@ export default function GastosPage() {
       )}
       <PageHeader eyebrow="Finanzas" title="Gastos y anticipos" subtitle="Rinde cada gasto con su boleta en el trabajo o el proyecto: suma al costo real y se compara con lo cotizado."
         actions={puede('gastos.crear') ? <button className="btn btn-primary" onClick={() => { setDestinoInicial(''); setNuevo(true); }}><Plus size={14} /> Rendir gasto</button> : null} />
+      {fase15 && (puede('compras.gestionar') || puede('compras.ver')) && (
+        <p style={{ margin: '-4px 0 12px', fontSize: '0.8rem', color: 'var(--muted)' }}>
+          ¿Es una <b>factura</b> de un proveedor (no una boleta)? Ingrésala en <Link href="/compras">Compras a proveedores</Link>: así se recupera el IVA y queda en el libro de compras.</p>
+      )}
 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 160px), 1fr))', gap: 8, marginBottom: 12 }}>
         <div className="kpi-card"><p className="label-muted">Rendí este mes</p><p className="kpi-value">{formatCLP(suma(mios.filter(g => g.fecha.startsWith(mes))))}</p></div>

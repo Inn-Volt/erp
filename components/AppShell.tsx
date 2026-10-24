@@ -69,6 +69,8 @@ const MENU: { grupo: string; icono: React.ElementType; items: Item[] }[] = [
   { grupo: 'Finanzas', icono: Wallet, items: [
     { href: '/facturacion', label: 'Facturación y cobranza', permisos: ['facturacion.ver', 'facturacion.gestionar'] },
     { href: '/gastos', label: 'Gastos y anticipos', permisos: ['gastos.crear', 'gastos.ver_todos', 'gastos.aprobar'] },
+    { href: '/compras', label: 'Compras a proveedores', permisos: ['compras.ver', 'compras.gestionar'] },
+    { href: '/contabilidad', label: 'Contabilidad e IVA', permisos: ['compras.ver', 'compras.gestionar', 'facturacion.gestionar'] },
   ] },
   { grupo: 'Mi empresa', icono: Building2, items: [
     { href: '/biblioteca', label: 'Biblioteca de precios', permisos: ['biblioteca.ver'] },
