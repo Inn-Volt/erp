@@ -26,6 +26,7 @@ import type { CotizacionDoc, Linea, PartidaCot, Seccion } from '@/lib/cotizador/
 import { planEnPalabras, TITULO_VALORIZACION, type HitoCobro } from '@/lib/cotizador/tipos';
 import { calcular, cantidadLegible, filasDelCliente, formatMonto, type Resultado } from '@/lib/cotizador/calculo';
 import { formatDate } from '@/utils';
+import { logoDocumento } from '@/lib/logoMarca';
 
 // Paleta del kit de marca InnVolt: tinta, amarillo, gris y crema.
 const INK = '#1a1813', DARK = '#1a1813', SPARK = '#f6c21c', WHITE = '#ffffff', MUTED = '#5f5b50', FAINT = '#8a8578', LINE = '#e3dfd4', TINT = '#f6f4ee';
@@ -205,7 +206,8 @@ export default function CotizacionPDF(p: CotizacionPDFProps) {
   const folio = `IV-${String(doc.folio || 0).padStart(4, '0')}`;
   const nombreArchivo = doc.revision > 0 ? `${folio} · Revisión ${doc.revision}` : folio;
   const emision = doc.fecha_emision || doc.created_at;
-  const logo = empresa.logo_url || (/innvolt/i.test(empresa.nombre) && typeof window !== 'undefined' ? window.location.origin + '/InnVolt-transparente-claro.png' : '');
+  // InnVolt: siempre el logo oficial del kit de marca (no el antiguo subido en «Mi empresa»).
+  const logo = logoDocumento(empresa, { absoluto: true });
 
   const secciones = (doc.secciones || []).filter(x => x.tipo === 'portada' || (x.texto || '').trim() || (x.titulo || '').trim());
   const portada: Seccion | null = secciones[0]?.tipo === 'portada' ? secciones[0] : null;

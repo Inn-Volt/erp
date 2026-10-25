@@ -21,6 +21,7 @@ import {
 } from '@/services/informes';
 import { aDoc, esLista, type NodoTexto } from '@/lib/textoFormato';
 import { formatDate } from '@/utils';
+import { logoDocumento } from '@/lib/logoMarca';
 
 const INK = '#1a1a1a', MUTED = '#5a5a5a', LINE = '#e2e2e2', TINT = '#f6f6f4', ROJO = '#b91c1c';
 const s = StyleSheet.create({
@@ -106,7 +107,7 @@ interface FotoNum { n: number; url: string; caption: string }
 export default function InformeGeneralPDF(p: InformeGeneralPDFProps) {
   const color = p.color || '#f6c21c';
   const titulo = p.tipo === 'visita' ? 'INFORME TÉCNICO DE VISITA' : 'ACTA DE ENTREGA';
-  const logo = p.empresa.logo_url || (/innvolt/i.test(p.empresa.nombre) ? '/InnVolt-transparente-claro.png' : '');
+  const logo = logoDocumento(p.empresa);
   const urls = p.urls || {};
   const inf = p.informe;
   const borrador = p.tipo === 'visita' && p.estadoInforme === 'borrador';

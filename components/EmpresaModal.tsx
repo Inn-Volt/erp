@@ -37,6 +37,7 @@ import { useState, useRef, useCallback } from 'react';
 import { X, Upload, Building2, CreditCard, FileText, Loader2, Check, Trash2 } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import type { EmpresaInfo } from '@/components/pdf/PresupuestoPDF';
+import { esInnVolt } from '@/lib/logoMarca';
 
 // ─── Estilos ─────────────────────────────────────────────────────────────────
 const panelStyle: React.CSSProperties = {
@@ -248,6 +249,11 @@ export default function EmpresaModal({ empresa, onSave, onClose }: Props) {
           {/* ── LOGO ── */}
           <div style={panelStyle}>
             <p style={labelStyle}><Upload size={12} /> Logo de la empresa</p>
+            {esInnVolt(form.nombre) && (
+              <p style={{ margin: '0 0 0.6rem', fontSize: '0.76rem', color: 'var(--muted)' }}>
+                Los PDF y la página de la cotización de InnVolt usan siempre el logo oficial del kit de marca (el de innvolt.cl).
+                El que subas aquí se usa para las otras empresas emisoras.</p>
+            )}
             <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', flexWrap: 'wrap' }}>
               {/* Preview */}
               <div style={{

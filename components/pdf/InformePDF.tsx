@@ -3,6 +3,7 @@ import React from 'react';
 import { Document, Page, Text, View, StyleSheet, Image } from '@react-pdf/renderer';
 import type { EmpresaInfo } from '@/components/pdf/PresupuestoPDF';
 import { formatDate } from '@/utils';
+import { logoDocumento } from '@/lib/logoMarca';
 
 /** Informe técnico de una OT (traído de TecApp): trabajos, checklist, materiales, fotos y firma. */
 
@@ -64,7 +65,7 @@ export interface InformePDFProps {
 }
 
 export default function InformePDF(p: InformePDFProps) {
-  const logo = p.empresa.logo_url || (/innvolt/i.test(p.empresa.nombre) ? '/InnVolt-transparente-claro.png' : '');
+  const logo = logoDocumento(p.empresa);
   return (
     <Document title={`Informe ${p.folioInforme} — ${p.folioOT}`}>
       <Page size="A4" style={s.page}>
