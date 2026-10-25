@@ -19,13 +19,12 @@ import TextoFormato from '@/components/TextoFormato';
 import { calcular } from '@/lib/cotizador/calculo';
 import type { CotizacionDoc } from '@/lib/cotizador/tipos';
 import FirmaPad from '@/components/FirmaPad';
+import { logoDocumento } from '@/lib/logoMarca';
 
 const C = {
   bg: '#f6f4ee', paper: '#ffffff', ink: '#1a1813', muted: '#5f5b50', faint: '#8a8578',
   line: '#e3dfd4', dark: '#1a1813', spark: '#f6c21c', ok: '#15803d', okBg: '#ecfdf3', bad: '#b91c1c', badBg: '#fef2f2',
 };
-const LOGO_INNVOLT = '/InnVolt-transparente-claro.png';
-const esInnVolt = (n: string) => n.toLowerCase().replace(/[^a-z]/g, '').includes('innvolt');
 
 /** Texto con formato (negrita, cursiva, títulos, listas), como en el PDF. */
 function Texto({ texto }: { texto: string }) {
@@ -140,7 +139,7 @@ export default function CotizacionClientePage() {
     );
   }
 
-  const logo = cot.empresa.logo_url || (esInnVolt(cot.empresa.nombre) ? LOGO_INNVOLT : '');
+  const logo = logoDocumento(cot.empresa);
   const pendiente = cot.estado === 'Enviada' && cot.responde_en_linea;
   const aceptada = cot.estado === 'Aprobada';
   // WhatsApp de quien cotizó (si tiene teléfono); si no, el de la empresa.

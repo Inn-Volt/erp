@@ -4,13 +4,8 @@ import {
 } from '@react-pdf/renderer';
 import type { CotizacionItem, Cliente, Partida, Vendedor } from '@/types';
 import { boldPorLinea, formatDate, fechaLocal, sumarDias, diasValidez, type Totals } from '@/utils';
+import { logoDocumento } from '@/lib/logoMarca';
 
-/** Logo con tinta oscura: es el que contrasta sobre el papel blanco del PDF. */
-const LOGO_PDF = '/InnVolt-transparente-claro.png';
-
-/** Solo se aplica el logo por defecto si la empresa emisora es InnVolt. */
-const esInnVolt = (nombre: string) =>
-  nombre.toLowerCase().replace(/[^a-z]/g, '').includes('innvolt');
 
 /**
  * Convierte un texto multilínea del cotizador en viñetas para el PDF.
@@ -613,15 +608,9 @@ export default function PresupuestoPDF({
 
   // El PDF se imprime sobre papel blanco: si la empresa no tiene logo propio,
   // se usa el de InnVolt con tinta oscura (la variante "claro").
-  const logoPDF = empresa.logo_url ||
-    (esInnVolt(empresa.nombre)
-      ? (typeof window !== 'undefined' ? window.location.origin : '') + LOGO_PDF
-      : '');
+  const logoPDF = logoDocumento(empresa, { absoluto: true });
   // Portada (fondo oscuro): logo de tinta clara si es InnVolt.
-  const logoPortada = empresa.logo_url ||
-    (esInnVolt(empresa.nombre)
-      ? (typeof window !== 'undefined' ? window.location.origin : '') + '/InnVolt-transparente-oscuro.png'
-      : '');
+  const logoPortada = logoDocumento(empresa, { fondo: 'oscuro', absoluto: true });
   const tituloPortada = (partidas.length === 1 ? partidas[0].nombre : '')
     || (descripcionGeneral || '').replace(/\*\*/g, '').split('\n').map(l => l.trim()).find(Boolean)?.slice(0, 110)
     || 'Propuesta de servicios eléctricos';
