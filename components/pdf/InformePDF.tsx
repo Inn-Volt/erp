@@ -6,12 +6,12 @@ import { formatDate } from '@/utils';
 
 /** Informe técnico de una OT (traído de TecApp): trabajos, checklist, materiales, fotos y firma. */
 
-const INK = '#1a1a1a', MUTED = '#5a5a5a', LINE = '#e2e2e2', SPARK = '#ffc600', TINT = '#f6f6f4';
+const INK = '#1a1813', MUTED = '#5f5b50', LINE = '#e3dfd4', SPARK = '#f6c21c', TINT = '#f6f4ee';
 const s = StyleSheet.create({
   page: { padding: 32, paddingBottom: 44, fontSize: 9, fontFamily: 'Helvetica', color: INK },
   barra: { position: 'absolute', top: 0, left: 0, right: 0, height: 4, flexDirection: 'row' },
   header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', borderBottomWidth: 1, borderBottomColor: LINE, paddingBottom: 12, marginBottom: 12 },
-  logo: { width: 130, objectFit: 'contain', marginBottom: 6 },
+  logo: { width: 155, objectFit: 'contain', marginBottom: 6 },
   empresa: { fontSize: 11, fontFamily: 'Helvetica-Bold' },
   linea: { fontSize: 7.5, color: MUTED, marginTop: 1 },
   folio: { backgroundColor: '#232323', borderRadius: 6, padding: '9 14', alignItems: 'center', minWidth: 140 },

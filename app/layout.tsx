@@ -1,17 +1,12 @@
 import type { Metadata, Viewport } from 'next';
-import { Inter, Space_Grotesk } from 'next/font/google';
+import { Archivo, Barlow } from 'next/font/google';
 import './globals.css';
 import PWARegister from '@/components/PWARegister';
 
-// Tipografías de TecApp, auto-hospedadas por Next (se descargan en el build y
-// se sirven desde el propio sitio: sin depender de Google en tiempo de uso).
-const inter = Inter({ subsets: ['latin'], variable: '--font-inter', display: 'swap' });
-const grotesk = Space_Grotesk({
-  subsets: ['latin'],
-  weight: ['400', '500', '600', '700'],
-  variable: '--font-grotesk',
-  display: 'swap',
-});
+// Tipografías de la marca InnVolt (las mismas del sitio innvolt.cl), auto-hospedadas por Next:
+// Archivo para títulos (con el eje de ancho: la guía de marca la usa al 112 %) y Barlow para el texto.
+const archivo = Archivo({ subsets: ['latin'], axes: ['wdth'], variable: '--font-archivo', display: 'swap' });
+const barlow = Barlow({ subsets: ['latin'], weight: ['400', '500', '600', '700'], variable: '--font-barlow', display: 'swap' });
 
 export const metadata: Metadata = {
   title: 'InnVolt — Cotizador ERP',
@@ -20,7 +15,12 @@ export const metadata: Metadata = {
   applicationName: 'InnVolt',
   appleWebApp: { capable: true, title: 'InnVolt', statusBarStyle: 'default' },
   icons: {
-    icon: [{ url: '/favicon-32.png', sizes: '32x32', type: 'image/png' }, { url: '/icon-192.png', sizes: '192x192', type: 'image/png' }],
+    icon: [
+      { url: '/favicon.svg', type: 'image/svg+xml' },
+      { url: '/favicon-32.png', sizes: '32x32', type: 'image/png' },
+      { url: '/favicon-16.png', sizes: '16x16', type: 'image/png' },
+      { url: '/icon-192.png', sizes: '192x192', type: 'image/png' },
+    ],
     apple: [{ url: '/apple-touch-icon.png', sizes: '180x180' }],
   },
 };
@@ -30,8 +30,8 @@ export const viewport: Viewport = {
   initialScale: 1,
   viewportFit: 'cover',
   themeColor: [
-    { media: '(prefers-color-scheme: light)', color: '#ffffff' },
-    { media: '(prefers-color-scheme: dark)',  color: '#18181b' },
+    { media: '(prefers-color-scheme: light)', color: '#1a1813' },
+    { media: '(prefers-color-scheme: dark)',  color: '#14130f' },
   ],
 };
 
@@ -47,7 +47,7 @@ const APLICAR_TEMA = `(function(){try{
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="es" suppressHydrationWarning className={`${inter.variable} ${grotesk.variable}`}>
+    <html lang="es" suppressHydrationWarning className={`${archivo.variable} ${barlow.variable}`}>
       <head>
         <script dangerouslySetInnerHTML={{ __html: APLICAR_TEMA }} />
       </head>

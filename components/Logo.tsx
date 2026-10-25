@@ -1,18 +1,18 @@
 
 /**
- * Logo de InnVolt, adaptable al tema.
+ * Logo de InnVolt (kit de marca oficial, el mismo del sitio innvolt.cl), adaptable al tema.
  * ─────────────────────────────────────────────────────────────────────────────
- *   InnVolt-transparente-claro.png   → "Inn" en negro  → fondo CLARO
- *   InnVolt-transparente-oscuro.png  → "Inn" en blanco → fondo OSCURO
+ *   /logos/innvolt-claro.svg   → «INN» en tinta, «VOLT» dorado  → fondo CLARO
+ *   /logos/innvolt-oscuro.svg  → «INN» crema, «VOLT» amarillo   → fondo OSCURO
  *
- * Se alternan con las clases `dark:` de Tailwind: sin parpadeo ni JS.
- * Para cambiar el logo basta con reemplazar esos archivos en /public.
+ * Se alternan por CSS (.logo-claro / .logo-oscuro): sin parpadeo ni JS. Los PDF y la página
+ * pública de la cotización usan las versiones PNG (InnVolt-transparente-*.png), que son las mismas.
  */
 
-/** Ruta del logo con tinta oscura — la que se ve sobre papel/fondo blanco. */
-export const LOGO_CLARO  = '/InnVolt-transparente-claro.png';
-/** Ruta del logo con tinta clara — la que se ve sobre fondo negro. */
-export const LOGO_OSCURO = '/InnVolt-transparente-oscuro.png';
+/** Ruta del logo con tinta oscura — la que se ve sobre papel/fondo claro. */
+export const LOGO_CLARO  = '/logos/innvolt-claro.svg';
+/** Ruta del logo con tinta clara — la que se ve sobre fondo oscuro. */
+export const LOGO_OSCURO = '/logos/innvolt-oscuro.svg';
 
 export function Logo({ className = '' }: { className?: string }) {
   return (

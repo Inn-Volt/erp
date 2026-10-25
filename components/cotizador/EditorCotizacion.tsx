@@ -47,7 +47,7 @@ import {
   type HitoCobro, type Plantilla, type Seccion, type TipoPartida,
 } from '@/lib/cotizador/tipos';
 import {
-  aMoneda, calcular, formatMonto, precioDeLinea, lineaFuera, lineasDeArticulo, nuevoId, porcentaje, q, sinDescuentoGlobal,
+  aMoneda, calcular, cantidadLegible, formatMonto, precioDeLinea, lineaFuera, lineasDeArticulo, nuevoId, porcentaje, q, sinDescuentoGlobal,
 } from '@/lib/cotizador/calculo';
 import { revisar, llenarMensaje } from '@/lib/cotizador/revision';
 import type { RecetaCompleta, Respuestas } from '@/lib/cotizador/recetas';
@@ -390,9 +390,43 @@ export default function EditorCotizacion({ id, clonarDe, clienteInicial, solicit
     }),
   };
 
-  const agregarArticulo = (p: PartidaCot, a: ArticuloCatalogo) => {
+  const agregarArticulo = (p: PartidaCot, a: ArticuloCatalogo, cantidad = 1) => {
     if (d.moneda === 'UF' && !(Number(d.valor_uf) > 0)) { warning('Está en UF: escribe el valor de la UF antes de agregar.'); return; }
-    agregarLineas(p.id, lineasDeArticulo(a, 1, p, catMap, d.moneda, d.valor_uf));
+    const n = cantidad > 0 ? cantidad : 1;
+    // Si el producto ya está en la partida tal cual (sin cambios a mano), se suma a esa línea en
+    // vez de repetirlo; su mano de obra ligada sigue la cantidad.
+    const igual = (l: Linea) => l.partidaId === p.id && l.itemId === a.id && !l.fuera && !l.ligadoA && l.descripcion === a.descripcion;
+    const ya = d.items.find(igual);
+    if (ya) {
+      setItems(items => {
+        const l = items.find(igual);
+        if (!l) return items;
+        const total = q((Number(l.cantidad) || 0) + n, 0.001);
+        return items.map(x => (x.id === l.id ? { ...x, cantidad: total }
+          : x.ligadoA === l.id && !x.cantidadAMano ? { ...x, cantidad: q(total * (x.porUnidad || 1), 0.001) } : x));
+      });
+      success(`${a.descripcion}: ya estaba en la partida, ahora son ${cantidadLegible(q((Number(ya.cantidad) || 0) + n, 0.001))}`);
+      return;
+    }
+    agregarLineas(p.id, lineasDeArticulo(a, n, p, catMap, d.moneda, d.valor_uf));
+  };
+
+  /** Duplica una partida con sus líneas, justo debajo (las mismas líneas, con su precio de hoy en la cotización). */
+  const duplicarPartida = (p: PartidaCot) => {
+    const nueva = nuevoId();
+    const propias = d.items.filter(l => l.partidaId === p.id);
+    const ids = new Map(propias.map(l => [l.id, nuevoId()]));
+    const copias = propias.map(l => ({ ...l, id: ids.get(l.id)!, partidaId: nueva, ligadoA: l.ligadoA ? ids.get(l.ligadoA) ?? l.ligadoA : l.ligadoA }));
+    // Las ya guardadas mantienen su precio congelado en la copia (no toman el de la biblioteca hoy).
+    for (const l of propias) if (guardadas.current.has(l.id)) guardadas.current.add(ids.get(l.id)!);
+    setD(x => {
+      const i = x.partidas.findIndex(y => y.id === p.id);
+      const partidas = [...x.partidas];
+      partidas.splice(i + 1, 0, { ...p, id: nueva, nombre: p.nombre ? `${p.nombre} (copia)` : '' });
+      return { ...x, partidas, items: [...x.items, ...copias] };
+    });
+    setRecienCreada(nueva);
+    success(`Partida duplicada con ${propias.length} línea${propias.length === 1 ? '' : 's'}: cámbiale el nombre`);
   };
 
   // ── IA → partidas (lo del catálogo con su precio; lo demás fuera del catálogo con su costo estimado) ──
@@ -522,6 +556,23 @@ export default function EditorCotizacion({ id, clonarDe, clienteInicial, solicit
     } finally { setGuardando(false); }
   };
   const porGuardar = editable && (sucio || !cot);
+
+  const [autoguardado, setAutoguardado] = useState<Date | null>(null);
+  useEffect(() => {
+    if (!editable || !cot?.id || !sucio || guardando || !d.titulo.trim() || !d.cliente_id) return;
+    const t = setTimeout(async () => {
+      const foto = d;
+      const fila = filaParaGuardar(foto);
+      try {
+        await cotizadorService.guardar(cot.id, fila);
+        (fila.items as Linea[]).forEach(l => guardadas.current.add(l.id));
+        setGuardadaHuella(huella(foto));
+        setAutoguardado(new Date());
+      } catch { /* si falla, queda «Guardar cambios» como siempre */ }
+    }, 20000);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [d, sucio, editable, cot?.id, guardando]);
 
   // Ctrl+S (⌘S en Mac) guarda la cotización en vez de abrir «Guardar página» del navegador.
   useEffect(() => {
@@ -762,7 +813,7 @@ export default function EditorCotizacion({ id, clonarDe, clienteInicial, solicit
   if (cot && d.estado === 'Aprobada' && puedeEditar && puedeAprobar) menuMas.push({ texto: 'Anular la aprobada', hacer: () => setModal('anular'), peligro: true });
 
   const bloqueResumen = (
-    <aside style={{ display: 'flex', flexDirection: 'column', gap: 12, position: 'sticky', top: 12, alignSelf: 'start' }}>
+    <aside id="cot-resumen" style={{ display: 'flex', flexDirection: 'column', gap: 12, position: 'sticky', top: 12, alignSelf: 'start' }}>
       <div className="panel-y" style={{ padding: '1rem' }}>
         <p className="section-label" style={{ marginTop: 0 }}>Lo que paga el cliente</p>
         {[['Subtotal', calc.totales.subtotal], ...(calc.totales.descuento ? [['Descuento', -calc.totales.descuento]] : []),
@@ -835,19 +886,32 @@ export default function EditorCotizacion({ id, clonarDe, clienteInicial, solicit
 
   return (
     <div className="anim-in" style={editable ? { paddingBottom: 76 } : undefined}>
-      {/* Guardar: flotante abajo a la derecha, siempre a mano (y Ctrl+S). */}
-      {editable && (
-        <button type="button" onClick={() => guardar()} disabled={!porGuardar || guardando}
-          title={porGuardar ? 'Guardar (Ctrl+S)' : 'Todo guardado'} aria-live="polite"
-          className={porGuardar ? 'btn btn-primary' : 'btn btn-ghost'}
-          style={{ position: 'fixed', zIndex: 150, right: 'max(1.25rem, env(safe-area-inset-right))', bottom: 'calc(1.25rem + env(safe-area-inset-bottom))',
-            borderRadius: 999, padding: porGuardar ? '0.75rem 1.35rem' : '0.55rem 1rem', gap: 8, fontWeight: 700, fontSize: porGuardar ? '0.95rem' : '0.8rem',
-            boxShadow: 'var(--shadow-pop)', opacity: 1, transition: 'padding .15s, font-size .15s',
-            ...(porGuardar ? {} : { background: 'rgb(var(--surface))', color: 'var(--muted)', border: '1px solid rgb(var(--line))', cursor: 'default' }) }}>
-          {guardando ? <><Loader2 size={16} className="iv-spin" /> Guardando…</>
-            : porGuardar ? <><Save size={16} /> {cot ? 'Guardar cambios' : 'Guardar'}</>
-            : <><CheckCircle2 size={15} color="var(--success)" /> Guardado</>}
-        </button>
+      {/* Abajo a la derecha, siempre a mano: el total (en pantallas sin la columna del resumen) y Guardar (y Ctrl+S). */}
+      {(editable || d.items.length > 0) && (
+        <div style={{ position: 'fixed', zIndex: 150, right: 'max(1.25rem, env(safe-area-inset-right))', bottom: 'calc(1.25rem + env(safe-area-inset-bottom))',
+          display: 'flex', alignItems: 'center', gap: 10 }}>
+          {d.items.length > 0 && (
+            <button type="button" className="cot-total-flotante" onClick={() => document.getElementById('cot-resumen')?.scrollIntoView({ behavior: 'smooth', block: 'start' })}
+              title="Ver el resumen" style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 1, padding: '0.4rem 0.85rem', borderRadius: 12, cursor: 'pointer',
+                background: 'rgb(var(--surface))', color: 'var(--text)', border: '1.5px solid var(--borde-marca)', boxShadow: 'var(--shadow-btn)' }}>
+              <span style={{ fontSize: '0.64rem', color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.08em' }}>Total con IVA</span>
+              <b style={{ fontSize: '0.98rem', fontVariantNumeric: 'tabular-nums' }}>{formatMonto(calc.totales.total, d.moneda)}</b>
+              {puedeCostos && verCostos && <span style={{ fontSize: '0.68rem', color: calc.internos.utilidad < 0 ? 'var(--danger)' : 'var(--success)' }}>utilidad {porcentaje(calc.internos.margen)}</span>}
+            </button>
+          )}
+          {editable && (
+            <button type="button" onClick={() => guardar()} disabled={!porGuardar || guardando}
+              title={porGuardar ? 'Guardar (Ctrl+S)' : 'Todo guardado'} aria-live="polite"
+              className={porGuardar ? 'btn btn-primary' : 'btn btn-ghost'}
+              style={{ borderRadius: 999, padding: porGuardar ? '0.75rem 1.35rem' : '0.55rem 1rem', gap: 8, fontWeight: 700, fontSize: porGuardar ? '0.95rem' : '0.8rem',
+                height: 'auto', opacity: 1, transition: 'padding .15s, font-size .15s',
+                ...(porGuardar ? {} : { background: 'rgb(var(--surface))', color: 'var(--muted)', border: '1px solid rgb(var(--line))', cursor: 'default', boxShadow: 'var(--shadow-soft)' }) }}>
+              {guardando ? <><Loader2 size={16} className="iv-spin" /> Guardando…</>
+                : porGuardar ? <><Save size={16} /> {cot ? 'Guardar cambios' : 'Guardar'}</>
+                : <><CheckCircle2 size={15} color="var(--success)" /> {autoguardado ? `Guardado solo ${autoguardado.toLocaleTimeString('es-CL', { hour: '2-digit', minute: '2-digit', hour12: false })}` : 'Guardado'}</>}
+            </button>
+          )}
+        </div>
       )}
       {/* Encabezado: N°, estado y los botones del estado. */}
       <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'flex-end', justifyContent: 'space-between', gap: 12, marginBottom: 16 }}>
@@ -901,7 +965,7 @@ export default function EditorCotizacion({ id, clonarDe, clienteInicial, solicit
       {!puedeEditar && <p style={{ fontSize: '0.84rem', color: 'var(--muted)', marginBottom: 10 }}>Solo lectura: no tienes permiso para editar cotizaciones.</p>}
 
       <div className="cot-grid" style={{ display: 'grid', gap: 16, gridTemplateColumns: 'minmax(0,1fr)', alignItems: 'start' }}>
-        <style>{`@media (min-width: 1200px) { .cot-grid { grid-template-columns: minmax(0,1fr) 18rem !important; } }`}</style>
+        <style>{`@media (min-width: 1200px) { .cot-grid { grid-template-columns: minmax(0,1fr) 18rem !important; } .cot-total-flotante { display: none !important; } }`}</style>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 12, minWidth: 0 }}>
           {/* Título */}
           <fieldset disabled={!editable} style={{ border: 'none', margin: 0, padding: 0 }}>
@@ -1133,8 +1197,9 @@ export default function EditorCotizacion({ id, clonarDe, clienteInicial, solicit
                     const out = [...ps]; [out[i], out[j]] = [out[j], out[i]]; return out;
                   }),
                   onAgregarDebajo: t => agregarPartida(t, p.id),
-                  onArticulo: a => agregarArticulo(p, a),
-                  onFuera: texto => agregarLineas(p.id, [{ ...lineaFuera(texto, p.id), ganancia: gananciaPorOmision(ajustes?.utilidad_por_tipo, 'material') }]),
+                  onArticulo: (a, n) => agregarArticulo(p, a, n),
+                  onFuera: (texto, n) => agregarLineas(p.id, [{ ...lineaFuera(texto, p.id), cantidad: n && n > 0 ? n : 1, ganancia: gananciaPorOmision(ajustes?.utilidad_por_tipo, 'material') }]),
+                  onDuplicar: () => duplicarPartida(p),
                   onReceta: r => {
                     if (d.moneda === 'UF' && !(Number(d.valor_uf) > 0)) { warning('Está en UF: escribe el valor de la UF antes de agregar.'); return; }
                     setAsistente({ receta: r, partidaId: p.id });

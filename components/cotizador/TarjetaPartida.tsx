@@ -11,7 +11,7 @@ import EditorFormato from '@/components/EditorFormato';
 import NumeroInput from '@/components/NumeroInput';
 import { textoPlano } from '@/lib/textoFormato';
 import { useLayoutEffect, useRef, useState } from 'react';
-import { ArrowDown, ArrowUp, CornerDownRight, Layers, Package, Plus, Trash2 } from 'lucide-react';
+import { ArrowDown, ArrowUp, CornerDownRight, Layers, Plus, Trash2 } from 'lucide-react';
 import BuscadorCatalogo from './BuscadorCatalogo';
 import { MenuAcciones, opcionMenu, campoChico } from './ui';
 import type { ArticuloCatalogo, Linea, Moneda, PartidaCot, QueVe, TipoPartida } from '@/lib/cotizador/tipos';
@@ -26,15 +26,27 @@ export interface AccionesPartida {
   onQuitar: () => void;
   onMover: (dir: -1 | 1) => void;
   onAgregarDebajo: (t: TipoPartida) => void;
-  onArticulo: (a: ArticuloCatalogo) => void;
-  onFuera: (texto: string) => void;
+  /** `cantidad`: la escrita en el buscador («12 enchufe») o la de una lista pegada. */
+  onArticulo: (a: ArticuloCatalogo, cantidad?: number) => void;
+  onFuera: (texto: string, cantidad?: number) => void;
   onReceta: (r: RecetaCompleta) => void;
   /** Armar una receta nueva desde aquí (sin ir a la Biblioteca). */
   onRecetaNueva?: () => void;
   onDescuento: (pct: number) => void;
   onDeshacerReceta?: () => void;
   onTraslado?: () => void;
+  /** Copia la partida con todas sus líneas, justo debajo (piso 1 → piso 2…). */
+  onDuplicar?: () => void;
 }
+/** Enter en una cantidad salta a la cantidad de la línea siguiente (como en una planilla). */
+function siguienteCantidad(e: React.KeyboardEvent<HTMLInputElement>) {
+  if (e.key !== 'Enter') return;
+  e.preventDefault();
+  const todas = Array.from(document.querySelectorAll<HTMLInputElement>('input[aria-label="Cantidad"]:not(:disabled)'));
+  const sig = todas[todas.indexOf(e.currentTarget) + 1];
+  if (sig) { sig.focus(); sig.select(); } else e.currentTarget.blur();
+}
+
 export interface AccionesLinea {
   cambiar: (id: string, patch: Partial<Linea>) => void;
   /** Costo o ganancia: si es del catálogo, queda ajustada solo en esta cotización. */
@@ -60,7 +72,9 @@ export default function TarjetaPartida(props: {
 }) {
   const { partida: p, indice, total, lineas, calc, moneda, valorUf, queVe, verCostos, editable, acciones, lineaAcc } = props;
   const instalacion = (p.tipo || 'instalacion') === 'instalacion';
-  const [modo, setModo] = useState<null | 'receta' | 'producto'>(lineas.length ? 'producto' : null);
+  // El buscador de productos aparece de inmediato (antes había que elegir «¿Qué quieres agregar?»);
+  // Receta se elige al lado y «+ Nuevo» (fuera de la biblioteca) está junto al buscador.
+  const [modo, setModo] = useState<'receta' | 'producto'>('producto');
   const [buscaReceta, setBuscaReceta] = useState('');
   // Al elegir «producto», el cursor va directo al buscador.
   const [modoElegido, setModoElegido] = useState(false);
@@ -107,6 +121,7 @@ export default function TarjetaPartida(props: {
             {cerrar => (<>
               <button type="button" style={opcionMenu} onClick={() => { cerrar(); acciones.onAgregarDebajo('instalacion'); }}>Agregar partida de instalación debajo</button>
               <button type="button" style={opcionMenu} onClick={() => { cerrar(); acciones.onAgregarDebajo('venta'); }}>Agregar partida de venta debajo</button>
+              {acciones.onDuplicar && <button type="button" style={opcionMenu} onClick={() => { cerrar(); acciones.onDuplicar!(); }}>Duplicar la partida (con sus líneas)</button>}
               {acciones.onTraslado && <button type="button" style={{ ...opcionMenu, borderTop: '1px solid var(--border2)' }} onClick={() => { cerrar(); acciones.onTraslado!(); }}>Agregar traslado (por comuna)</button>}
               <button type="button" style={{ ...opcionMenu, borderTop: '1px solid var(--border2)' }} disabled={indice === 0} onClick={() => { cerrar(); acciones.onMover(-1); }}>↑ Subir</button>
               <button type="button" style={opcionMenu} disabled={indice === total - 1} onClick={() => { cerrar(); acciones.onMover(1); }}>↓ Bajar</button>
@@ -142,15 +157,7 @@ export default function TarjetaPartida(props: {
 
         {editable && (
           <div style={{ marginTop: 10 }}>
-            {modo === null ? (
-              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'center' }}>
-                <span style={{ fontSize: '0.84rem', color: 'var(--text)', fontWeight: 600 }}>¿Qué quieres agregar?</span>
-                <button type="button" className="btn btn-ghost btn-sm" onClick={() => setModo('receta')}><Layers size={13} /> Una receta</button>
-                <button type="button" className="btn btn-ghost btn-sm" onClick={() => { setModo('producto'); setModoElegido(true); }}><Package size={13} /> Un producto o servicio</button>
-                <button type="button" className="btn btn-ghost btn-sm" title="Algo que no está en la biblioteca: solo para esta cotización"
-                  onClick={() => { setModo('producto'); acciones.onFuera(''); }}><Plus size={13} /> Uno nuevo (sin biblioteca)</button>
-              </div>
-            ) : (
+            {(
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'flex-start' }}>
                 <div style={{ display: 'inline-flex', border: '1px solid var(--border2)', borderRadius: 8, padding: 2 }}>
                   {(['producto', 'receta'] as const).map(m => (
@@ -357,7 +364,7 @@ function FilaLinea({ l, esLigada, cols, calc, moneda, fila, ligadas, conMano, de
       {/* Cantidad con su unidad */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
         <NumeroInput className="input" min={0} decimales={3} disabled={!editable} value={l.cantidad} ariaLabel="Cantidad"
-          onChange={v => acc.cantidad(l.id, v)} envoltura={{ width: 70 }}
+          onChange={v => acc.cantidad(l.id, v)} envoltura={{ width: 70 }} onKeyDown={siguienteCantidad}
           style={{ ...campoChico, textAlign: 'right', color: esLigada && !l.cantidadAMano ? 'var(--muted)' : undefined }} />
         {editable && nueva ? (
           <select value={l.unidad || 'un'} aria-label="Unidad" title="Unidad" onChange={e => acc.cambiar(l.id, { unidad: e.target.value })}
