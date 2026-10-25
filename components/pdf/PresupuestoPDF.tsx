@@ -31,7 +31,7 @@ const lineasClausula = (texto?: string): string[] =>
 // ─── Paleta INNVOLT (sobria: negro + blanco + gris, amarillo como único acento) ─
 const INK      = '#1a1a1a';  // texto principal / bloques oscuros
 const DARK      = '#232323';  // bloques rellenos (folio, tabla, total)
-const SPARK    = '#ffc600';  // amarillo del logo — único acento
+const SPARK    = '#f6c21c';  // amarillo del logo — único acento
 const WHITE     = '#ffffff';
 const MUTED    = '#565656';  // texto secundario
 const FAINT     = '#8a8a8a';  // texto terciario
@@ -65,7 +65,7 @@ const s = StyleSheet.create({
     borderBottomColor: LINE,
   },
   logoBlock: { flex: 1, paddingRight: 16 },
-  logoImage: { width: 148, objectFit: 'contain', marginBottom: 8 },
+  logoImage: { width: 170, objectFit: 'contain', marginBottom: 8 },
   logoName: { fontSize: 20, fontFamily: 'Helvetica-Bold', color: INK, letterSpacing: 0.5, marginBottom: 8 },
   companyName: { fontSize: 12, fontFamily: 'Helvetica-Bold', color: INK, marginBottom: 3 },
   companyLine: { fontSize: 7.5, color: MUTED, marginBottom: 1.5, lineHeight: 1.3 },
@@ -640,7 +640,7 @@ export default function PresupuestoPDF({
           <View>
             {logoPortada ? (
               // eslint-disable-next-line jsx-a11y/alt-text -- <Image> de @react-pdf no admite alt
-              <Image style={{ width: 170, objectFit: 'contain' }} src={logoPortada} />
+              <Image style={{ width: 220, objectFit: 'contain' }} src={logoPortada} />
             ) : <Text style={{ fontSize: 22, fontFamily: 'Helvetica-Bold' }}>{empresa.nombre.toUpperCase()}</Text>}
           </View>
           <View>

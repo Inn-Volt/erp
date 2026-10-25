@@ -7,12 +7,13 @@ const config: Config = {
     extend: {
       colors: {
         // Identidad InnVolt
+        // Identidad InnVolt (kit de marca, igual que innvolt.cl)
         innvolt: {
-          DEFAULT: '#ffc600',
-          yellow: '#ffc600',
-          'yellow-dark': '#e6b200',
-          ink: '#0e0e0e',
-          black: '#000000',
+          DEFAULT: '#f6c21c',
+          yellow: '#f6c21c',
+          'yellow-dark': '#a87700',
+          ink: '#1a1813',
+          black: '#0b0b09',
         },
         // Tokens semánticos: cambian con el tema vía variables CSS
         surface: 'rgb(var(--surface) / <alpha-value>)',

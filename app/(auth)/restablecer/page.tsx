@@ -66,8 +66,8 @@ export default function RestablecerPage() {
     <main className="relative flex min-h-dvh items-center justify-center bg-surface-2 px-6">
       <div className="absolute right-5 top-5"><ThemeToggle /></div>
       <div className="anim-in w-full max-w-sm">
-        <div className="mb-8 flex justify-center"><LogoImg height={72} /></div>
-        <div className="rounded-2xl border border-line bg-surface p-8 shadow-sm">
+        <div className="mb-8 flex justify-center"><LogoImg height={36} /></div>
+        <div className="panel-y p-8">
           {estado === 'cargando' && (
             <p style={{ display: 'flex', alignItems: 'center', gap: 8, color: 'var(--muted)', justifyContent: 'center' }}><Loader2 size={16} className="iv-spin" /> Verificando el enlace…</p>
           )}

@@ -207,7 +207,7 @@ export default function AppShell({ userName, userId, onLogout, children }: {
 
   const marca = (
     <Link href={inicio} onClick={e => guardia(e, inicio)} className="flex items-center px-5 py-4" aria-label="InnVolt — inicio">
-      <LogoImg height={34} />
+      <LogoImg height={26} />
     </Link>
   );
 
@@ -330,7 +330,7 @@ export default function AppShell({ userName, userId, onLogout, children }: {
     <div className="flex h-dvh overflow-hidden bg-surface-2">
       <CerrarConEscape />
       {/* Menú lateral (escritorio): fijo a la altura de la pantalla; solo el contenido hace scroll */}
-      <aside className={`hidden h-full w-64 shrink-0 flex-col overflow-y-auto border-r border-line bg-surface ${plegado ? '' : 'md:flex'}`}
+      <aside className={`zona-tinta hidden h-full w-64 shrink-0 flex-col overflow-y-auto border-r border-line bg-surface ${plegado ? '' : 'md:flex'}`}
         style={{ paddingTop: 'env(safe-area-inset-top, 0px)' }}>
         <div className="flex items-center justify-between pr-3">
           {marca}
@@ -344,7 +344,7 @@ export default function AppShell({ userName, userId, onLogout, children }: {
       </aside>
 
       {/* Menú plegado (escritorio): barra angosta con un ícono por grupo */}
-      <aside className={`hidden h-full w-[68px] shrink-0 flex-col items-center gap-1 border-r border-line bg-surface py-2 ${plegado ? 'md:flex' : ''}`}
+      <aside className={`zona-tinta hidden h-full w-[68px] shrink-0 flex-col items-center gap-1 border-r border-line bg-surface py-2 ${plegado ? 'md:flex' : ''}`}
         style={{ paddingTop: 'calc(0.5rem + env(safe-area-inset-top, 0px))' }} aria-label="Menú">
         <button onClick={alternar} title="Mostrar el menú completo" aria-label="Mostrar el menú completo"
           className="mb-2 flex h-9 w-9 items-center justify-center rounded-lg text-content-muted hover:bg-surface-3 hover:text-content">
@@ -382,7 +382,7 @@ export default function AppShell({ userName, userId, onLogout, children }: {
         const top = Math.max(8, Math.min(flotante.top - 8, (typeof window !== 'undefined' ? window.innerHeight : 800) - alto - 8));
         return (
           <div role="menu" aria-label={g.grupo} onMouseEnter={seguirAbierto} onMouseLeave={cerrarLuego}
-            className="fixed z-[210] hidden w-60 rounded-xl border border-line bg-surface p-2 shadow-xl md:block" style={{ left: 72, top }}>
+            className="zona-tinta fixed z-[210] hidden w-60 rounded-xl border border-line bg-surface p-2 shadow-xl md:block" style={{ left: 72, top }}>
             <p className="flex items-center gap-2 px-2 pb-1.5 pt-1 text-[11px] font-bold uppercase tracking-wider text-content-muted">
               <g.icono size={13} className="text-accent" aria-hidden /> {g.grupo}
             </p>
@@ -413,7 +413,7 @@ export default function AppShell({ userName, userId, onLogout, children }: {
               <Menu size={22} />
             </button>
             <Link href={inicio} onClick={e => guardia(e, inicio)} aria-label="InnVolt — inicio" className={`shrink-0 ${plegado ? '' : 'md:hidden'}`}>
-              <LogoImg height={28} />
+              <LogoImg height={22} />
             </Link>
             {grupoDeLaPantalla && marcada && (
               <p className="hidden min-w-0 truncate text-sm md:block">
@@ -455,7 +455,7 @@ export default function AppShell({ userName, userId, onLogout, children }: {
       {abierto && (
         <div className="fixed inset-0 z-[200] md:hidden">
           <div className="absolute inset-0 bg-black/40" onClick={() => setAbierto(false)} />
-          <aside className="absolute left-0 top-0 flex h-full w-72 max-w-[85vw] flex-col overflow-y-auto border-r border-line bg-surface"
+          <aside className="zona-tinta absolute left-0 top-0 flex h-full w-72 max-w-[85vw] flex-col overflow-y-auto border-r border-line bg-surface"
             style={{ paddingTop: 'env(safe-area-inset-top, 0px)', paddingBottom: 'env(safe-area-inset-bottom, 0px)' }}>
             <div className="flex items-center justify-between">
               {marca}

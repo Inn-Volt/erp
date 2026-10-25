@@ -21,8 +21,8 @@ import type { CotizacionDoc } from '@/lib/cotizador/tipos';
 import FirmaPad from '@/components/FirmaPad';
 
 const C = {
-  bg: '#f3f3f1', paper: '#ffffff', ink: '#1a1a1a', muted: '#5c5c5c', faint: '#8d8d8d',
-  line: '#e5e5e3', dark: '#1f1f1f', spark: '#ffc600', ok: '#15803d', okBg: '#ecfdf3', bad: '#b91c1c', badBg: '#fef2f2',
+  bg: '#f6f4ee', paper: '#ffffff', ink: '#1a1813', muted: '#5f5b50', faint: '#8a8578',
+  line: '#e3dfd4', dark: '#1a1813', spark: '#f6c21c', ok: '#15803d', okBg: '#ecfdf3', bad: '#b91c1c', badBg: '#fef2f2',
 };
 const LOGO_INNVOLT = '/InnVolt-transparente-claro.png';
 const esInnVolt = (n: string) => n.toLowerCase().replace(/[^a-z]/g, '').includes('innvolt');
@@ -162,7 +162,7 @@ export default function CotizacionClientePage() {
         <header style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, marginBottom: 14, flexWrap: 'wrap' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
             { }
-            {logo ? <img src={logo} alt={cot.empresa.nombre} style={{ height: 42, width: 'auto' }} /> : <strong style={{ fontSize: 20 }}>{cot.empresa.nombre}</strong>}
+            {logo ? <img src={logo} alt={cot.empresa.nombre} style={{ height: 30, width: 'auto', maxWidth: '70vw' }} /> : <strong style={{ fontSize: 20 }}>{cot.empresa.nombre}</strong>}
           </div>
           <div style={{ textAlign: 'right', fontSize: 12, color: C.muted }}>
             <div style={{ fontWeight: 800, color: C.ink, fontSize: 15 }}>Cotización {formatFolio(cot.folio)}</div>

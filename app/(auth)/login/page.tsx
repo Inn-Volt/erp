@@ -81,11 +81,11 @@ export default function LoginPage() {
       <div className="anim-in w-full max-w-sm">
         {/* Marca */}
         <div className="mb-8 flex flex-col items-center text-center">
-          <LogoImg height={84} />
-          <p className="mt-2 text-sm text-content-muted">Gestión de servicios eléctricos</p>
+          <LogoImg height={40} />
+          <p className="mt-3 font-display text-xs font-bold uppercase tracking-[0.14em] text-accent">Electricidad y energía · ERP</p>
         </div>
 
-        <div className="rounded-2xl border border-line bg-surface p-8 shadow-sm">
+        <div className="panel-y p-8">
           {recuperar ? (
             <form onSubmit={handleRecuperar} className="flex flex-col gap-4">
               <div>

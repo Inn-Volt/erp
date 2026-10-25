@@ -27,13 +27,14 @@ import { planEnPalabras, TITULO_VALORIZACION, type HitoCobro } from '@/lib/cotiz
 import { calcular, cantidadLegible, filasDelCliente, formatMonto, type Resultado } from '@/lib/cotizador/calculo';
 import { formatDate } from '@/utils';
 
-const INK = '#1a1a1a', DARK = '#232323', SPARK = '#ffc600', WHITE = '#ffffff', MUTED = '#565656', FAINT = '#8a8a8a', LINE = '#e2e2e2', TINT = '#f6f6f4';
+// Paleta del kit de marca InnVolt: tinta, amarillo, gris y crema.
+const INK = '#1a1813', DARK = '#1a1813', SPARK = '#f6c21c', WHITE = '#ffffff', MUTED = '#5f5b50', FAINT = '#8a8578', LINE = '#e3dfd4', TINT = '#f6f4ee';
 
 const s = StyleSheet.create({
   page: { backgroundColor: WHITE, color: INK, fontFamily: 'Helvetica', fontSize: 8.5, paddingTop: 26, paddingBottom: 46, paddingHorizontal: 32 },
   barra: { position: 'absolute', top: 0, left: 0, right: 0, height: 4, flexDirection: 'row' },
   header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', borderBottomWidth: 1, borderBottomColor: LINE, paddingBottom: 12, marginBottom: 12 },
-  logo: { width: 140, objectFit: 'contain', marginBottom: 6 },
+  logo: { width: 170, objectFit: 'contain', marginBottom: 6 },
   empresa: { fontSize: 11.5, fontFamily: 'Helvetica-Bold', marginBottom: 2 },
   linea: { fontSize: 7.5, color: MUTED, marginBottom: 1.2 },
   folio: { backgroundColor: DARK, borderRadius: 6, padding: '10 16', minWidth: 160, alignItems: 'center' },

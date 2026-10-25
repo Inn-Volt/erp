@@ -127,8 +127,8 @@ export default function AjustesCotPage() {
               <div style={fila}>
                 <label><span className="label-muted">Color de acento</span>
                   <span style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-                    <input type="color" value={dz.color || '#ffc600'} onChange={e => setDz({ color: e.target.value })} style={{ width: 44, height: 36, border: 'none', background: 'none', cursor: 'pointer' }} />
-                    <input className="input" value={dz.color || '#ffc600'} onChange={e => setDz({ color: e.target.value })} style={{ maxWidth: 120 }} />
+                    <input type="color" value={dz.color || '#f6c21c'} onChange={e => setDz({ color: e.target.value })} style={{ width: 44, height: 36, border: 'none', background: 'none', cursor: 'pointer' }} />
+                    <input className="input" value={dz.color || '#f6c21c'} onChange={e => setDz({ color: e.target.value })} style={{ maxWidth: 120 }} />
                     {dz.color && <button type="button" className="btn btn-ghost btn-xs" onClick={() => setDz({ color: undefined })}>Amarillo InnVolt</button>}
                   </span></label>
                 <label><span className="label-muted">Título del documento</span>

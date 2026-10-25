@@ -6,7 +6,7 @@ import type { ToastMessage } from '@/types';
 const ICONS = {
   success: <CheckCircle size={16} color="var(--success)" />,
   error:   <XCircle size={16} color="var(--danger)" />,
-  warning: <AlertTriangle size={16} color="#ffc600" />,
+  warning: <AlertTriangle size={16} color="#f6c21c" />,
   info:    <Info size={16} color="var(--info)" />,
 };
 

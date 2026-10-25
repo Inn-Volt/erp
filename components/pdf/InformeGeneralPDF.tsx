@@ -26,7 +26,7 @@ const INK = '#1a1a1a', MUTED = '#5a5a5a', LINE = '#e2e2e2', TINT = '#f6f6f4', RO
 const s = StyleSheet.create({
   page: { padding: 32, paddingBottom: 46, fontSize: 9, fontFamily: 'Helvetica', color: INK },
   header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', borderBottomWidth: 1, borderBottomColor: LINE, paddingBottom: 12, marginBottom: 12 },
-  logo: { width: 130, objectFit: 'contain', marginBottom: 6 },
+  logo: { width: 155, objectFit: 'contain', marginBottom: 6 },
   empresa: { fontSize: 11, fontFamily: 'Helvetica-Bold' },
   linea: { fontSize: 7.5, color: MUTED, marginTop: 1 },
   folio: { backgroundColor: '#232323', borderRadius: 6, padding: '9 14', alignItems: 'center', minWidth: 160 },
@@ -104,7 +104,7 @@ export interface InformeGeneralPDFProps {
 interface FotoNum { n: number; url: string; caption: string }
 
 export default function InformeGeneralPDF(p: InformeGeneralPDFProps) {
-  const color = p.color || '#ffc600';
+  const color = p.color || '#f6c21c';
   const titulo = p.tipo === 'visita' ? 'INFORME TÉCNICO DE VISITA' : 'ACTA DE ENTREGA';
   const logo = p.empresa.logo_url || (/innvolt/i.test(p.empresa.nombre) ? '/InnVolt-transparente-claro.png' : '');
   const urls = p.urls || {};
