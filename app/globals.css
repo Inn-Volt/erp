@@ -14,15 +14,17 @@
 
 /* ══ TEMA CLARO (crema) ═════════════════════════════════ */
 :root {
-  --surface:       255 255 255;   /* papel: tarjetas            */
-  --surface-2:     246 244 238;   /* crema #F6F4EE: fondo       */
-  --surface-3:     237 234 226;   /* crema oscuro: hover, zebra */
+  --surface:       255 255 255;   /* papel: tarjetas                                  */
+  --surface-2:     236 232 222;   /* fondo de página: crema más profundo (las tarjetas
+                                     blancas se separan bien de él)                    */
+  --surface-3:     246 244 238;   /* crema de la marca #F6F4EE: zonas dentro de las
+                                     tarjetas, hover y filas alternas                  */
   --content:        26  24  19;   /* tinta #1A1813              */
   --content-muted:  95  91  80;   /* gris de la marca #5F5B50   */
   --content-faint: 138 133 120;   /* texto terciario            */
-  --line:          222 217 205;   /* bordes (cálidos)           */
-  --line-soft:     233 229 219;   /* separadores suaves         */
-  --hover:         240 237 229;   /* fondo al pasar el mouse    */
+  --line:          214 207 191;   /* bordes (cálidos)           */
+  --line-soft:     230 226 216;   /* separadores suaves         */
+  --hover:         243 240 233;   /* fondo al pasar el mouse    */
 
   --fg: 26 24 19;
 
@@ -47,7 +49,7 @@
   /* Bordes y sombras: finos y suaves (cómodos a la vista todo el día). */
   --tinta:          #1a1813;
   --borde-marca:    rgb(var(--line));
-  --shadow-card: 0 1px 2px rgba(26,24,19,0.05), 0 2px 8px rgba(26,24,19,0.04);
+  --shadow-card: 0 1px 2px rgba(26,24,19,0.07), 0 4px 14px rgba(26,24,19,0.06);
   --shadow-btn:  0 1px 2px rgba(26,24,19,0.10);
   --shadow-soft: 0 1px 2px rgba(26,24,19,0.06);
   --shadow-pop:  0 18px 48px rgba(26,24,19,0.18);
