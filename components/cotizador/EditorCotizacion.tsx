@@ -893,7 +893,7 @@ export default function EditorCotizacion({ id, clonarDe, clienteInicial, solicit
           {d.items.length > 0 && (
             <button type="button" className="cot-total-flotante" onClick={() => document.getElementById('cot-resumen')?.scrollIntoView({ behavior: 'smooth', block: 'start' })}
               title="Ver el resumen" style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 1, padding: '0.4rem 0.85rem', borderRadius: 12, cursor: 'pointer',
-                background: 'rgb(var(--surface))', color: 'var(--text)', border: '1.5px solid var(--borde-marca)', boxShadow: 'var(--shadow-btn)' }}>
+                background: 'rgb(var(--surface))', color: 'var(--text)', border: '1px solid var(--borde-marca)', boxShadow: 'var(--shadow-pop)' }}>
               <span style={{ fontSize: '0.64rem', color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.08em' }}>Total con IVA</span>
               <b style={{ fontSize: '0.98rem', fontVariantNumeric: 'tabular-nums' }}>{formatMonto(calc.totales.total, d.moneda)}</b>
               {puedeCostos && verCostos && <span style={{ fontSize: '0.68rem', color: calc.internos.utilidad < 0 ? 'var(--danger)' : 'var(--success)' }}>utilidad {porcentaje(calc.internos.margen)}</span>}
