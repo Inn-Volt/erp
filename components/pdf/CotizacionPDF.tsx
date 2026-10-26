@@ -175,8 +175,24 @@ function altoTexto(texto: string | null | undefined, tam: number, interlinea: nu
 const ALTO_UTIL = 842 - 26 - 46 - 20;
 
 /** Diseño del PDF (ajustes_cotizacion.pdf_diseno, fase 8). */
+/** Un rótulo de columna en dos líneas parejas, cortando entre palabras («MATERIALES / E INSUMOS»). */
+function enDosLineas(t: string): string {
+  const w = t.split(/\s+/).filter(Boolean);
+  if (w.length < 2 || t.length <= 14) return t;
+  let mejor = 1, peor = Infinity;
+  for (let i = 1; i < w.length; i++) {
+    const largo = Math.max(w.slice(0, i).join(' ').length, w.slice(i).join(' ').length);
+    if (largo < peor) { peor = largo; mejor = i; }
+  }
+  return `${w.slice(0, mejor).join(' ')}\n${w.slice(mejor).join(' ')}`;
+}
+/** Sin guiones de corte: una palabra no se parte entre líneas. */
+const sinCortar = (palabra: string) => [palabra];
+
 export interface DisenoPDF {
   color?: string; titulo?: string; pie?: string;
+  /** Nombres de las dos columnas del detalle de una partida de instalación (vacío: los de siempre). */
+  col_materiales?: string; col_mano_obra?: string;
   mostrar_forma_pago?: boolean; mostrar_importante?: boolean; mostrar_como_aceptar?: boolean; mostrar_banco?: boolean; mostrar_firmas?: boolean;
 }
 
@@ -220,6 +236,9 @@ export default function CotizacionPDF(p: CotizacionPDFProps) {
   const acento = /^#[0-9a-f]{6}$/i.test(dz.color || '') ? dz.color! : SPARK;
   const tituloDoc = (dz.titulo || '').trim().toUpperCase() || 'COTIZACIÓN';
   const ver = (k: keyof DisenoPDF) => dz[k] !== false;
+  // Columnas del detalle de una partida de instalación: lo que se suministra y lo que se hace.
+  const colMateriales = (dz.col_materiales || '').trim() || 'Materiales e insumos';
+  const colManoObra = (dz.col_mano_obra || '').trim() || 'Mano de obra y servicios';
 
   const partidas = doc.partidas || [];
   const lineasDe = (pid: string) => doc.items.filter(l => l.partidaId === pid);
@@ -356,7 +375,8 @@ export default function CotizacionPDF(p: CotizacionPDFProps) {
   const ColsInstalacion = () => (
     <View style={s.thRow}>
       <Text style={[s.th, { width: 40 }]}>CANT.</Text><Text style={[s.th, { flex: 1 }]}>DESCRIPCIÓN</Text>
-      <Text style={[s.th, { width: 66, textAlign: 'right' }]}>EQUIPO</Text><Text style={[s.th, { width: 66, textAlign: 'right' }]}>INSTALACIÓN (HH)</Text>
+      <Text style={[s.th, { width: 76, textAlign: 'right' }]} hyphenationCallback={sinCortar}>{enDosLineas(colMateriales.toUpperCase())}</Text>
+      <Text style={[s.th, { width: 76, textAlign: 'right' }]} hyphenationCallback={sinCortar}>{enDosLineas(colManoObra.toUpperCase())}</Text>
       {conDescuento && <Text style={[s.th, { width: 40, textAlign: 'right' }]}>DESC.</Text>}
       <Text style={[s.th, { width: 80, textAlign: 'right' }]}>TOTAL</Text>
     </View>
@@ -372,8 +392,8 @@ export default function CotizacionPDF(p: CotizacionPDFProps) {
           <View key={f.principal.id} style={s.tr} wrap={false}>
             <Text style={[s.td, { width: 40 }]}>{cantidadLegible(f.cantidad)} {f.unidad}</Text>
             <Text style={[s.td, { flex: 1, paddingRight: 6 }]}>{f.descripcion}</Text>
-            <Text style={[s.td, { width: 66, textAlign: 'right' }]}>{f.equipo === null ? '' : f.equipoUnitario !== null ? fmt(f.equipoUnitario, true) : '—'}</Text>
-            <Text style={[s.td, { width: 66, textAlign: 'right' }]}>{f.hh === null ? '' : f.hhUnitario !== null ? fmt(f.hhUnitario, true) : '—'}</Text>
+            <Text style={[s.td, { width: 76, textAlign: 'right' }]}>{f.equipo === null ? '' : f.equipoUnitario !== null ? fmt(f.equipoUnitario, true) : '—'}</Text>
+            <Text style={[s.td, { width: 76, textAlign: 'right' }]}>{f.hh === null ? '' : f.hhUnitario !== null ? fmt(f.hhUnitario, true) : '—'}</Text>
             {conDescuento && <Text style={[s.td, { width: 40, textAlign: 'right' }]}>{f.descuentoPct ? `${f.descuentoPct} %` : f.descuento ? fmt(f.descuento) : ''}</Text>}
             <Text style={[s.td, { width: 80, textAlign: 'right', fontFamily: 'Helvetica-Bold' }]}>{fmt(f.subtotal)}</Text>
           </View>
@@ -413,7 +433,7 @@ export default function CotizacionPDF(p: CotizacionPDFProps) {
         const { cols, filas } = filasDe(lineas, pt);
         const instal = (pt.tipo || 'instalacion') === 'instalacion';
         const altos = (instal ? filasDelCliente(lineas, r).map(f => f.descripcion) : lineas.map(l => l.descripcion))
-          .map(d => altoFila(d, (instal ? 255 : 315) - (conDescuento ? 40 : 0)));
+          .map(d => altoFila(d, (instal ? 235 : 315) - (conDescuento ? 40 : 0)));
         const suma = (xs: number[]) => xs.reduce((a, b) => a + b, 0);
         const total = altoCab + 24 + suma(altos);
         if (total <= ALTO_UTIL * 0.75 || filas.length <= 4) {
@@ -502,6 +522,8 @@ export default function CotizacionPDF(p: CotizacionPDFProps) {
   // El cuadro de totales va con las dos últimas filas: nunca queda solo en una hoja.
   // El cuadro de totales va con lo último del detalle (la última partida entera, o las dos últimas
   // filas): nunca queda solo en una hoja.
+  // Las columnas de materiales y mano de obra solo aparecen en el detalle de partidas de instalación.
+  const conColumnas = doc.que_ve_cliente === 'detalle' && partidas.some(pt => (pt.tipo || 'instalacion') === 'instalacion' && lineasDe(pt.id).length > 0);
   const Detalle = () => {
     const bloques = bloquesDetalle();
     const n = bloques.length;
@@ -512,6 +534,12 @@ export default function CotizacionPDF(p: CotizacionPDFProps) {
     return (
       <View>
         <Text style={[s.bloqueTitulo, { borderBottomColor: acento }]}>DETALLE DE LA COTIZACIÓN</Text>
+        {conColumnas && (
+          <Text style={{ fontSize: 7.2, color: MUTED, lineHeight: 1.45, marginTop: -3, marginBottom: 9 }}>
+            Valores por unidad. {colMateriales}: lo que se suministra (equipos, materiales y accesorios). {colManoObra}: la
+            instalación y los servicios de cada ítem. El total de la fila incluye ambos.
+          </Text>
+        )}
         {bloques.slice(0, n - cola).map(b => b.nodo)}
         <View wrap={false}>{bloques.slice(n - cola).map(b => b.nodo)}<Totales /></View>
       </View>

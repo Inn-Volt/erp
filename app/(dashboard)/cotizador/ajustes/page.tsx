@@ -134,6 +134,12 @@ export default function AjustesCotPage() {
                 <label><span className="label-muted">Título del documento</span>
                   <input className="input" value={dz.titulo || ''} placeholder="COTIZACIÓN" onChange={e => setDz({ titulo: e.target.value })} maxLength={30} /></label>
               </div>
+              <div style={fila}>
+                <label><span className="label-muted">Columna de lo que se suministra (detalle)</span>
+                  <input className="input" value={dz.col_materiales || ''} placeholder="Materiales e insumos" onChange={e => setDz({ col_materiales: e.target.value })} maxLength={28} /></label>
+                <label><span className="label-muted">Columna de lo que se hace (detalle)</span>
+                  <input className="input" value={dz.col_mano_obra || ''} placeholder="Mano de obra y servicios" onChange={e => setDz({ col_mano_obra: e.target.value })} maxLength={28} /></label>
+              </div>
               <label><span className="label-muted">Texto del pie de página (vacío: «InnVolt · Cotización IV-0001»)</span>
                 <input className="input" value={dz.pie || ''} onChange={e => setDz({ pie: e.target.value })} maxLength={120} placeholder="InnVolt SpA · Instalaciones eléctricas certificadas SEC" /></label>
               <div>

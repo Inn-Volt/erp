@@ -4,7 +4,7 @@
  * Una partida del presupuesto (TecApp): encabezado con número, nombre, tipo (instalación o
  * venta), total y menú; descripción para el cliente; «¿Qué quieres agregar?» (receta o
  * producto) y sus líneas. En una de instalación cada producto va con su mano de obra en
- * una fila (Equipo · HH), y la mano de obra se despliega con ▸.
+ * una fila (materiales · mano de obra), y la mano de obra se despliega con ▸.
  */
 
 import EditorFormato from '@/components/EditorFormato';
