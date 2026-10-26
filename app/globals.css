@@ -2,9 +2,10 @@
    INNVOLT ERP — Design System v8.0 (kit de marca InnVolt)
    La misma imagen del sitio innvolt.cl: fondo CREMA, TINTA cálida,
    AMARILLO #F6C21C y DORADO para detalles; títulos en Archivo
-   (ancho 112 %) y texto en Barlow. Firma de la marca: botón
-   principal y tarjetas con borde de tinta y sombra dura.
-   El menú lateral va en tinta (como la barra del sitio).
+   (ancho 112 %) y texto en Barlow. El menú lateral va en tinta
+   (como la barra del sitio). Para el uso diario, sobrio: tarjetas
+   con borde fino cálido y sombra suave (el borde negro y la sombra
+   dura del sitio cansan en una herramienta de todo el día).
    Oscuro en tonos tinta cálidos (no grises fríos).
    Colores en "R G B" para opacidad con rgb(var(--token) / alpha).
 ───────────────────────────────────────────────────────── */
@@ -43,13 +44,13 @@
   --input-border:   rgb(205 199 185);
   --focus-ring:     rgba(168,119,0,0.28);
 
-  /* Firma de la marca: borde de tinta y sombra dura (botón principal, tarjetas, ventanas). */
+  /* Bordes y sombras: finos y suaves (cómodos a la vista todo el día). */
   --tinta:          #1a1813;
-  --borde-marca:    #1a1813;
-  --shadow-card: 3px 3px 0 var(--tinta);
-  --shadow-btn:  2px 2px 0 var(--tinta);
+  --borde-marca:    rgb(var(--line));
+  --shadow-card: 0 1px 2px rgba(26,24,19,0.05), 0 2px 8px rgba(26,24,19,0.04);
+  --shadow-btn:  0 1px 2px rgba(26,24,19,0.10);
   --shadow-soft: 0 1px 2px rgba(26,24,19,0.06);
-  --shadow-pop:  6px 6px 0 var(--tinta);
+  --shadow-pop:  0 18px 48px rgba(26,24,19,0.18);
 }
 
 /* ══ TEMA OSCURO (tinta) y ZONA TINTA (menú lateral) ═════
@@ -85,9 +86,9 @@
   --focus-ring:     rgba(246,194,28,0.28);
 
   --tinta:          #000000;
-  --borde-marca:    rgb(70 65 55);
-  --shadow-card: 3px 3px 0 rgba(0,0,0,0.55);
-  --shadow-btn:  2px 2px 0 #000000;
+  --borde-marca:    rgb(var(--line));
+  --shadow-card: 0 1px 2px rgba(0,0,0,0.35);
+  --shadow-btn:  0 1px 2px rgba(0,0,0,0.4);
   --shadow-soft: 0 0 0 1px rgba(255,255,255,0.02);
   --shadow-pop:  0 24px 60px rgba(0,0,0,0.6);
 }
@@ -214,7 +215,7 @@ input[type="number"] { -moz-appearance: textfield; appearance: textfield; }
 .display {
   font-family: var(--font-display);
   font-stretch: 112%;
-  font-weight: 800;
+  font-weight: 700;
   letter-spacing: -0.02em;
   line-height: 1.1;
 }
@@ -247,7 +248,7 @@ input[type="number"] { -moz-appearance: textfield; appearance: textfield; }
 }
 .pg-title {
   margin-top: 0.25rem;
-  font-family: var(--font-display); font-stretch: 112%; font-weight: 800; letter-spacing: -0.025em;
+  font-family: var(--font-display); font-stretch: 112%; font-weight: 700; letter-spacing: -0.02em;
   font-size: 1.6rem; line-height: 1.15; color: rgb(var(--content));
 }
 @media (min-width: 640px) { .pg-title { font-size: 1.9rem; } }
@@ -278,19 +279,20 @@ input[type="number"] { -moz-appearance: textfield; appearance: textfield; }
 .btn:focus-visible { box-shadow: 0 0 0 3px var(--focus-ring); }
 .btn:disabled { opacity: 0.5; cursor: not-allowed; }
 
-/* Principal: amarillo InnVolt con borde de tinta y sombra dura, como en innvolt.cl */
+/* Principal: el amarillo de la marca con texto en tinta; un borde inferior dorado discreto
+   (el guiño a la sombra del sitio, sin su peso). */
 .btn-primary {
   background: var(--y-brand);
   color: var(--on-accent);
-  border: 1.5px solid var(--borde-marca);
-  box-shadow: var(--shadow-btn);
+  border: 1px solid transparent;
+  box-shadow: inset 0 -2px 0 rgba(168,119,0,0.35), var(--shadow-btn);
   font-family: var(--font-display);
   font-weight: 700;
-  transition: background-color 0.13s ease, transform 0.12s ease, box-shadow 0.12s ease;
+  transition: background-color 0.13s ease, box-shadow 0.12s ease;
 }
-.btn-primary:hover:not(:disabled) { background: var(--y-brand-hover); transform: translate(1px, 1px); box-shadow: 1px 1px 0 var(--tinta); }
-.btn-primary:active:not(:disabled) { transform: translate(2px, 2px); box-shadow: none; }
-.btn-primary:focus-visible { box-shadow: var(--shadow-btn), 0 0 0 3px var(--focus-ring); }
+.btn-primary:hover:not(:disabled) { background: var(--y-brand-hover); }
+.btn-primary:active:not(:disabled) { box-shadow: inset 0 1px 2px rgba(26,24,19,0.18); }
+.btn-primary:focus-visible { box-shadow: inset 0 -2px 0 rgba(168,119,0,0.35), 0 0 0 3px var(--focus-ring); }
 
 /* Secundario: contorno sobrio */
 .btn-ghost {
@@ -310,7 +312,7 @@ input[type="number"] { -moz-appearance: textfield; appearance: textfield; }
 .btn-sm { height: 32px; padding: 0 0.75rem; font-size: 0.8rem; }
 .btn-xs { height: 28px; padding: 0 0.6rem; font-size: 0.74rem; }
 /* Botones chicos: sombra más corta para no recargar las filas */
-.btn-primary.btn-sm, .btn-primary.btn-xs { box-shadow: 1.5px 1.5px 0 var(--tinta); }
+.btn-primary.btn-sm, .btn-primary.btn-xs { box-shadow: inset 0 -1.5px 0 rgba(168,119,0,0.35); }
 
 /* ── Opciones de <select> nativas ────────────────────────
    El popup nativo no hereda el tema: sin esto, en oscuro las
@@ -345,8 +347,8 @@ select option {
 /* ── Cards / Panels (TecApp: rounded-2xl, borde fino, sombra sutil) ── */
 .panel, .panel-y {
   background: rgb(var(--surface));
-  border: 1.5px solid var(--borde-marca);
-  border-radius: var(--r-md);
+  border: 1px solid var(--borde-marca);
+  border-radius: var(--r-lg);
   box-shadow: var(--shadow-card);
   overflow: hidden;
 }
@@ -514,14 +516,14 @@ aside.sidebar-desktop { border-right-color: rgb(var(--line)) !important; }
 /* ── KPI card ───────────────────────────────────────────── */
 .kpi-card {
   background: rgb(var(--surface));
-  border: 1.5px solid var(--borde-marca);
+  border: 1px solid var(--borde-marca);
   padding: 1.1rem 1.25rem;
   display: flex;
   flex-direction: column;
   gap: 0.45rem;
   position: relative;
   overflow: hidden;
-  border-radius: var(--r-md);
+  border-radius: var(--r-lg);
   box-shadow: var(--shadow-card);
 }
 .kpi-icon {
@@ -532,8 +534,8 @@ aside.sidebar-desktop { border-right-color: rgb(var(--line)) !important; }
 }
 .kpi-value {
   font-family: var(--font-display);
-  font-stretch: 112%;
-  font-weight: 800;
+  font-stretch: 108%;
+  font-weight: 700;
   letter-spacing: -0.02em;
   font-variant-numeric: tabular-nums;
   font-size: clamp(1.45rem, 2.6vw, 1.9rem);
@@ -599,7 +601,7 @@ aside.sidebar-desktop { border-right-color: rgb(var(--line)) !important; }
 
 .modal-box {
   background: rgb(var(--surface));
-  border: 1.5px solid var(--borde-marca);
+  border: 1px solid var(--borde-marca);
   width: min(95vw, 620px);
   max-width: 560px;
   max-height: calc(100dvh - 4rem);
@@ -629,8 +631,8 @@ aside.sidebar-desktop { border-right-color: rgb(var(--line)) !important; }
 /* ── Section label ──────────────────────────────────────── */
 .section-label {
   font-family: var(--font-display);
-  font-stretch: 112%;
-  font-weight: 800;
+  font-stretch: 104%;
+  font-weight: 700;
   font-size: 1rem;
   letter-spacing: -0.01em;
   text-transform: none;
