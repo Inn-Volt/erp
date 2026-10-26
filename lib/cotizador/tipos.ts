@@ -32,7 +32,7 @@ export function normalizarEstado(e: string, enviada?: boolean): EstadoCot {
 
 export const QUE_VE: { valor: QueVe; nombre: string; ayuda: string }[] = [
   { valor: 'partidas', nombre: 'El total de cada partida', ayuda: 'Una fila por partida con su cantidad, valor unitario y total.' },
-  { valor: 'detalle', nombre: 'Todo el detalle', ayuda: 'Cada partida con sus líneas: equipo e instalación (HH) por separado.' },
+  { valor: 'detalle', nombre: 'Todo el detalle', ayuda: 'Cada partida con sus líneas: materiales e insumos y mano de obra por separado.' },
   { valor: 'total', nombre: 'Solo el total', ayuda: 'Las partidas sin montos; solo el total de la cotización.' },
 ];
 
