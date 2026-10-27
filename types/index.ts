@@ -155,6 +155,8 @@ export interface ComponenteIAResuelto {
   codigo?: string;     // código de catálogo cuando hubo match
   matched: boolean;    // true si se enlazó a un ítem real de la biblioteca
   itemId?: string;     // el artículo exacto de la biblioteca (cotizar conversando)
+  utilidad?: number;   // % utilidad escrito en la planilla importada (vacío: la de Ajustes)
+  imprevistos?: number; // % imprevistos escrito en la planilla importada
 }
 
 /** Partida resuelta lista para insertar en el cotizador. */

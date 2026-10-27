@@ -12,6 +12,7 @@
 
 import { fotosDeInforme, resumenInforme, type InformeLleno } from '@/services/informes';
 import DesdeLevantamiento, { type TextosLevantamiento } from '@/components/cotizador/DesdeLevantamiento';
+import ImportarPlanilla, { type TextosPlanilla } from '@/components/cotizador/ImportarPlanilla';
 import TrabajoPanel from '@/components/trabajos/TrabajoPanel';
 import { BannerAprobacion, PedirAprobacion, aprobacionRequerida, revisarAprobacion } from '@/components/cotizador/AprobacionGerente';
 import { useFase } from '@/lib/fases';
@@ -19,7 +20,7 @@ import { correoAutomatico, enviarCorreo } from '@/lib/correo';
 import PlanCobro from './PlanCobro';
 import NumeroInput from '@/components/NumeroInput';
 import { textoPlano, tituloCorto } from '@/lib/textoFormato';
-import { gananciaPorOmision } from '@/lib/cotizador/utilidad';
+import { gananciaDesdeUtilidad, gananciaPorOmision } from '@/lib/cotizador/utilidad';
 import EditorFormato from '@/components/EditorFormato';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
@@ -27,7 +28,7 @@ import { useRouter } from 'next/navigation';
 import { pdf } from '@react-pdf/renderer';
 import { saveAs } from 'file-saver';
 import {
-  Copy, Eye, FileDown, History, Link2, Loader2, Plus, RotateCcw, Save, Search, Send, Sparkles, XCircle, ClipboardList, CheckCircle2,
+  Copy, Eye, FileDown, History, Link2, Loader2, Plus, RotateCcw, Save, Search, Send, Sparkles, XCircle, ClipboardList, CheckCircle2, FileSpreadsheet,
 } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import FaltaSQL from '@/components/FaltaSQL';
@@ -123,7 +124,7 @@ export default function EditorCotizacion({ id, clonarDe, clienteInicial, solicit
   const [verCostos, setVerCostos] = useState(false);
   const [abierto, setAbierto] = useState<Record<Bloque, boolean>>({ cliente: true, cotizacion: false, descripcion: true, presentacion: false, aclaraciones: false });
 
-  const [modal, setModal] = useState<null | 'revisar' | 'reenviar' | 'aprobar' | 'rechazar' | 'historial' | 'volver' | 'anular' | 'ia' | 'levantamiento'>(null);
+  const [modal, setModal] = useState<null | 'revisar' | 'reenviar' | 'aprobar' | 'rechazar' | 'historial' | 'volver' | 'anular' | 'ia' | 'levantamiento' | 'planilla'>(null);
   const [asistente, setAsistente] = useState<{ receta: RecetaCompleta; partidaId: string } | null>(null);
   // Receta nueva armada desde una partida (para usarla solo aquí o guardarla en la biblioteca).
   const [recetaNuevaPara, setRecetaNuevaPara] = useState<string | null>(null);
@@ -448,8 +449,10 @@ export default function EditorCotizacion({ id, clonarDe, clienteInicial, solicit
         } else {
           items.push({
             id: nuevoId(), partidaId: p.id, descripcion: c.descripcion, categoria: c.categoria, unidad: c.unidad || 'un',
-            cantidad: c.cantidad ?? 1, costo: aMoneda(c.costo || 0, moneda, valorUf, true), imprevistos: 0, margen: 0, precio: 0,
-            iva: IVA, descuento: 0, fuera: true, ganancia: gananciaPorOmision(ajustes?.utilidad_por_tipo, c.categoria),
+            cantidad: c.cantidad ?? 1, costo: aMoneda(c.costo || 0, moneda, valorUf, true), imprevistos: c.imprevistos || 0, margen: 0, precio: 0,
+            iva: IVA, descuento: 0, fuera: true,
+            // La planilla importada puede traer su propia utilidad; si no, la de Ajustes.
+            ganancia: c.utilidad !== undefined ? gananciaDesdeUtilidad(c.utilidad) : gananciaPorOmision(ajustes?.utilidad_por_tipo, c.categoria),
           });
         }
       }
@@ -492,6 +495,18 @@ export default function EditorCotizacion({ id, clonarDe, clienteInicial, solicit
       const bloques = ([['Condiciones de montaje', textos.montaje], ['Exclusiones', textos.exclusiones], ['Pendiente de confirmar', textos.pendientes]] as [string, string][])
         .filter(([, t]) => t.trim()).map(([k, t]) => `**${k}:**\n${t.trim()}`);
       if (bloques.length) setD(x => ({ ...x, descripcion_general: [x.descripcion_general?.trim(), ...bloques].filter(Boolean).join('\n\n') }));
+    }
+  };
+
+  // Importar planilla: sus partidas y, si se eligió, su título y sus textos (alcance, exclusiones, plan).
+  const insertarPlanilla = (partidasIA: PartidaIAResuelta[], textos: TextosPlanilla | null) => {
+    insertarIA(partidasIA);
+    if (textos) {
+      setD(x => ({
+        ...x,
+        titulo: textos.titulo && (!x.titulo.trim() || x.titulo.trim() === 'Cotización') ? textos.titulo : x.titulo,
+        descripcion_general: [x.descripcion_general?.trim(), textos.introduccion].filter(Boolean).join('\n\n'),
+      }));
     }
   };
 
@@ -864,6 +879,8 @@ export default function EditorCotizacion({ id, clonarDe, clienteInicial, solicit
           <button className="btn btn-ghost" style={{ justifyContent: 'flex-start' }} onClick={() => agregarPartida('instalacion')} title="Cada producto trae su mano de obra, ligada a él"><Plus size={14} /> Partida de instalación</button>
           <button className="btn btn-ghost" style={{ justifyContent: 'flex-start' }} onClick={() => agregarPartida('venta')} title="Venta de producto: solo el producto, sin mano de obra"><Plus size={14} /> Partida de venta</button>
           <button className="btn btn-ghost" style={{ justifyContent: 'flex-start' }} onClick={() => setModal('ia')}><Sparkles size={14} /> Cotizar con IA</button>
+          <button className="btn btn-ghost" style={{ justifyContent: 'flex-start' }} onClick={() => setModal('planilla')}
+            title="Partidas, ítems con costo, textos y plan desde un Excel"><FileSpreadsheet size={14} /> Importar planilla</button>
           {d.agendamiento_id && <button className="btn btn-ghost" style={{ justifyContent: 'flex-start', borderColor: 'var(--y-brand)' }} onClick={() => setModal('levantamiento')}
             title="Revisa lo detectado en los informes de la visita y créalo como partidas"><ClipboardList size={14} /> Desde el levantamiento</button>}
         </>}
@@ -1261,6 +1278,7 @@ export default function EditorCotizacion({ id, clonarDe, clienteInicial, solicit
       </div>
 
       {modal === 'levantamiento' && d.agendamiento_id && <DesdeLevantamiento agendaId={d.agendamiento_id} catalogo={catalogo} onInsertar={insertarLevantamiento} onClose={() => setModal(null)} />}
+      {modal === 'planilla' && <ImportarPlanilla moneda={d.moneda} previsualizar={previsualizarIA} onInsertar={insertarPlanilla} onClose={() => setModal(null)} />}
       {modal === 'ia' && <CotizarIAConversa moneda={d.moneda} catalogo={catalogo} recetas={recetas} previsualizar={previsualizarIA} onInsertar={insertarConversa} onClose={() => setModal(null)} guardarComo={id || 'nueva'}
         contexto={[d.titulo?.trim(), textoPlano(d.descripcion_general).trim()].filter(Boolean).join('. ').slice(0, 1500)} />}
       {(modal === 'revisar' || modal === 'reenviar') && cot && (
