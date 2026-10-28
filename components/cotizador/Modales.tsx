@@ -16,7 +16,10 @@ export function RevisarYEnviar({ avisos, para, telefono, mensajeWhatsapp, asunto
   onIrA: (id: string) => void; onCerrar: () => void;
   onEnviar: (canal: Canal, datos: { para: string; telefono: string; mensajeWhatsapp: string; asunto: string; mensajeCorreo: string }) => Promise<void>;
 }) {
-  const rojos = avisos.filter(a => a.nivel === 'rojo');
+  // Lo rojo que se puede enviar igual confirmándolo (vender con pérdida a sabiendas).
+  const [conPerdida, setConPerdida] = useState(false);
+  const perdidas = avisos.filter(a => a.nivel === 'rojo' && a.confirmar === 'perdida');
+  const rojos = avisos.filter(a => a.nivel === 'rojo' && !(a.confirmar === 'perdida' && conPerdida));
   const ambar = avisos.filter(a => a.nivel === 'ambar');
   const [canal, setCanal] = useState<Canal>(telefono ? 'whatsapp' : para ? 'correo' : 'descarga');
   const [d, setD] = useState({ para, telefono, mensajeWhatsapp, asunto, mensajeCorreo });
@@ -39,6 +42,13 @@ export function RevisarYEnviar({ avisos, para, telefono, mensajeWhatsapp, asunto
           <p style={{ margin: '0 0 6px', fontWeight: 700, color: 'var(--danger)', fontSize: '0.88rem' }}><XCircle size={14} style={{ verticalAlign: -2 }} /> No se puede enviar todavía</p>
           {rojos.map((a, i) => <AvisoFila key={i} a={a} onIrA={id => { onCerrar(); onIrA(id); }} />)}
         </div>
+      )}
+      {perdidas.length > 0 && (
+        <label style={{ display: 'flex', gap: 8, alignItems: 'flex-start', fontSize: '0.84rem', color: 'var(--text)', cursor: 'pointer' }}>
+          <input type="checkbox" checked={conPerdida} onChange={e => setConPerdida(e.target.checked)} style={{ marginTop: 3, accentColor: 'var(--danger)' }} />
+          <span>Sé que {perdidas.length === 1 ? 'esa línea queda' : `esas ${perdidas.length} líneas quedan`} bajo el costo y la envío igual (vendo con pérdida).
+            {conPerdida && <span style={{ display: 'block', fontSize: '0.74rem', color: 'var(--muted)' }}>{perdidas.map(a => a.texto.replace(/ \(solo lo ves tú\)\.$/, '')).join(' · ')}</span>}</span>
+        </label>
       )}
       {ambar.length > 0 && (
         <div style={{ border: '1px solid #d97706', borderRadius: 8, padding: '0.6rem 0.8rem', background: 'rgba(217,119,6,.07)' }}>

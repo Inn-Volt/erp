@@ -12,6 +12,8 @@ import { supabase } from '@/lib/supabase';
 const MARCAS: Record<number, () => Promise<boolean>> = {
   // Fase 15 (supabase_fase15_revision.sql): compras, horas, aprobación, ficha tributaria…
   15: async () => !(await supabase.from('compras').select('id', { head: true, count: 'exact' }).limit(1)).error,
+  // Fase 17 (supabase_fase17_descuentos.sql): descuento máximo por persona.
+  17: async () => !(await supabase.from('descuentos_maximos').select('usuario_id', { head: true, count: 'exact' }).limit(1)).error,
 };
 
 const cache = new Map<number, Promise<boolean>>();

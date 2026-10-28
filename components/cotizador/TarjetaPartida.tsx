@@ -14,8 +14,8 @@ import { useLayoutEffect, useRef, useState } from 'react';
 import { ArrowDown, ArrowUp, CornerDownRight, Layers, Plus, Trash2 } from 'lucide-react';
 import BuscadorCatalogo from './BuscadorCatalogo';
 import { MenuAcciones, opcionMenu, campoChico } from './ui';
-import type { ArticuloCatalogo, Linea, Moneda, PartidaCot, QueVe, TipoPartida } from '@/lib/cotizador/tipos';
-import { IVA, UNIDADES_ITEM, UNIDADES_PARTIDA } from '@/lib/cotizador/tipos';
+import type { ArticuloCatalogo, CargoPorcentaje, Linea, Moneda, PartidaCot, QueVe, TipoPartida } from '@/lib/cotizador/tipos';
+import { CARGOS_RAPIDOS, IVA, UNIDADES_ITEM, UNIDADES_PARTIDA } from '@/lib/cotizador/tipos';
 import { CATEGORIA_COLORS, CATEGORIA_LABELS } from '@/types';
 import { agrupar, cantidadLegible, filasDelCliente, formatMonto, porcentaje, qp, type Resultado } from '@/lib/cotizador/calculo';
 import type { RecetaCompleta } from '@/lib/cotizador/recetas';
@@ -32,7 +32,8 @@ export interface AccionesPartida {
   onReceta: (r: RecetaCompleta) => void;
   /** Armar una receta nueva desde aquí (sin ir a la Biblioteca). */
   onRecetaNueva?: () => void;
-  onDescuento: (pct: number) => void;
+  /** Partida de cargo: agrega un cargo (traslado, logística…), con monto a mano o calculado como %. */
+  onCargo?: (descripcion: string, cargo?: CargoPorcentaje | null) => void;
   onDeshacerReceta?: () => void;
   onTraslado?: () => void;
   /** Copia la partida con todas sus líneas, justo debajo (piso 1 → piso 2…). */
@@ -69,9 +70,16 @@ export default function TarjetaPartida(props: {
   acciones: AccionesPartida; lineaAcc: AccionesLinea;
   /** Título y cliente de la cotización, para «Mejorar con IA». */
   contextoIA?: () => string;
+  /** El descuento máximo de quien cotiza (%): lo que lo pasa se marca en rojo. null: sin tope. */
+  descuentoMax?: number | null;
 }) {
   const { partida: p, indice, total, lineas, calc, moneda, valorUf, queVe, verCostos, editable, acciones, lineaAcc } = props;
-  const instalacion = (p.tipo || 'instalacion') === 'instalacion';
+  const tipoActual = p.tipo || 'instalacion';
+  const instalacion = tipoActual === 'instalacion';
+  // Cargo operacional (traslado, logística, viático…): se cobra tal cual, sin utilidad ni descuento.
+  const esCargo = tipoActual === 'cargo';
+  const descMax = props.descuentoMax ?? null;
+  const bases = props.partidas.map((x, i) => ({ x, i })).filter(({ x }) => x.tipo !== 'cargo');
   // El buscador de productos aparece de inmediato (antes había que elegir «¿Qué quieres agregar?»);
   // Receta se elige al lado y «+ Nuevo» (fuera de la biblioteca) está junto al buscador.
   const [modo, setModo] = useState<'receta' | 'producto'>('producto');
@@ -79,7 +87,10 @@ export default function TarjetaPartida(props: {
   // Al elegir «producto», el cursor va directo al buscador.
   const [modoElegido, setModoElegido] = useState(false);
   const [conDescripcion, setConDescripcion] = useState(!!p.descripcion);
-  const [descPartida, setDescPartida] = useState('');
+  // «Calcular como %» de una partida de cargo: concepto, % y sobre qué.
+  const [conceptoCargo, setConceptoCargo] = useState('');
+  const [pctCargo, setPctCargo] = useState<number | null>(null);
+  const [baseCargo, setBaseCargo] = useState<string>('total');
   // Utilidad de toda la partida de una vez (además de la de cada línea): a todas, solo a
   // materiales o solo a mano de obra y servicios. Se puede deshacer.
   const [utilPartida, setUtilPartida] = useState('');
@@ -118,19 +129,27 @@ export default function TarjetaPartida(props: {
       <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 8, padding: '0.5rem 0.75rem', background: 'var(--bg3)', borderBottom: '1px solid var(--border2)', borderTopRightRadius: 11 }}>
         <span style={{ fontFamily: 'monospace', fontSize: '0.75rem', fontWeight: 700, background: 'var(--bg2)', borderRadius: 6, padding: '0.1rem 0.4rem', color: 'var(--text)' }}>{indice + 1}</span>
         <input value={p.nombre} disabled={!editable} autoFocus={props.recienCreada} maxLength={200}
-          onChange={e => acciones.onCambiar({ nombre: e.target.value })} placeholder="Nombre de la partida: Tablero piso 2"
+          onChange={e => acciones.onCambiar({ nombre: e.target.value })} placeholder={esCargo ? 'Nombre: Cargo operacional' : 'Nombre de la partida: Tablero piso 2'}
           aria-label="Nombre de la partida"
           style={{ flex: 1, minWidth: 160, background: 'transparent', border: '1px solid transparent', borderRadius: 6, padding: '0.3rem 0.4rem', fontWeight: 700, fontSize: '0.98rem', color: 'var(--text)', outline: 'none' }} />
         <div role="group" aria-label="Tipo de partida" style={{ display: 'inline-flex', border: '1px solid var(--border2)', borderRadius: 8, padding: 2, background: 'var(--bg2)' }}>
-          {(['instalacion', 'venta'] as const).map(t => (
-            <button key={t} type="button" disabled={!editable} aria-pressed={(p.tipo || 'instalacion') === t}
-              onClick={() => (p.tipo || 'instalacion') !== t && acciones.onTipo(t)}
-              title={t === 'instalacion' ? 'Cada producto trae su mano de obra, ligada a él' : 'Venta de producto: solo el producto, sin mano de obra'}
-              style={{ border: 'none', borderRadius: 6, padding: '0.2rem 0.55rem', fontSize: '0.72rem', fontWeight: 600, cursor: editable ? 'pointer' : 'default',
-                background: (p.tipo || 'instalacion') === t ? 'var(--y-brand)' : 'transparent', color: (p.tipo || 'instalacion') === t ? '#111' : 'var(--muted)' }}>
-              {t === 'instalacion' ? 'Instalación' : 'Venta'}
-            </button>
-          ))}
+          {(['instalacion', 'venta', 'cargo'] as const).filter(t => t !== 'cargo' || editable || esCargo).map(t => {
+            // De cargo a otra cosa (o al revés) solo con la partida vacía: sus líneas son de otra clase.
+            const bloqueado = t !== tipoActual && (t === 'cargo' || esCargo) && lineas.length > 0;
+            return (
+              <button key={t} type="button" disabled={!editable || bloqueado} aria-pressed={tipoActual === t}
+                onClick={() => tipoActual !== t && acciones.onTipo(t)}
+                title={bloqueado ? 'Para cambiarla a este tipo, la partida tiene que estar vacía'
+                  : t === 'instalacion' ? 'Cada producto trae su mano de obra, ligada a él'
+                  : t === 'venta' ? 'Venta de producto: solo el producto, sin mano de obra'
+                  : 'Cargo operacional: traslado, logística, viático… Se cobra tal cual, sin utilidad ni descuento'}
+                style={{ border: 'none', borderRadius: 6, padding: '0.2rem 0.55rem', fontSize: '0.72rem', fontWeight: 600, cursor: editable && !bloqueado ? 'pointer' : 'default',
+                  opacity: bloqueado ? 0.45 : 1,
+                  background: tipoActual === t ? 'var(--y-brand)' : 'transparent', color: tipoActual === t ? '#111' : 'var(--muted)' }}>
+                {t === 'instalacion' ? 'Instalación' : t === 'venta' ? 'Venta' : 'Cargo'}
+              </button>
+            );
+          })}
         </div>
         <span style={{ marginLeft: 'auto', fontSize: '0.86rem', color: 'var(--text)', whiteSpace: 'nowrap' }}>
           <span style={{ fontSize: '0.72rem', color: 'var(--muted)' }}>Total </span><b>{formatMonto(neto, moneda)}</b>
@@ -140,6 +159,7 @@ export default function TarjetaPartida(props: {
             {cerrar => (<>
               <button type="button" style={opcionMenu} onClick={() => { cerrar(); acciones.onAgregarDebajo('instalacion'); }}>Agregar partida de instalación debajo</button>
               <button type="button" style={opcionMenu} onClick={() => { cerrar(); acciones.onAgregarDebajo('venta'); }}>Agregar partida de venta debajo</button>
+              <button type="button" style={opcionMenu} onClick={() => { cerrar(); acciones.onAgregarDebajo('cargo'); }}>Agregar cargo operacional debajo</button>
               {acciones.onDuplicar && <button type="button" style={opcionMenu} onClick={() => { cerrar(); acciones.onDuplicar!(); }}>Duplicar la partida (con sus líneas)</button>}
               {acciones.onTraslado && <button type="button" style={{ ...opcionMenu, borderTop: '1px solid var(--border2)' }} onClick={() => { cerrar(); acciones.onTraslado!(); }}>Agregar traslado (por comuna)</button>}
               <button type="button" style={{ ...opcionMenu, borderTop: '1px solid var(--border2)' }} disabled={indice === 0} onClick={() => { cerrar(); acciones.onMover(-1); }}>↑ Subir</button>
@@ -174,7 +194,37 @@ export default function TarjetaPartida(props: {
           <datalist id="unidades-de-partida">{UNIDADES_PARTIDA.map(u => <option key={u} value={u} />)}</datalist>
         </details>
 
-        {editable && (
+        {editable && esCargo && (
+          <div style={{ marginTop: 10, display: 'flex', flexDirection: 'column', gap: 8, fontSize: '0.76rem', color: 'var(--muted)' }}>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, alignItems: 'center' }}>
+              <span>Agregar</span>
+              {CARGOS_RAPIDOS.map(c => (
+                <button key={c} type="button" className="btn btn-ghost btn-xs" onClick={() => acciones.onCargo?.(c)}><Plus size={12} /> {c}</button>
+              ))}
+              {acciones.onTraslado && <button type="button" className="btn btn-ghost btn-xs" onClick={acciones.onTraslado}
+                title="Calcula el traslado según la comuna (la tabla de traslados de la Biblioteca)"><Plus size={12} /> Traslado a una comuna</button>}
+            </div>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, alignItems: 'center' }}>
+              <span>O calcularlo como</span>
+              <NumeroInput className="input" min={0} max={100} value={pctCargo} onChange={v => setPctCargo(v)} onVacio={() => setPctCargo(null)}
+                ariaLabel="% del cargo" envoltura={{ width: 64 }} style={{ ...campoChico }} /> % de
+              <select className="input" value={baseCargo} onChange={e => setBaseCargo(e.target.value)} aria-label="Sobre qué se calcula el cargo"
+                style={{ ...campoChico, width: 'auto', maxWidth: 240, padding: '0.3rem 0.4rem' }}>
+                <option value="total">toda la cotización</option>
+                <option value="mano_obra">la mano de obra y servicios</option>
+                {bases.map(({ x, i }) => <option key={x.id} value={x.id}>la partida {i + 1}. {x.nombre?.trim() || 'sin nombre'}</option>)}
+              </select>
+              <input className="input" list="cargos-rapidos" value={conceptoCargo} maxLength={120} onChange={e => setConceptoCargo(e.target.value)}
+                placeholder="Gasto operacional" aria-label="Nombre del cargo" style={{ ...campoChico, width: 170 }} />
+              <button type="button" className="btn btn-ghost btn-xs" disabled={!(Number(pctCargo) > 0)}
+                title="Se calcula sobre el neto (con los descuentos, sin IVA) y se pone al día solo si cambia la base"
+                onClick={() => { acciones.onCargo?.(conceptoCargo.trim() || 'Gasto operacional', { pct: Number(pctCargo), base: baseCargo }); setPctCargo(null); setConceptoCargo(''); }}>Agregar</button>
+              <datalist id="cargos-rapidos">{CARGOS_RAPIDOS.map(c => <option key={c} value={c} />)}</datalist>
+            </div>
+          </div>
+        )}
+
+        {editable && !esCargo && (
           <div style={{ marginTop: 10 }}>
             {(
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'flex-start' }}>
@@ -232,7 +282,8 @@ export default function TarjetaPartida(props: {
         <div style={{ marginTop: 10, border: '1px solid var(--border2)', borderRadius: 8, overflowX: 'auto' }}>
           {lineas.length === 0 ? (
             <p style={{ padding: '0.7rem', fontSize: '0.84rem', color: 'var(--muted)', margin: 0 }}>
-              {!editable ? 'Sin líneas.' : modo === null ? 'Aquí quedan las líneas: elige arriba si agregas una receta o un producto.'
+              {!editable ? 'Sin líneas.' : esCargo ? 'Agrega arriba los cargos: se cobran tal cual, sin utilidad ni descuento.'
+                : modo === null ? 'Aquí quedan las líneas: elige arriba si agregas una receta o un producto.'
                 : instalacion ? 'Busca arriba lo que lleva: cada producto trae su instalación.' : 'Busca arriba los productos que se venden.'}
             </p>
           ) : (
@@ -240,7 +291,10 @@ export default function TarjetaPartida(props: {
               <div style={{ display: 'grid', gridTemplateColumns: cols, gap: 8, padding: '0.45rem 0.7rem', borderBottom: '1px solid var(--border2)', borderLeft: '3px solid transparent' }}>
                 <span style={{ ...th, textAlign: 'left' }}>Descripción</span>
                 <span style={{ ...th, textAlign: 'left' }}>Cantidad</span>
-                {verCostos
+                {esCargo
+                  ? <><span style={th} title="Lo que se cobra por unidad (neto): un cargo va tal cual, sin utilidad">Monto unit.</span>
+                    {verCostos && <span />}</>
+                  : verCostos
                   ? <><span style={th} title="Costo neto por unidad. Si el precio que tienes trae IVA, escríbelo y toca «quitar IVA»">Costo unit.</span>
                     <span style={th} title="De lo que paga el cliente (neto), qué parte queda para InnVolt">Utilidad</span></>
                   : <span style={th} title="Precio neto por unidad">Precio unit.</span>}
@@ -263,7 +317,8 @@ export default function TarjetaPartida(props: {
                         onDesplegar={() => setDesplegadas(s => { const x = new Set(s); if (x.has(g.cabeza.id)) x.delete(g.cabeza.id); else x.add(g.cabeza.id); return x; })}
                         producto={l !== g.cabeza ? g.cabeza : null}
                         verCostos={verCostos} editable={editable} primera={n === 0} ultima={n === grupos.length - 1}
-                        partidas={props.partidas.filter(x => x.id !== p.id)} acc={lineaAcc} />
+                        partidas={props.partidas.filter(x => x.id !== p.id && (x.tipo === 'cargo') === esCargo)} acc={lineaAcc}
+                        esCargo={esCargo} bases={bases} descPartida={esCargo ? 0 : Number(p.descuento) || 0} descuentoMax={descMax} />
                     ))}
                   </div>
                 );
@@ -273,17 +328,19 @@ export default function TarjetaPartida(props: {
         </div>
 
         <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'space-between', gap: '0.4rem 1.2rem', marginTop: 8, fontSize: '0.76rem', color: 'var(--muted)' }}>
-          {editable && lineas.length > 1 ? (
-            <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-              Descuento a toda la partida
-              <NumeroInput className="input" min={0} max={100} value={descPartida === '' ? null : num(descPartida)} mostrarCero
-                onChange={v => setDescPartida(String(v))} onVacio={() => setDescPartida('')}
-                ariaLabel="Descuento a toda la partida" envoltura={{ width: 64 }} style={{ ...campoChico }} /> %
-              <button type="button" className="btn btn-ghost btn-xs" disabled={descPartida.trim() === ''}
-                onClick={() => { acciones.onDescuento(Math.min(Math.max(num(descPartida), 0), 100)); setDescPartida(''); }}>Aplicar</button>
+          {!esCargo && lineas.length > 0 && (editable || (Number(p.descuento) || 0) > 0) ? (
+            <span style={{ display: 'flex', alignItems: 'center', gap: 4, flexWrap: 'wrap' }}
+              title="Se descuenta del total de la partida, después del descuento de cada línea. En el PDF la partida sale con lo descontado">
+              Descuento de la partida
+              <NumeroInput className="input" min={0} max={100} value={p.descuento ?? null} disabled={!editable}
+                onChange={v => acciones.onCambiar({ descuento: v > 0 ? Math.min(v, 100) : null })} onVacio={() => acciones.onCambiar({ descuento: null })}
+                ariaLabel="Descuento de la partida" envoltura={{ width: 64 }}
+                style={{ ...campoChico, ...(descMax !== null && (Number(p.descuento) || 0) > descMax ? rojo : {}) }} /> %
+              {(pc?.descuentoPartida || 0) > 0 && <span>(− {formatMonto(pc!.descuentoPartida, moneda)})</span>}
+              {descMax !== null && (Number(p.descuento) || 0) > descMax && <span style={{ color: 'var(--danger)' }}>pasa tu máximo ({porcentaje(descMax)})</span>}
             </span>
           ) : <span />}
-          {editable && verCostos && lineas.some(l => (l.costo || 0) > 0) && (
+          {editable && verCostos && !esCargo && lineas.some(l => (l.costo || 0) > 0) && (
             <span style={{ display: 'flex', alignItems: 'center', gap: 4, flexWrap: 'wrap' }}>
               Utilidad de
               <select className="input" value={utilA} onChange={e => setUtilA(e.target.value as typeof utilA)} aria-label="A qué líneas se aplica la utilidad"
@@ -307,7 +364,7 @@ export default function TarjetaPartida(props: {
               : <span style={{ color: '#d97706' }} title="El PDF imprime la cantidad como texto y solo el total">El valor unitario no da exacto: el PDF dirá «{cantidadLegible(p.cantidad)} {p.unidad}» y solo el total</span>}
             </span>
           )}
-          {verCostos && lineas.length > 0 && (
+          {verCostos && !esCargo && lineas.length > 0 && (
             <span>Costo {formatMonto(costo, moneda)} · Utilidad {formatMonto(utilidad, moneda)}{neto > 0 ? ` (${porcentaje(Math.round((utilidad / neto) * 1000) / 10)})` : ''}</span>
           )}
         </div>
@@ -316,14 +373,23 @@ export default function TarjetaPartida(props: {
   );
 }
 
-function FilaLinea({ l, esLigada, cols, calc, moneda, fila, ligadas, conMano, desplegada, onDesplegar, producto, verCostos, editable, primera, ultima, partidas, acc }: {
+function FilaLinea({ l, esLigada, cols, calc, moneda, fila, ligadas, conMano, desplegada, onDesplegar, producto, verCostos, editable, primera, ultima, partidas, acc,
+  esCargo, bases, descPartida, descuentoMax }: {
   l: Linea; esLigada: boolean; cols: string; calc: Resultado; moneda: Moneda;
   fila?: ReturnType<typeof filasDelCliente>[number]; ligadas: Linea[]; conMano: boolean; desplegada: boolean; onDesplegar: () => void;
   producto: Linea | null; verCostos: boolean; editable: boolean; primera: boolean; ultima: boolean; partidas: PartidaCot[]; acc: AccionesLinea;
+  esCargo: boolean; bases: { x: PartidaCot; i: number }[]; descPartida: number; descuentoMax: number | null;
 }) {
   const c = calc.lineas.get(l.id);
   const deAntes = !l.itemId && !l.fuera;
-  const nueva = !!l.fuera && !l.ajustada;
+  // En una partida de cargo, todo es «solo de esta cotización»: no hace falta decirlo.
+  const nueva = !!l.fuera && !l.ajustada && !esCargo;
+  // Un cargo calculado como %: su monto lo pone la cotización (y su base puede haber desaparecido).
+  const pctCargo = esCargo && l.cargo ? l.cargo : null;
+  const sinBase = !!pctCargo && pctCargo.base !== 'total' && pctCargo.base !== 'mano_obra' && !bases.some(b => b.x.id === pctCargo.base);
+  // Descuento efectivo de la línea (el suyo y el de su partida) contra el máximo de quien cotiza.
+  const descEfectivo = (1 - (1 - (Number(l.descuento) || 0) / 100) * (1 - descPartida / 100)) * 100;
+  const pasaMax = descuentoMax !== null && descEfectivo > descuentoMax + 1e-9;
   const exenta = (l.iva ?? IVA) === 0;
   // Líneas guardadas antes con «costo con IVA»: se siguen calculando con su neto.
   const costoConIva = !!l.ivaIncluido && !exenta;
@@ -376,6 +442,25 @@ function FilaLinea({ l, esLigada, cols, calc, moneda, fila, ligadas, conMano, de
           {deAntes && <span style={{ ...etiqueta, background: 'var(--bg3)', fontWeight: 400 }}>Línea de antes</span>}
           {nueva && (l.costo || 0) > 0 && (l.ganancia === null || l.ganancia === undefined) &&
             <span style={{ color: '#d97706' }} title="Ponle utilidad para que no se venda a costo">sin utilidad: se vende a costo</span>}
+          {pctCargo && (
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, flexWrap: 'wrap' }}>
+              {editable ? <>
+                <NumeroInput className="input" min={0} max={100} value={pctCargo.pct} ariaLabel="% del cargo" envoltura={{ width: 58 }}
+                  onChange={v => acc.cambiar(l.id, { cargo: { ...pctCargo, pct: v } })} style={{ ...campoChico, padding: '0.15rem 0.3rem', fontSize: '0.72rem' }} /> % de
+                <select value={pctCargo.base} aria-label="Sobre qué se calcula" onChange={e => acc.cambiar(l.id, { cargo: { ...pctCargo, base: e.target.value } })}
+                  style={{ fontSize: '0.68rem', background: 'transparent', border: '1px solid var(--border2)', borderRadius: 4, color: 'var(--text)', maxWidth: 200 }}>
+                  <option value="total">toda la cotización</option>
+                  <option value="mano_obra">la mano de obra y servicios</option>
+                  {bases.map(({ x, i }) => <option key={x.id} value={x.id}>la partida {i + 1}. {x.nombre?.trim() || 'sin nombre'}</option>)}
+                  {sinBase && <option value={pctCargo.base}>(una partida que ya no está)</option>}
+                </select>
+                <button type="button" onClick={() => acc.cambiar(l.id, { cargo: null })} title="Deja el monto de hoy fijo: ya no se pone al día solo"
+                  style={{ background: 'none', border: 'none', color: 'var(--y)', cursor: 'pointer', fontSize: '0.66rem' }}>dejar el monto fijo</button>
+              </> : <span>{porcentaje(pctCargo.pct)} de {pctCargo.base === 'total' ? 'toda la cotización' : pctCargo.base === 'mano_obra' ? 'la mano de obra y servicios'
+                : `la partida ${(bases.find(b => b.x.id === pctCargo.base)?.i ?? -1) + 1 || '?'}`}</span>}
+              {sinBase && <span style={{ color: '#d97706' }}>La partida base ya no está: quedó el monto de antes.</span>}
+            </span>
+          )}
           {esLigada && (l.cantidadAMano ? (
             <span>Cantidad a mano {editable && <button type="button" onClick={() => acc.religar(l.id)} style={{ background: 'none', border: 'none', color: 'var(--y)', cursor: 'pointer', fontSize: '0.66rem' }}>↺ seguir al producto</button>}</span>
           ) : <span>{cantidadLegible(l.porUnidad || 1)} por cada {producto?.unidad || 'unidad'}</span>)}
@@ -386,7 +471,7 @@ function FilaLinea({ l, esLigada, cols, calc, moneda, fila, ligadas, conMano, de
             {desplegada ? '▾ Ocultar la instalación' : `▸ Incluye instalación: ${ligadas.map(m => m.descripcion).join(', ')}`}
           </button>
         )}
-        {nueva && editable && !verCostos && (
+        {nueva && editable && !verCostos && !esCargo && (
           // Con los costos ocultos, el precio de lo nuevo sale de aquí.
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 4, paddingLeft: 4, alignItems: 'center', fontSize: '0.72rem', color: 'var(--muted)' }}>
             <span>Costo</span>
@@ -400,7 +485,7 @@ function FilaLinea({ l, esLigada, cols, calc, moneda, fila, ligadas, conMano, de
 
       {/* Cantidad con su unidad */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-        <NumeroInput className="input" min={0} decimales={3} disabled={!editable} value={l.cantidad} ariaLabel="Cantidad"
+        <NumeroInput className="input" min={0} decimales={3} disabled={!editable || !!pctCargo} value={l.cantidad} ariaLabel="Cantidad"
           onChange={v => acc.cantidad(l.id, v)} envoltura={{ width: 70 }} onKeyDown={siguienteCantidad}
           style={{ ...campoChico, textAlign: 'right', color: esLigada && !l.cantidadAMano ? 'var(--muted)' : undefined }} />
         {editable && nueva ? (
@@ -413,8 +498,14 @@ function FilaLinea({ l, esLigada, cols, calc, moneda, fila, ligadas, conMano, de
         )}
       </div>
 
-      {/* Costo, margen y utilidad (o el precio unitario, con los costos ocultos) */}
-      {verCostos ? (editable ? <>
+      {/* Costo, margen y utilidad (o el precio unitario, con los costos ocultos). Un cargo: su monto, tal cual. */}
+      {esCargo ? <>
+        {editable && !pctCargo
+          ? <CeldaNum valor={l.costo} etiqueta="Monto unitario del cargo (neto)" onCambiar={v => acc.cambiar(l.id, { costo: v ?? 0, ganancia: 0 })}
+            prefijo={moneda === 'UF' ? 'UF' : '$'} decimales={moneda === 'UF' ? 4 : 0} />
+          : <span style={der} title={pctCargo ? 'Calculado: se pone al día solo' : undefined}>{formatMonto(c?.precio, moneda, true)}</span>}
+        {verCostos && <span />}
+      </> : verCostos ? (editable ? <>
         <div>
           <CeldaNum valor={l.costo} etiqueta={costoConIva ? 'Costo unitario con IVA incluido' : 'Costo unitario neto (no cambia la biblioteca)'} onCambiar={v => acc.ajustar(l.id, { costo: v ?? 0 })}
             prefijo={moneda === 'UF' ? 'UF' : '$'} decimales={moneda === 'UF' ? 4 : 0} />
@@ -439,14 +530,17 @@ function FilaLinea({ l, esLigada, cols, calc, moneda, fila, ligadas, conMano, de
 
       {/* Descuento */}
       <span>
-        {variosDesc ? (
+        {esCargo ? (
+          <span style={{ ...der, display: 'block', color: 'var(--muted)' }} title="Un cargo operacional no lleva descuento">—</span>
+        ) : variosDesc ? (
           <button type="button" onClick={onDesplegar} title="El producto y su instalación llevan distinto descuento: despliégala para cambiar cada uno"
             style={{ width: '100%', border: '1px dashed var(--border2)', borderRadius: 6, background: 'none', fontSize: '0.72rem', color: 'var(--muted)', cursor: 'pointer', padding: '0.4rem 0.3rem' }}>varios</button>
         ) : (
           <NumeroInput className="input" min={0} max={100} sufijo="%" disabled={!editable} value={l.descuento || 0} ariaLabel="% de descuento"
             onChange={v => {
               if (delGrupo) [l, ...ligadas].forEach(x => acc.cambiar(x.id, { descuento: v })); else acc.cambiar(l.id, { descuento: v });
-            }} style={{ ...campoChico, textAlign: 'right' }} />
+            }} style={{ ...campoChico, textAlign: 'right', ...(pasaMax ? rojo : {}) }}
+            title={pasaMax ? `Con el de la partida queda en ${porcentaje(Math.round(descEfectivo * 10) / 10)}: pasa tu máximo (${porcentaje(descuentoMax)})` : undefined} />
         )}
       </span>
 
@@ -467,8 +561,8 @@ function FilaLinea({ l, esLigada, cols, calc, moneda, fila, ligadas, conMano, de
         <span style={{ fontSize: '0.6rem', color: exenta ? '#d97706' : 'var(--muted)', whiteSpace: 'nowrap' }}>{exenta ? 'exento' : '19 %'}</span>
       </label>
 
-      {/* Más acciones */}
-      <span>
+      {/* Más acciones (y Quitar a la vista) */}
+      <span style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2 }}>
         {editable && (
           <MenuAcciones etiqueta="Más acciones de la línea" ancho={250}>
             {cerrar => (<>
@@ -490,6 +584,14 @@ function FilaLinea({ l, esLigada, cols, calc, moneda, fila, ligadas, conMano, de
                 <Trash2 size={13} style={iconoMenu} /> {!esLigada && ligadas.length ? 'Quitar (con su instalación)' : 'Quitar'}</button>
             </>)}
           </MenuAcciones>
+        )}
+        {editable && (
+          <button type="button" onClick={() => acc.quitar(l.id)} aria-label={!esLigada && ligadas.length ? 'Quitar la línea con su instalación' : 'Quitar la línea'}
+            title={!esLigada && ligadas.length ? 'Quitar (con su instalación)' : 'Quitar'}
+            className="cot-quitar-linea"
+            style={{ background: 'none', border: 'none', padding: 4, cursor: 'pointer', color: 'var(--muted)', lineHeight: 0, borderRadius: 6 }}>
+            <Trash2 size={14} />
+          </button>
         )}
       </span>
     </div>
@@ -539,6 +641,8 @@ function QuitarIva({ l, moneda, onCosto }: { l: Linea; moneda: Moneda; onCosto: 
 }
 
 const iconoMenu: React.CSSProperties = { flexShrink: 0, marginRight: 8, color: 'var(--muted)' };
+/** Un descuento que pasa el máximo de quien cotiza. */
+const rojo: React.CSSProperties = { borderColor: 'var(--danger)', color: 'var(--danger)', fontWeight: 700 };
 const opcion: React.CSSProperties = { ...opcionMenu, display: 'flex', alignItems: 'center' };
 
 /** Texto de una línea que se ve entero: crece hacia abajo en vez de cortarse. */

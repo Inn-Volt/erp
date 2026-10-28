@@ -92,7 +92,7 @@ export default function CotizacionClientePage() {
         <CotizacionPDF doc={doc} cliente={cliente} empresa={cot.empresa} vendedor={cot.vendedor}
           sucursal={cot.sucursal} contacto={cot.contacto} importante={cot.importante} correoAceptar={cot.correo_aceptar}
           enlace={typeof window !== 'undefined' ? window.location.href.split('?')[0] : null}
-          marca={cot.estado === 'Anulada' ? 'ANULADA' : null} fotos={cot.fotos} planCobro={cot.plan_cobro} diseno={cot.pdf_diseno}
+          marca={cot.estado === 'Anulada' ? 'ANULADA' : null} fotos={cot.fotos} planCobro={cot.plan_cobro} diseno={cot.pdf_diseno} referencia={cot.referencia}
           aceptacion={cot.estado === 'Aprobada' && cot.respondida_por && cot.respondida_at
             ? { nombre: cot.respondida_por, rut: cot.respondida_rut, fecha: cot.respondida_at, firma: cot.respuesta_firma }
             : null} />,
@@ -218,7 +218,9 @@ export default function CotizacionClientePage() {
           <div style={{ display: 'flex', flexDirection: 'column' }}>
             {cot.partidas.map(p => {
               const its = cot.items.filter(i => i.partidaId === p.id);
-              const bruto = t.r.partidas.get(p.id)?.subtotal || 0;
+              // Lo que paga por la partida, con sus descuentos (el de cada línea y el de la partida).
+              const pc = t.r.partidas.get(p.id);
+              const bruto = pc?.neto || 0;
               return (
                 <div key={p.id} style={{ padding: '12px 0', borderBottom: `1px solid ${C.line}` }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12 }}>
@@ -226,7 +228,8 @@ export default function CotizacionClientePage() {
                     {cot.que_ve_cliente !== 'total' && <strong style={{ whiteSpace: 'nowrap' }}>{fmt(bruto)}</strong>}
                   </div>
                   {p.descripcion && <TextoFormato texto={p.descripcion} style={{ fontSize: 13, color: C.muted, marginTop: 3 }} />}
-                  <p style={{ fontSize: 12, color: C.faint, marginTop: 3 }}>{p.cantidad} {p.unidad}</p>
+                  <p style={{ fontSize: 12, color: C.faint, marginTop: 3 }}>{p.cantidad} {p.unidad}
+                    {cot.que_ve_cliente !== 'total' && (pc?.descuento || 0) > 0 ? ` · incluye un descuento de ${fmt(pc!.descuento)}` : ''}</p>
                   {cot.que_ve_cliente === 'detalle' && its.length > 0 && (
                     <ul style={{ margin: '6px 0 0', paddingLeft: 16, fontSize: 12, color: C.muted }}>
                       {its.map(i => <li key={i.id}>{i.descripcion} — {i.cantidad} {i.unidad}</li>)}
@@ -239,7 +242,7 @@ export default function CotizacionClientePage() {
               <div key={i.id} style={{ padding: '12px 0', borderBottom: `1px solid ${C.line}` }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12 }}>
                   <span style={{ fontSize: 14 }}>{i.descripcion}</span>
-                  <strong style={{ whiteSpace: 'nowrap' }}>{fmt((i.precio || 0) * (i.cantidad || 0))}</strong>
+                  <strong style={{ whiteSpace: 'nowrap' }}>{fmt(t.r.lineas.get(i.id)?.neto ?? (i.precio || 0) * (i.cantidad || 0))}</strong>
                 </div>
                 <p style={{ fontSize: 12, color: C.faint, marginTop: 2 }}>{i.cantidad} {i.unidad} × {fmt(i.precio || 0)}{(i.descuento || 0) > 0 ? ` · descuento ${i.descuento}%` : ''}</p>
               </div>

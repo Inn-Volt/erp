@@ -801,3 +801,6 @@ aside.sidebar-desktop { border-right-color: rgb(var(--line)) !important; }
   content: attr(data-placeholder); float: left; height: 0; pointer-events: none; color: rgb(var(--content-faint));
 }
 @media (max-width: 640px) { .tf-editor { font-size: 16px; } }
+
+/* Cotizador: «Quitar» de cada línea, a la vista pero discreto. */
+.cot-quitar-linea:hover, .cot-quitar-linea:focus-visible { color: var(--danger) !important; background: var(--bg3) !important; }
