@@ -61,3 +61,15 @@ export function utilidadesDe(guardadas: UtilidadPorTipo | null | undefined): Rec
 /** La ganancia (lo que se suma al costo) con que entra algo nuevo de ese tipo. */
 export const gananciaPorOmision = (guardadas: UtilidadPorTipo | null | undefined, tipo: CategoriaItem) =>
   gananciaDesdeUtilidad(utilidadesDe(guardadas)[tipo] ?? 25);
+
+/**
+ * Imprevistos (fase 18): un colchón sobre el costo para lo que no se ve (mermas, cortes, sorpresas).
+ * Lo que tiene su propia utilidad (fuera de la biblioteca o ajustado aquí) sube su precio para
+ * mantenerla; lo de la biblioteca mantiene su precio y la utilidad que se ve ya lo descuenta.
+ * La operación (traslados, fletes) y los cargos no llevan: se cobran tal cual.
+ */
+export type ImprevistosPorTipo = Partial<Record<CategoriaItem, number>>;
+export const TOPE_IMPREVISTOS = 50;
+export const TIPOS_CON_IMPREVISTOS = TIPOS.filter(t => t.clave !== 'operacion');
+export const imprevistosPorOmision = (guardados: ImprevistosPorTipo | null | undefined, tipo: CategoriaItem) =>
+  tipo === 'operacion' ? 0 : Math.min(Math.max(Number(guardados?.[tipo]) || 0, 0), TOPE_IMPREVISTOS);
