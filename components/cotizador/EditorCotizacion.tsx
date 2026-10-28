@@ -1338,11 +1338,19 @@ export default function EditorCotizacion({ id, clonarDe, clienteInicial, solicit
 
 function EstadoActual({ d, envios, equipo, onAbrir }: { d: CotizacionDoc; envios: EnvioCot[]; equipo: Record<string, Vendedor>; onAbrir: (path: string) => void }) {
   const enlace = d.token_publico ? linkPublico(d.token_publico) : null;
+  // Fase 16: cuántas veces abrió el enlace el cliente, y la última.
+  const [aperturas, setAperturas] = useState<{ n: number; ultima: string | null } | null>(null);
+  useEffect(() => {
+    if (!d.vista_at) return;
+    supabase.from('cotizacion_aperturas').select('created_at', { count: 'exact' }).eq('cotizacion_id', d.id).order('created_at', { ascending: false }).limit(1)
+      .then(({ data, count, error }) => { if (!error) setAperturas({ n: count || 0, ultima: (data?.[0] as { created_at: string } | undefined)?.created_at || null }); });
+  }, [d.id, d.vista_at]);
   return (
     <div className="panel-y" style={{ padding: '0.8rem 1rem', marginBottom: 14, display: 'flex', flexDirection: 'column', gap: 6, fontSize: '0.86rem', color: 'var(--text)' }}>
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.3rem 1.2rem' }}>
         {d.enviada_at && <span><span style={{ color: 'var(--muted)' }}>Enviada:</span> {new Date(d.enviada_at).toLocaleString('es-CL', { dateStyle: 'medium', timeStyle: 'short' })}</span>}
-        {d.vista_at && <span><span style={{ color: 'var(--muted)' }}>El cliente la abrió:</span> {formatDate(d.vista_at)}</span>}
+        {d.vista_at && <span><span style={{ color: 'var(--muted)' }}>El cliente la abrió:</span> {formatDate(d.vista_at)}
+          {aperturas && aperturas.n > 1 && aperturas.ultima && <span style={{ color: 'var(--info)' }}> · {aperturas.n} veces, la última el {new Date(aperturas.ultima).toLocaleString('es-CL', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit', hour12: false })}</span>}</span>}
         {d.valida_hasta && <span><span style={{ color: 'var(--muted)' }}>Válida hasta:</span> {formatDate(d.valida_hasta)}</span>}
         {d.estado === 'Aprobada' && <span style={{ color: 'var(--success)' }}>Aprobada{d.revision_aprobada !== null && d.revision_aprobada !== undefined ? ` (revisión ${d.revision_aprobada})` : ''}{d.aprobada_como ? `: ${d.aprobada_como}` : d.respondida_por ? `: ${d.respondida_por} en línea` : ''}</span>}
         {d.estado === 'Rechazada' && <span style={{ color: 'var(--danger)' }}>Rechazada: {d.motivo_perdida}{d.motivo_perdida_nota ? ` · ${d.motivo_perdida_nota}` : ''}</span>}
