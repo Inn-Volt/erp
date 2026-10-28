@@ -20,7 +20,7 @@ import { correoAutomatico, enviarCorreo } from '@/lib/correo';
 import PlanCobro from './PlanCobro';
 import NumeroInput from '@/components/NumeroInput';
 import { textoPlano, tituloCorto } from '@/lib/textoFormato';
-import { gananciaDesdeUtilidad, gananciaPorOmision } from '@/lib/cotizador/utilidad';
+import { gananciaDesdeUtilidad, gananciaPorOmision, imprevistosPorOmision } from '@/lib/cotizador/utilidad';
 import EditorFormato from '@/components/EditorFormato';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
@@ -40,6 +40,9 @@ import { CATALOGO_PENDIENTE } from './BuscadorCatalogo';
 import AsistenteReceta from './AsistenteReceta';
 import EditorReceta from './EditorReceta';
 import TrasladoModal from './TrasladoModal';
+import CalculadoraCuadrilla from './CalculadoraCuadrilla';
+import { hojasExcel } from '@/lib/cotizador/herramientas';
+import { descargarExcel } from '@/lib/excel';
 import { proyectosService, folioProyecto, type Proyecto } from '@/services/fase5';
 import { BloquePlegable, EstadoPill, MenuAcciones, opcionMenu, PedirMotivo, etiqueta } from './ui';
 import { AprobarModal, HistorialModal, RechazarModal, RevisarYEnviar, type Canal } from './Modales';
@@ -144,6 +147,7 @@ export default function EditorCotizacion({ id, clonarDe, clienteInicial, solicit
   const [trayendoUF, setTrayendoUF] = useState(false);
   const [proyectos, setProyectos] = useState<Proyecto[]>([]);
   const [trasladoPara, setTrasladoPara] = useState<string | null>(null);
+  const [cuadrillaPara, setCuadrillaPara] = useState<string | null>(null);
   useEffect(() => { proyectosService.listar().then(setProyectos).catch(() => setProyectos([])); }, []);
 
   const editable = puedeEditar && d.estado === 'Borrador';
@@ -397,7 +401,14 @@ export default function EditorCotizacion({ id, clonarDe, clienteInicial, solicit
     if (cambios.size) setItems(items => items.map(l => (cambios.has(l.id) ? { ...l, costo: cambios.get(l.id)!, cantidad: 1, ganancia: 0 } : l)));
   }, [calc, d.items, d.partidas, editable, setItems]);
 
-  const agregarLineas = (pid: string, nuevas: Linea[]) => {
+  const agregarLineas = (pid: string, nuevasSin: Linea[]) => {
+    // Lo nuevo entra con los imprevistos de cada tipo (Utilidad → imprevistos). Un cargo y la
+    // operación (traslados, fletes) se cobran tal cual: sin imprevistos.
+    const enCargo = d.partidas.find(p => p.id === pid)?.tipo === 'cargo';
+    const nuevas = enCargo ? nuevasSin : nuevasSin.map(l => {
+      const imp = imprevistosPorOmision(ajustes?.imprevistos_por_tipo, l.categoria);
+      return imp > 0 && !(l.imprevistos || 0) ? { ...l, imprevistos: imp } : l;
+    });
     setItems(items => {
       // Al final de su partida (para que queden juntas en el orden del documento).
       let ultima = -1;
@@ -433,6 +444,19 @@ export default function EditorCotizacion({ id, clonarDe, clienteInicial, solicit
         : x.ligadoA === lid && !x.cantidadAMano ? { ...x, cantidad: q(v * (x.porUnidad || 1), 0.001) } : x));
     }),
     quitar: lid => setItems(items => items.filter(l => l.id !== lid && l.ligadoA !== lid)),
+    duplicar: lid => {
+      const grupo = d.items.filter(x => x.id === lid || x.ligadoA === lid);
+      if (!grupo.length) return;
+      const ids = new Map(grupo.map(x => [x.id, nuevoId()]));
+      // Como al duplicar una partida: si ya estaba guardada, la copia mantiene su precio.
+      for (const x of grupo) if (guardadas.current.has(x.id)) guardadas.current.add(ids.get(x.id)!);
+      const copias = grupo.map(x => ({ ...x, id: ids.get(x.id)!, ligadoA: x.ligadoA ? ids.get(x.ligadoA) ?? x.ligadoA : x.ligadoA }));
+      setItems(items => {
+        let fin = -1;
+        items.forEach((x, i) => { if (x.id === lid || x.ligadoA === lid) fin = i; });
+        return fin < 0 ? items : [...items.slice(0, fin + 1), ...copias, ...items.slice(fin + 1)];
+      });
+    },
     mover: (lid, dir) => setItems(items => {
       const l = items.find(x => x.id === lid)!;
       const grupo = (x: Linea) => x.id === lid || x.ligadoA === lid;
@@ -900,6 +924,11 @@ export default function EditorCotizacion({ id, clonarDe, clienteInicial, solicit
   if (cot && d.token_publico && d.estado !== 'Borrador') {
     menuMas.push({ texto: 'Copiar el enlace del cliente', hacer: () => { navigator.clipboard?.writeText(linkPublico(d.token_publico!)); success('Enlace copiado'); } });
   }
+  // Excel con costos (la hoja de ítems se vuelve a importar con «Importar planilla»).
+  if (puedeCostos && d.items.length) menuMas.push({ texto: 'Descargar Excel (con costos)', hacer: () => {
+    descargarExcel(hojasExcel(d, calc), nombrePDF(d, cliente?.nombre_cliente).replace(/\.pdf$/, '.xlsx'))
+      .catch(e => toastError(e instanceof Error ? e.message : 'No se pudo armar el Excel'));
+  } });
   if (cot && ['Borrador', 'Enviada'].includes(d.estado) && puedeEditar) menuMas.push({ texto: 'Anular', hacer: () => setModal('anular'), peligro: true });
   if (cot && d.estado === 'Aprobada' && puedeEditar && puedeAprobar) menuMas.push({ texto: 'Anular la aprobada', hacer: () => setModal('anular'), peligro: true });
 
@@ -1305,6 +1334,7 @@ export default function EditorCotizacion({ id, clonarDe, clienteInicial, solicit
                   onCargo: (texto, cargo) => agregarCargo(p.id, texto, cargo),
                   onDeshacerReceta: () => { if (recetaAgregada) { setItems(() => recetaAgregada.antes); setRecetaAgregada(null); } },
                   onTraslado: () => setTrasladoPara(p.id),
+                  onCuadrilla: () => setCuadrillaPara(p.id),
                 }} />
             ))}
             {sueltas.length > 0 && (
@@ -1381,15 +1411,26 @@ export default function EditorCotizacion({ id, clonarDe, clienteInicial, solicit
           onConfirmar={async m => { try { await cotizadorService.anular(cot.id, m); success('Cotización anulada'); await recargar(); } catch (e) { toastError(e instanceof Error ? e.message : 'No se pudo'); } }} />
       )}
       {trasladoPara && (
-        <TrasladoModal onCerrar={() => setTrasladoPara(null)} onAgregar={(t, visitas) => {
+        <TrasladoModal costoHora={ajustes?.costo_hora} onCerrar={() => setTrasladoPara(null)} onAgregar={t => {
           if (d.moneda === 'UF' && !(Number(d.valor_uf) > 0)) { warning('Está en UF: escribe el valor de la UF antes de agregar.'); return; }
           agregarLineas(trasladoPara, [{
-            id: nuevoId(), partidaId: trasladoPara, descripcion: `Traslado a ${t.comuna}${t.desde_otra_base ? ` (desde ${t.sale_desde})` : ''}`,
-            categoria: 'operacion', unidad: 'visita', cantidad: visitas, costo: aMoneda(t.total, d.moneda, d.valor_uf, true),
+            id: nuevoId(), partidaId: trasladoPara, descripcion: t.descripcion,
+            categoria: 'operacion', unidad: 'visita', cantidad: t.visitas, costo: aMoneda(t.porVisita, d.moneda, d.valor_uf, true),
             imprevistos: 0, margen: 0, precio: 0, iva: IVA, descuento: 0, fuera: true, ganancia: 0,
           }]);
           setTrasladoPara(null);
           success('Traslado agregado');
+        }} />
+      )}
+      {cuadrillaPara && (
+        <CalculadoraCuadrilla costoHora={ajustes?.costo_hora} onCerrar={() => setCuadrillaPara(null)} onAgregar={c => {
+          if (d.moneda === 'UF' && !(Number(d.valor_uf) > 0)) { warning('Está en UF: escribe el valor de la UF antes de agregar.'); return; }
+          agregarLineas(cuadrillaPara, [{
+            ...lineaFuera(c.descripcion, cuadrillaPara), categoria: 'mano_obra', unidad: 'día', cantidad: c.dias,
+            costo: aMoneda(c.porDia, d.moneda, d.valor_uf, true), ganancia: gananciaPorOmision(ajustes?.utilidad_por_tipo, 'mano_obra'),
+          }]);
+          setCuadrillaPara(null);
+          success('Mano de obra agregada');
         }} />
       )}
       {recetaNuevaPara && (

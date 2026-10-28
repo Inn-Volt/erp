@@ -10,14 +10,14 @@
 import EditorFormato from '@/components/EditorFormato';
 import NumeroInput from '@/components/NumeroInput';
 import { textoPlano } from '@/lib/textoFormato';
-import { useLayoutEffect, useRef, useState } from 'react';
-import { ArrowDown, ArrowUp, CornerDownRight, Layers, Plus, Trash2 } from 'lucide-react';
+import { useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { ArrowDown, ArrowUp, Copy, CornerDownRight, HardHat, Layers, Plus, Trash2 } from 'lucide-react';
 import BuscadorCatalogo from './BuscadorCatalogo';
 import { MenuAcciones, opcionMenu, campoChico } from './ui';
 import type { ArticuloCatalogo, CargoPorcentaje, Linea, Moneda, PartidaCot, QueVe, TipoPartida } from '@/lib/cotizador/tipos';
 import { CARGOS_RAPIDOS, IVA, UNIDADES_ITEM, UNIDADES_PARTIDA } from '@/lib/cotizador/tipos';
 import { CATEGORIA_COLORS, CATEGORIA_LABELS } from '@/types';
-import { agrupar, cantidadLegible, filasDelCliente, formatMonto, porcentaje, qp, type Resultado } from '@/lib/cotizador/calculo';
+import { agrupar, cantidadLegible, filasDelCliente, formatMonto, porcentaje, q, qp, type Resultado } from '@/lib/cotizador/calculo';
 import type { RecetaCompleta } from '@/lib/cotizador/recetas';
 
 export interface AccionesPartida {
@@ -38,6 +38,8 @@ export interface AccionesPartida {
   onTraslado?: () => void;
   /** Copia la partida con todas sus líneas, justo debajo (piso 1 → piso 2…). */
   onDuplicar?: () => void;
+  /** Calcular la mano de obra de una cuadrilla (técnicos, ayudantes y días). */
+  onCuadrilla?: () => void;
 }
 /** Enter en una cantidad salta a la cantidad de la línea siguiente (como en una planilla). */
 function siguienteCantidad(e: React.KeyboardEvent<HTMLInputElement>) {
@@ -56,6 +58,8 @@ export interface AccionesLinea {
   alCatalogo: (id: string) => void;
   cantidad: (id: string, v: number) => void;
   quitar: (id: string) => void;
+  /** Copia la línea (con su instalación) justo debajo. */
+  duplicar: (id: string) => void;
   mover: (id: string, dir: -1 | 1) => void;
   moverA: (id: string, partidaId: string) => void;
   religar: (id: string) => void;
@@ -110,6 +114,27 @@ export default function TarjetaPartida(props: {
     for (const x of antesUtil || []) lineaAcc.cambiar(x.id, x.patch);
     setAntesUtil(null);
   };
+  // Las líneas están hechas para «base» unidades de la partida (p. ej. 3 puertas). Si la partida pasa
+  // a 5, se ofrece multiplicarlas × 5/3 (como el cotizador de antes); se puede deshacer.
+  const [base, setBase] = useState(Number(p.cantidad) || 1);
+  const [antesEscala, setAntesEscala] = useState<{ base: number; factor: number; lineas: { id: string; cantidad: number }[] } | null>(null);
+  useEffect(() => { if (!lineas.length) setBase(Number(p.cantidad) || 1); }, [lineas.length, p.cantidad]);
+  const cantP = Number(p.cantidad) || 0;
+  const factor = editable && !esCargo && lineas.length > 0 && base > 0 && cantP > 0 && Math.abs(cantP - base) > 1e-9 ? cantP / base : null;
+  const escalar = () => {
+    if (!factor) return;
+    setAntesEscala({ base, factor, lineas: lineas.map(l => ({ id: l.id, cantidad: Number(l.cantidad) || 0 })) });
+    // Cada línea por el mismo factor (la instalación ligada también: sigue siendo «por cada» producto).
+    for (const l of lineas) if (!l.cargo) lineaAcc.cambiar(l.id, { cantidad: q((Number(l.cantidad) || 0) * factor, 0.001) });
+    setBase(cantP);
+  };
+  const deshacerEscala = () => {
+    if (!antesEscala) return;
+    for (const x of antesEscala.lineas) lineaAcc.cambiar(x.id, { cantidad: x.cantidad });
+    setBase(antesEscala.base);
+    acciones.onCambiar({ cantidad: antesEscala.base });
+    setAntesEscala(null);
+  };
   const [desplegadas, setDesplegadas] = useState<Set<string>>(new Set());
   const pc = calc.partidas.get(p.id);
   const grupos = agrupar(lineas);
@@ -161,7 +186,8 @@ export default function TarjetaPartida(props: {
               <button type="button" style={opcionMenu} onClick={() => { cerrar(); acciones.onAgregarDebajo('venta'); }}>Agregar partida de venta debajo</button>
               <button type="button" style={opcionMenu} onClick={() => { cerrar(); acciones.onAgregarDebajo('cargo'); }}>Agregar cargo operacional debajo</button>
               {acciones.onDuplicar && <button type="button" style={opcionMenu} onClick={() => { cerrar(); acciones.onDuplicar!(); }}>Duplicar la partida (con sus líneas)</button>}
-              {acciones.onTraslado && <button type="button" style={{ ...opcionMenu, borderTop: '1px solid var(--border2)' }} onClick={() => { cerrar(); acciones.onTraslado!(); }}>Agregar traslado (por comuna)</button>}
+              {acciones.onTraslado && <button type="button" style={{ ...opcionMenu, borderTop: '1px solid var(--border2)' }} onClick={() => { cerrar(); acciones.onTraslado!(); }}>Agregar traslado (por comuna o km)</button>}
+              {acciones.onCuadrilla && !esCargo && <button type="button" style={opcionMenu} onClick={() => { cerrar(); acciones.onCuadrilla!(); }}>Mano de obra por cuadrilla</button>}
               <button type="button" style={{ ...opcionMenu, borderTop: '1px solid var(--border2)' }} disabled={indice === 0} onClick={() => { cerrar(); acciones.onMover(-1); }}>↑ Subir</button>
               <button type="button" style={opcionMenu} disabled={indice === total - 1} onClick={() => { cerrar(); acciones.onMover(1); }}>↓ Bajar</button>
               <button type="button" style={{ ...opcionMenu, borderTop: '1px solid var(--border2)', color: 'var(--danger)' }} onClick={() => { cerrar(); acciones.onQuitar(); }}>Quitar la partida</button>
@@ -193,6 +219,21 @@ export default function TarjetaPartida(props: {
           </div>
           <datalist id="unidades-de-partida">{UNIDADES_PARTIDA.map(u => <option key={u} value={u} />)}</datalist>
         </details>
+        {factor && (
+          <div role="status" style={{ marginTop: 8, display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'center', background: 'var(--y-soft)', borderRadius: 8, padding: '0.45rem 0.7rem', fontSize: '0.82rem', color: 'var(--text)' }}>
+            <span style={{ flex: '1 1 260px' }}>Las líneas están para <b>{cantidadLegible(base)} {p.unidad}</b> y la partida dice <b>{cantidadLegible(cantP)}</b>.</span>
+            <button type="button" className="btn btn-primary btn-xs" onClick={escalar}>Multiplicar las líneas × {cantidadLegible(cantP)}/{cantidadLegible(base)}</button>
+            <button type="button" className="btn btn-ghost btn-xs" onClick={() => { setBase(cantP); setAntesEscala(null); }}
+              title="Las cantidades de las líneas quedan como están (la cantidad de la partida es solo para el valor unitario del PDF)">Dejarlas así</button>
+          </div>
+        )}
+        {!factor && antesEscala && editable && (
+          <div role="status" style={{ marginTop: 8, display: 'flex', gap: 10, alignItems: 'center', background: 'var(--bg3)', borderRadius: 8, padding: '0.45rem 0.7rem', fontSize: '0.82rem', color: 'var(--text)' }}>
+            <span style={{ flex: 1 }}>Cantidades de las líneas multiplicadas × {cantidadLegible(Math.round(antesEscala.factor * 1000) / 1000)}.</span>
+            <button type="button" onClick={deshacerEscala} style={{ background: 'none', border: 'none', color: 'var(--y)', textDecoration: 'underline', cursor: 'pointer' }}>Deshacer</button>
+            <button type="button" aria-label="Cerrar" onClick={() => setAntesEscala(null)} style={{ background: 'none', border: 'none', color: 'var(--muted)', cursor: 'pointer' }}>✕</button>
+          </div>
+        )}
 
         {editable && esCargo && (
           <div style={{ marginTop: 10, display: 'flex', flexDirection: 'column', gap: 8, fontSize: '0.76rem', color: 'var(--muted)' }}>
@@ -202,7 +243,7 @@ export default function TarjetaPartida(props: {
                 <button key={c} type="button" className="btn btn-ghost btn-xs" onClick={() => acciones.onCargo?.(c)}><Plus size={12} /> {c}</button>
               ))}
               {acciones.onTraslado && <button type="button" className="btn btn-ghost btn-xs" onClick={acciones.onTraslado}
-                title="Calcula el traslado según la comuna (la tabla de traslados de la Biblioteca)"><Plus size={12} /> Traslado a una comuna</button>}
+                title="Por la comuna (la tabla de traslados) o por kilómetros, peajes y horas de viaje"><Plus size={12} /> Traslado (comuna o km)</button>}
             </div>
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, alignItems: 'center' }}>
               <span>O calcularlo como</span>
@@ -236,10 +277,14 @@ export default function TarjetaPartida(props: {
                   ))}
                 </div>
                 <div style={{ flex: 1, minWidth: 240 }}>
-                  {modo === 'producto' ? (
+                  {modo === 'producto' ? (<>
                     <BuscadorCatalogo catalogo={props.catalogo} moneda={moneda} valorUf={valorUf} autoFocus={modoElegido}
                       onElegir={acciones.onArticulo} onFuera={acciones.onFuera} onBuscarReceta={t => { setBuscaReceta(t); setModo('receta'); }} />
-                  ) : (
+                    {acciones.onCuadrilla && (
+                      <button type="button" className="btn btn-ghost btn-xs" onClick={acciones.onCuadrilla} style={{ marginTop: 6 }}
+                        title="Mano de obra por cuadrilla: técnicos y ayudantes por días de trabajo"><HardHat size={13} /> Mano de obra por cuadrilla</button>
+                    )}
+                  </>) : (
                     <div style={{ position: 'relative' }}>
                       <div style={{ display: 'flex', gap: 6 }}>
                         <input className="input" value={buscaReceta} onChange={e => setBuscaReceta(e.target.value)} placeholder="Busca una receta…" autoFocus />
@@ -569,6 +614,7 @@ function FilaLinea({ l, esLigada, cols, calc, moneda, fila, ligadas, conMano, de
               {!esLigada && <>
                 <button type="button" style={opcion} disabled={primera} onClick={() => { cerrar(); acc.mover(l.id, -1); }}><ArrowUp size={13} style={iconoMenu} /> Subir</button>
                 <button type="button" style={opcion} disabled={ultima} onClick={() => { cerrar(); acc.mover(l.id, 1); }}><ArrowDown size={13} style={iconoMenu} /> Bajar</button>
+                <button type="button" style={opcion} onClick={() => { cerrar(); acc.duplicar(l.id); }}><Copy size={13} style={iconoMenu} /> {ligadas.length ? 'Duplicar (con su instalación)' : 'Duplicar'}</button>
               </>}
               {!esLigada && partidas.length > 0 && (
                 <div style={{ borderTop: '1px solid var(--border2)', padding: '0.35rem 0' }}>

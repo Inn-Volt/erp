@@ -249,6 +249,8 @@ export interface AjustesCot {
   /** Fase 15: sobre este % de descuento o bajo esta utilidad %, se pide aprobación (vacío: nunca). */
   descuento_max?: number | null;
   utilidad_min?: number | null;
+  /** Fase 18: imprevistos % con que entra lo nuevo, por tipo (vacío: 0). */
+  imprevistos_por_tipo?: import('@/lib/cotizador/utilidad').ImprevistosPorTipo | null;
 }
 
 export interface Plantilla {
