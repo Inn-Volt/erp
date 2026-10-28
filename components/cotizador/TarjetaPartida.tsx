@@ -80,6 +80,25 @@ export default function TarjetaPartida(props: {
   const [modoElegido, setModoElegido] = useState(false);
   const [conDescripcion, setConDescripcion] = useState(!!p.descripcion);
   const [descPartida, setDescPartida] = useState('');
+  // Utilidad de toda la partida de una vez (además de la de cada línea): a todas, solo a
+  // materiales o solo a mano de obra y servicios. Se puede deshacer.
+  const [utilPartida, setUtilPartida] = useState('');
+  const [utilA, setUtilA] = useState<'todas' | 'material' | 'servicio'>('todas');
+  const [antesUtil, setAntesUtil] = useState<{ id: string; patch: Partial<Linea> }[] | null>(null);
+  const aplicarUtilidad = () => {
+    const u = Math.min(Math.max(num(utilPartida), 0), 95);
+    const elegidas = lineas.filter(l => (l.costo || 0) > 0
+      && (utilA === 'todas' || (utilA === 'material' ? l.categoria === 'material' : l.categoria !== 'material')));
+    if (!elegidas.length) return;
+    setAntesUtil(elegidas.map(l => ({ id: l.id, patch: { fuera: !!l.fuera, ajustada: !!l.ajustada, ganancia: l.ganancia ?? null } })));
+    // Como al cambiar la utilidad en una línea: lo del catálogo queda «ajustado aquí», la biblioteca no cambia.
+    for (const l of elegidas) lineaAcc.ajustar(l.id, { ganancia: gananciaParaUtilidad(u, l.descuento) });
+    setUtilPartida('');
+  };
+  const deshacerUtilidad = () => {
+    for (const x of antesUtil || []) lineaAcc.cambiar(x.id, x.patch);
+    setAntesUtil(null);
+  };
   const [desplegadas, setDesplegadas] = useState<Set<string>>(new Set());
   const pc = calc.partidas.get(p.id);
   const grupos = agrupar(lineas);
@@ -264,6 +283,24 @@ export default function TarjetaPartida(props: {
                 onClick={() => { acciones.onDescuento(Math.min(Math.max(num(descPartida), 0), 100)); setDescPartida(''); }}>Aplicar</button>
             </span>
           ) : <span />}
+          {editable && verCostos && lineas.some(l => (l.costo || 0) > 0) && (
+            <span style={{ display: 'flex', alignItems: 'center', gap: 4, flexWrap: 'wrap' }}>
+              Utilidad de
+              <select className="input" value={utilA} onChange={e => setUtilA(e.target.value as typeof utilA)} aria-label="A qué líneas se aplica la utilidad"
+                style={{ ...campoChico, width: 'auto', padding: '0.3rem 0.4rem' }}>
+                <option value="todas">toda la partida</option>
+                <option value="material">los materiales</option>
+                <option value="servicio">la mano de obra y servicios</option>
+              </select>
+              <NumeroInput className="input" min={0} max={95} value={utilPartida === '' ? null : num(utilPartida)} mostrarCero
+                onChange={v => setUtilPartida(String(v))} onVacio={() => setUtilPartida('')}
+                ariaLabel="Utilidad para toda la partida" envoltura={{ width: 64 }} style={{ ...campoChico }}
+                onKeyDown={e => { if (e.key === 'Enter' && utilPartida.trim() !== '') { e.preventDefault(); aplicarUtilidad(); } }} /> %
+              <button type="button" className="btn btn-ghost btn-xs" disabled={utilPartida.trim() === ''} onClick={aplicarUtilidad}
+                title="Pone esa utilidad a cada línea (lo de la biblioteca queda «ajustado aquí»; la biblioteca no cambia)">Aplicar</button>
+              {antesUtil && <button type="button" className="btn btn-ghost btn-xs" onClick={deshacerUtilidad}>Deshacer</button>}
+            </span>
+          )}
           {queVe === 'partidas' && pc && lineas.length > 0 && (Number(p.cantidad) !== 1 || p.unidad !== 'global') && (
             <span>{pc.valorUnitario !== null
               ? <>Valor unitario: {formatMonto(pc.valorUnitario, moneda, true)} × {cantidadLegible(p.cantidad)} {p.unidad}</>
