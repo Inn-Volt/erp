@@ -30,6 +30,9 @@ const recordar = (id: string) => {
 
 interface FilaRevision { texto: string; cantidad: number; opciones: ArticuloCatalogo[]; elegido: string; incluir: boolean }
 
+/** Se fue a crear algo a la biblioteca: al volver, el cotizador la recarga. */
+export const CATALOGO_PENDIENTE = 'innvolt-catalogo-pendiente';
+
 export default function BuscadorCatalogo({ catalogo, moneda, valorUf, onElegir, onFuera, onBuscarReceta, autoFocus }: {
   catalogo: ArticuloCatalogo[];
   moneda: Moneda;
@@ -173,7 +176,11 @@ export default function BuscadorCatalogo({ catalogo, moneda, valorUf, onElegir, 
               </button>
             );
           })}
-          {texto.trim() && resultados.length === 0 && <p style={{ padding: '0.7rem 0.8rem', fontSize: '0.82rem', color: 'var(--muted)', margin: 0 }}>Nada en el catálogo con «{busqueda.trim()}».</p>}
+          {texto.trim() && resultados.length === 0 && <p style={{ padding: '0.7rem 0.8rem', fontSize: '0.82rem', color: 'var(--muted)', margin: 0 }}>Nada en el catálogo con «{busqueda.trim()}».{' '}
+            {/* En otra pestaña: al volver, el cotizador trae la biblioteca al día (ver EditorCotizacion). */}
+            <a href={`/biblioteca?nuevo=${encodeURIComponent(busqueda.trim())}`} target="_blank" rel="noopener"
+              onMouseDown={e => e.preventDefault()} onClick={() => window.dispatchEvent(new Event(CATALOGO_PENDIENTE))}
+              style={{ color: 'var(--y)', textDecoration: 'underline' }}>Crearlo en la biblioteca</a></p>}
           {texto.trim() && resultados.length === 0 && onBuscarReceta && (
             <button type="button" onMouseDown={e => e.preventDefault()} onClick={() => onBuscarReceta(busqueda.trim())}
               style={{ display: 'block', width: '100%', textAlign: 'left', padding: '0.55rem 0.8rem', background: 'none', border: 'none', borderTop: '1px solid var(--border2)', color: 'var(--y)', fontSize: '0.84rem', cursor: 'pointer' }}>

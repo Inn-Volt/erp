@@ -9,7 +9,12 @@ import type { CategoriaItem, Cliente, CotizacionItem, Partida } from '@/types';
 export type EstadoCot = 'Borrador' | 'Enviada' | 'Aprobada' | 'Rechazada' | 'Anulada';
 export type Moneda = 'CLP' | 'UF';
 export type QueVe = 'partidas' | 'detalle' | 'total';
-export type TipoPartida = 'instalacion' | 'venta';
+/** «cargo»: cargo operacional (traslado, logística, viático…): se cobra tal cual, sin descuento ni utilidad. */
+export type TipoPartida = 'instalacion' | 'venta' | 'cargo';
+
+/** Un cargo calculado como % (sobre el neto, después de los descuentos y antes del IVA; nunca cuenta los cargos). */
+export interface CargoPorcentaje { pct: number; base: 'total' | 'mano_obra' | string }
+export const CARGOS_RAPIDOS = ['Traslado', 'Logística', 'Viático', 'Estacionamiento', 'Movilización', 'Gasto operacional'];
 
 export const ESTADOS_COT: { clave: EstadoCot; color: string; fondo: string; ayuda: string }[] = [
   { clave: 'Borrador', color: '#64748b', fondo: 'rgba(100,116,139,.14)', ayuda: 'En preparación. Es el único estado que se edita.' },
@@ -88,10 +93,14 @@ export interface Linea extends CotizacionItem {
    *  escritos traen el IVA adentro y se calcula con el neto (÷ 1,19). Hoy el costo se pasa a
    *  neto con «quitar IVA» y esto ya no se marca. */
   ivaIncluido?: boolean;
+  /** Línea de un cargo operacional calculada como % (el monto se guarda en el costo y se pone al día solo). */
+  cargo?: CargoPorcentaje | null;
 }
 
 export interface PartidaCot extends Partida {
   tipo?: TipoPartida;
+  /** % de descuento de la partida, sobre su neto (ya con el descuento de cada línea). */
+  descuento?: number | null;
 }
 
 export interface Seccion {
@@ -314,3 +323,22 @@ export interface ReglaComponente {
 }
 
 export const VERSION_COTIZADOR = '1.0 (TecApp)';
+
+/** Datos del encabezado del PDF que se pueden apagar (Ajustes → Diseño del PDF). */
+export type DatoEncabezado = 'contacto' | 'rut' | 'telefono' | 'correo' | 'direccion' | 'referencia';
+export const DATOS_ENCABEZADO: { clave: DatoEncabezado; nombre: string; ejemplo: string; deFabrica?: false }[] = [
+  // Nueva: apagada de fábrica para que los PDF de siempre no cambien.
+  { clave: 'referencia', nombre: 'N° de solicitud', ejemplo: 'Solicitud SOL-0012, junto al N° de la cotización', deFabrica: false },
+  { clave: 'contacto', nombre: 'Contacto', ejemplo: 'Contacto: Juan Pérez' },
+  { clave: 'rut', nombre: 'RUT del cliente', ejemplo: 'RUT: 76.123.456-7' },
+  { clave: 'telefono', nombre: 'Teléfono', ejemplo: 'Teléfono: +56 9 …' },
+  { clave: 'correo', nombre: 'Correo', ejemplo: 'Correo: compras@cliente.cl' },
+  { clave: 'direccion', nombre: 'Dirección o sucursal', ejemplo: 'Lugar: Casa matriz · Av. …' },
+];
+
+export type DisenoEncabezado = Partial<Record<DatoEncabezado, boolean>>;
+/** ¿Ese dato sale en el encabezado del PDF? Lo no tocado en los ajustes sigue como viene de fábrica. */
+export function datoEncabezadoVisible(encabezado: DisenoEncabezado | null | undefined, k: DatoEncabezado): boolean {
+  const v = encabezado?.[k];
+  return typeof v === 'boolean' ? v : DATOS_ENCABEZADO.find(x => x.clave === k)?.deFabrica !== false;
+}

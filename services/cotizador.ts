@@ -97,6 +97,30 @@ export const ajustesService = {
   },
 };
 
+/**
+ * Descuento máximo de cada persona al cotizar (fase 17). Sin fila: sin tope propio (rige solo el
+ * de los ajustes). Pasarlo pide la aprobación de quien autoriza, como el resto de los umbrales.
+ */
+export const descuentosMaxService = {
+  async de(usuarioId: string): Promise<number | null> {
+    const { data, error } = await supabase.from('descuentos_maximos').select('maximo').eq('usuario_id', usuarioId).maybeSingle();
+    if (error) throw error;
+    return data ? Number((data as { maximo: number }).maximo) : null;
+  },
+  async todos(): Promise<Record<string, number>> {
+    const { data, error } = await supabase.from('descuentos_maximos').select('usuario_id, maximo');
+    if (error) throw error;
+    return Object.fromEntries(((data || []) as { usuario_id: string; maximo: number }[]).map(x => [x.usuario_id, Number(x.maximo)]));
+  },
+  /** null: quita el tope propio. */
+  async fijar(usuarioId: string, maximo: number | null) {
+    const { error } = maximo === null
+      ? await supabase.from('descuentos_maximos').delete().eq('usuario_id', usuarioId)
+      : await supabase.from('descuentos_maximos').upsert({ usuario_id: usuarioId, maximo: Math.min(Math.max(maximo, 0), 100) });
+    lanzar(error);
+  },
+};
+
 export const plantillasCotService = {
   async listar(incluirInactivas = false): Promise<Plantilla[]> {
     let q = supabase.from('plantillas_cotizacion').select('*').order('es_la_de_siempre', { ascending: false }).order('nombre');

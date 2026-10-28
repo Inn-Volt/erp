@@ -12,13 +12,16 @@
  * IVA de cada línea: afecta (se le suma el 19 %) o exenta (iva 0). El costo es siempre neto (un
  * precio de mercado se pasa a neto con «quitar IVA»); las líneas guardadas antes con «costo con
  * IVA» (`ivaIncluido`) traen el IVA adentro de su costo y su precio y se calculan con el neto (÷ 1,19).
- * Totales: Subtotal − Descuento = Neto (= afecto + exento); IVA = afecto × 19 %; Neto + IVA = Total.
+ * Partida: su descuento propio (%) va sobre su neto, ya con el descuento de cada línea, y se reparte
+ * entre lo afecto y lo exento de la partida (así el IVA sigue cuadrando).
+ * Totales: Subtotal − Descuento = Neto (= afecto + exento); IVA = afecto × 19 %; Neto + IVA = Total
+ * (Descuento = el de las líneas + el de las partidas).
  * Cada pieza ya está redondeada y las cuentas son sumas: siempre cuadran.
  * En UF el precio unitario va a 0,0001 y los montos a 0,01.
  */
 
 import type { CategoriaItem } from '@/types';
-import { IVA, type ArticuloCatalogo, type Linea, type Moneda, type PartidaCot, type TipoPartida } from './tipos';
+import { IVA, type ArticuloCatalogo, type CargoPorcentaje, type Linea, type Moneda, type PartidaCot, type TipoPartida } from './tipos';
 
 const CATEGORIAS: CategoriaItem[] = ['material', 'mano_obra', 'servicio', 'operacion'];
 
@@ -104,7 +107,18 @@ export function calcularLinea(l: Linea, moneda: Moneda): LineaCalculada {
   };
 }
 
-export interface PartidaCalculada { subtotal: number; descuento: number; neto: number; valorUnitario: number | null; costo: number; utilidad: number }
+export interface PartidaCalculada {
+  subtotal: number;
+  /** Todo lo descontado: el de cada línea más el de la partida. */
+  descuento: number;
+  /** Lo que paga el cliente por la partida (después de ambos descuentos, antes del IVA). */
+  neto: number;
+  /** El neto de sus líneas, antes del descuento de la partida. */
+  netoLineas: number;
+  /** El descuento propio de la partida (su %), en dinero. */
+  descuentoPartida: number;
+  valorUnitario: number | null; costo: number; utilidad: number;
+}
 export interface Totales {
   subtotal: number; descuento: number; neto: number; exento: number; afecto: number; iva: number; total: number;
   netoClp: number | null; ivaClp: number | null; totalClp: number | null;
@@ -132,15 +146,24 @@ export function calcular(lineas: Linea[], partidas: PartidaCot[], moneda: Moneda
   const calc = new Map<string, LineaCalculada>();
   for (const l of lineas) calc.set(l.id, calcularLinea(l, moneda));
   const porPartida = new Map<string, PartidaCalculada>();
+  // Descuento propio de cada partida (un cargo operacional no lleva), repartido entre afecto y exento.
+  let descPartidas = 0, descPartidasExento = 0;
   for (const p of partidas) {
-    const suyas = lineas.filter(l => l.partidaId === p.id).map(l => calc.get(l.id)!);
+    const propias = lineas.filter(l => l.partidaId === p.id);
+    const suyas = propias.map(l => calc.get(l.id)!);
     const subtotal = suyas.reduce((s, c) => s + c.subtotal, 0);
-    const neto = suyas.reduce((s, c) => s + c.neto, 0);
+    const netoLineas = suyas.reduce((s, c) => s + c.neto, 0);
+    const exentoLineas = propias.filter(esExenta).reduce((s, l) => s + calc.get(l.id)!.neto, 0);
+    const pct = p.tipo === 'cargo' ? 0 : Math.min(Math.max(Number(p.descuento) || 0, 0), 100);
+    const descuentoPartida = pct ? qm((netoLineas * pct) / 100, moneda) : 0;
+    const descExento = pct ? Math.min(descuentoPartida, qm((exentoLineas * pct) / 100, moneda)) : 0;
+    descPartidas += descuentoPartida; descPartidasExento += descExento;
+    const neto = netoLineas - descuentoPartida;
     const costo = suyas.reduce((s, c) => s + c.costoConImprevistos, 0);
     porPartida.set(p.id, {
       subtotal,
-      descuento: suyas.reduce((s, c) => s + c.descuento, 0),
-      neto,
+      descuento: suyas.reduce((s, c) => s + c.descuento, 0) + descuentoPartida,
+      neto, netoLineas, descuentoPartida,
       valorUnitario: unitarioImprimible(subtotal, Number(p.cantidad) || 1, moneda),
       costo,
       utilidad: neto - costo,
@@ -152,6 +175,7 @@ export function calcular(lineas: Linea[], partidas: PartidaCot[], moneda: Moneda
     subtotal += c.subtotal; descuento += c.descuento; neto += c.neto;
     if (esExenta(l)) exento += c.neto;
   }
+  descuento += descPartidas; neto -= descPartidas; exento -= descPartidasExento;
   subtotal = qm(subtotal, moneda); descuento = qm(descuento, moneda); neto = qm(neto, moneda); exento = qm(exento, moneda);
   const afecto = neto - exento;
   const iva = qm((afecto * IVA) / 100, moneda);
@@ -159,23 +183,27 @@ export function calcular(lineas: Linea[], partidas: PartidaCot[], moneda: Moneda
   const clp = moneda === 'CLP' ? { netoClp: neto, ivaClp: iva, totalClp: total } : enPesos(neto, exento, valorUf);
 
   const acc = new Map<CategoriaItem, [number, number, number]>();
+  const pctDe = new Map(partidas.map(p => [p.id, p.tipo === 'cargo' ? 0 : Math.min(Math.max(Number(p.descuento) || 0, 0), 100)]));
   for (const l of lineas) {
     const c = calc.get(l.id)!;
     const cat = CATEGORIAS.includes(l.categoria) ? l.categoria : 'material';
     const a = acc.get(cat) || [0, 0, 0];
-    a[0] += c.neto;
+    // Lo que de verdad queda de la línea, con el descuento de su partida.
+    a[0] += c.neto * (1 - (pctDe.get(l.partidaId || '') || 0) / 100);
     a[1] += c.costoTotal;
     a[2] += c.costoConImprevistos;
     acc.set(cat, a);
   }
   const porCategoria: PorCategoria[] = CATEGORIAS.filter(c => acc.has(c)).map(c => {
-    const [n, co, ci] = acc.get(c)!;
+    const [nn, co, ci] = acc.get(c)!;
+    const n = qm(nn, moneda);
     const costo = qm(co, moneda), costoCI = qm(ci, moneda);
     return { categoria: c, neto: n, costo, costoConImprevistos: costoCI, utilidad: n - costoCI };
   });
   const costoDirecto = porCategoria.reduce((s, c) => s + c.costo, 0);
   const costoCI = porCategoria.reduce((s, c) => s + c.costoConImprevistos, 0);
-  const utilidad = porCategoria.reduce((s, c) => s + c.utilidad, 0);
+  // La utilidad es la del total (lo que paga el cliente menos el costo): cuadra con el neto.
+  const utilidad = neto - costoCI;
   return {
     moneda, lineas: calc, partidas: porPartida,
     totales: { subtotal, descuento, neto, exento, afecto, iva, total, ...clp },
@@ -184,6 +212,30 @@ export function calcular(lineas: Linea[], partidas: PartidaCot[], moneda: Moneda
       margen: neto ? Math.round((utilidad / neto) * 1000) / 10 : null, porCategoria,
     },
   };
+}
+
+// ── Cargos operacionales calculados como % ──
+/**
+ * La base de un cargo calculado: sobre el neto (después de los descuentos, antes del IVA) y nunca
+ * con los cargos. «total»: toda la cotización; «mano_obra»: la mano de obra y los servicios;
+ * o el id de una partida: esa partida ANTES de su descuento propio.
+ */
+export function baseDeCargo(base: string, lineas: Linea[], partidas: PartidaCot[], r: Resultado): number | null {
+  const cargos = new Set(partidas.filter(p => p.tipo === 'cargo').map(p => p.id));
+  const pctDe = new Map(partidas.map(p => [p.id, p.tipo === 'cargo' ? 0 : Math.min(Math.max(Number(p.descuento) || 0, 0), 100)]));
+  const conDescPartida = (l: Linea) => (r.lineas.get(l.id)?.neto || 0) * (1 - (pctDe.get(l.partidaId || '') || 0) / 100);
+  if (base === 'total') return lineas.filter(l => !cargos.has(l.partidaId || '')).reduce((s, l) => s + conDescPartida(l), 0);
+  if (base === 'mano_obra') return lineas.filter(l => !cargos.has(l.partidaId || '') && (l.categoria === 'mano_obra' || l.categoria === 'servicio'))
+    .reduce((s, l) => s + conDescPartida(l), 0);
+  const p = partidas.find(x => x.id === base);
+  if (!p || p.tipo === 'cargo') return null;   // la partida ya no está (o pasó a ser de cargo)
+  return r.partidas.get(p.id)?.netoLineas ?? 0;
+}
+
+/** El monto que le toca a un cargo calculado (en pesos al peso; en UF a la centésima). null = sin base. */
+export function montoDeCargo(c: CargoPorcentaje, lineas: Linea[], partidas: PartidaCot[], r: Resultado): number | null {
+  const base = baseDeCargo(c.base, lineas, partidas, r);
+  return base === null ? null : qm((base * (Number(c.pct) || 0)) / 100, r.moneda);
 }
 
 // ── Lo que lee el cliente en «Todo el detalle»: un producto junto con su mano de obra ──

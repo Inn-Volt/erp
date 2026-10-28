@@ -36,6 +36,7 @@ import CotizarIAConversa, { type VistaPrevia } from '@/components/cotizador/Coti
 import CotizacionPDF, { nombrePDF } from '@/components/pdf/CotizacionPDF';
 import type { EmpresaInfo } from '@/components/pdf/PresupuestoPDF';
 import TarjetaPartida, { type AccionesLinea } from './TarjetaPartida';
+import { CATALOGO_PENDIENTE } from './BuscadorCatalogo';
 import AsistenteReceta from './AsistenteReceta';
 import EditorReceta from './EditorReceta';
 import TrasladoModal from './TrasladoModal';
@@ -43,17 +44,17 @@ import { proyectosService, folioProyecto, type Proyecto } from '@/services/fase5
 import { BloquePlegable, EstadoPill, MenuAcciones, opcionMenu, PedirMotivo, etiqueta } from './ui';
 import { AprobarModal, HistorialModal, RechazarModal, RevisarYEnviar, type Canal } from './Modales';
 import {
-  IVA, PLAN_COBRO_BASE, QUE_VE, UNIDADES_ITEM, VERSION_COTIZADOR, TITULO_VALORIZACION,
-  type AjustesCot, type ArticuloCatalogo, type CotizacionDoc, type EnvioCot, type Linea, type Moneda, type PartidaCot,
+  IVA, PLAN_COBRO_BASE, QUE_VE, UNIDADES_ITEM, VERSION_COTIZADOR, TITULO_VALORIZACION, datoEncabezadoVisible,
+  type AjustesCot, type ArticuloCatalogo, type CargoPorcentaje, type CotizacionDoc, type EnvioCot, type Linea, type Moneda, type PartidaCot,
   type HitoCobro, type Plantilla, type Seccion, type TipoPartida,
 } from '@/lib/cotizador/tipos';
 import {
-  aMoneda, calcular, cantidadLegible, formatMonto, precioDeLinea, lineaFuera, lineasDeArticulo, nuevoId, porcentaje, q, sinDescuentoGlobal,
+  aMoneda, calcular, cantidadLegible, formatMonto, precioDeLinea, lineaFuera, lineasDeArticulo, montoDeCargo, nuevoId, porcentaje, q, sinDescuentoGlobal,
 } from '@/lib/cotizador/calculo';
 import { revisar, llenarMensaje } from '@/lib/cotizador/revision';
 import type { RecetaCompleta, Respuestas } from '@/lib/cotizador/recetas';
 import {
-  ajustesService, catalogoCotService, cotizadorService, faltaFase4, plantillasCotService, recetasCotService,
+  ajustesService, catalogoCotService, cotizadorService, descuentosMaxService, faltaFase4, plantillasCotService, recetasCotService,
 } from '@/services/cotizador';
 import { clientesService } from '@/services/clientes';
 import { archivosOT, folioOT, informesService, otService, sucursalesService, type Contacto, type InformeOT, type Sucursal } from '@/services/operacion';
@@ -101,6 +102,13 @@ export default function EditorCotizacion({ id, clonarDe, clienteInicial, solicit
   const puedeEditar = puede('cotizaciones.crear');
   const puedeAprobar = puede('cotizaciones.aprobar');
   const puedeCostos = puede('cotizaciones.ver_costos') || puedeEditar;
+  // Fase 17: el descuento máximo de quien cotiza (lo que lo pasa se marca en rojo y pide aprobación).
+  const fase17 = useFase(17);
+  const [descuentoMax, setDescuentoMax] = useState<number | null>(null);
+  useEffect(() => {
+    if (!fase17 || !perfil?.id || autoriza) { setDescuentoMax(null); return; }
+    descuentosMaxService.de(perfil.id).then(setDescuentoMax).catch(() => setDescuentoMax(null));
+  }, [fase17, perfil?.id, autoriza]);
 
   const [cargando, setCargando] = useState(true);
   const [falta, setFalta] = useState(false);
@@ -280,11 +288,38 @@ export default function EditorCotizacion({ id, clonarDe, clienteInicial, solicit
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id, clonarDe]);
 
-  // Sucursales y contactos del cliente
+  // Si se fue a crear algo a la biblioteca (otra pestaña), al volver se trae el catálogo al día.
+  useEffect(() => {
+    let pendiente = false;
+    const marcar = () => { pendiente = true; };
+    const volver = () => {
+      if (!pendiente || document.visibilityState !== 'visible') return;
+      pendiente = false;
+      catalogoCotService.todos().then(setCatalogo).catch(() => {});
+    };
+    window.addEventListener(CATALOGO_PENDIENTE, marcar);
+    window.addEventListener('focus', volver);
+    document.addEventListener('visibilitychange', volver);
+    return () => { window.removeEventListener(CATALOGO_PENDIENTE, marcar); window.removeEventListener('focus', volver); document.removeEventListener('visibilitychange', volver); };
+  }, []);
+
+  // Sucursales y contactos del cliente. Al elegir un cliente (o en una cotización nueva) se
+  // propone su contacto principal (o el único que tiene); se puede cambiar o dejar sin contacto.
+  const proponerContacto = useRef(false);
   useEffect(() => {
     setSitios([]); setContactos([]);
-    if (!d.cliente_id) return;
-    sucursalesService.deCliente(d.cliente_id).then(r => { setSitios(r.sucursales); setContactos(r.contactos); }).catch(() => {});
+    const cid = d.cliente_id;
+    if (!cid) return;
+    sucursalesService.deCliente(cid).then(r => {
+      setSitios(r.sucursales); setContactos(r.contactos);
+      const proponer = proponerContacto.current || !d.id;
+      proponerContacto.current = false;
+      if (!proponer || !editable) return;
+      const activos = r.contactos.filter(c => c.activo !== false);
+      const elegido = activos.find(c => c.principal) || (activos.length === 1 ? activos[0] : null);
+      if (elegido) setD(x => (x.contacto_id || x.cliente_id !== cid ? x : { ...x, contacto_id: elegido.id }));
+    }).catch(() => {});
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [d.cliente_id]);
 
   // ── Líneas y partidas ──
@@ -292,7 +327,7 @@ export default function EditorCotizacion({ id, clonarDe, clienteInicial, solicit
   const setPartidas = useCallback((f: (p: PartidaCot[]) => PartidaCot[]) => setD(x => ({ ...x, partidas: f(x.partidas) })), []);
 
   const agregarPartida = (tipo: TipoPartida, despuesDe?: string | null) => {
-    const p: PartidaCot = { id: nuevoId(), nombre: '', cantidad: 1, unidad: 'global', tipo };
+    const p: PartidaCot = { id: nuevoId(), nombre: tipo === 'cargo' ? 'Cargo operacional' : '', cantidad: 1, unidad: 'global', tipo };
     setPartidas(ps => {
       const i = despuesDe ? ps.findIndex(x => x.id === despuesDe) : -1;
       return i < 0 ? [...ps, p] : [...ps.slice(0, i + 1), p, ...ps.slice(i + 1)];
@@ -303,6 +338,14 @@ export default function EditorCotizacion({ id, clonarDe, clienteInicial, solicit
 
   const cambiarTipo = (pid: string, tipo: TipoPartida) => {
     const suyas = d.items.filter(l => l.partidaId === pid);
+    const antes = d.partidas.find(p => p.id === pid)?.tipo || 'instalacion';
+    // De cargo a otra cosa (o al revés) solo con la partida vacía: sus líneas son de otra clase.
+    if ((tipo === 'cargo' || antes === 'cargo') && suyas.length) { warning('Para cambiar ese tipo, la partida tiene que estar vacía.'); return; }
+    if (tipo === 'cargo' || antes === 'cargo') {
+      setPartidas(ps => ps.map(p => (p.id !== pid ? p : { ...p, tipo,
+        ...(tipo === 'cargo' && !p.nombre?.trim() ? { nombre: 'Cargo operacional' } : antes === 'cargo' && p.nombre === 'Cargo operacional' ? { nombre: '' } : {}) })));
+      return;
+    }
     if (tipo === 'venta') {
       const ligadas = suyas.filter(l => l.ligadoA);
       if (ligadas.length && !confirm(`Pasar a venta quita la mano de obra ligada a los productos (${ligadas.length} línea${ligadas.length === 1 ? '' : 's'}). ¿Seguir?`)) return;
@@ -326,6 +369,33 @@ export default function EditorCotizacion({ id, clonarDe, clienteInicial, solicit
     }
     setPartidas(ps => ps.map(p => (p.id === pid ? { ...p, tipo } : p)));
   };
+
+  /** Un cargo operacional (traslado, logística…): se cobra tal cual (costo = precio, sin utilidad ni descuento). */
+  const agregarCargo = (pid: string, descripcion: string, cargo?: CargoPorcentaje | null) => {
+    if (d.moneda === 'UF' && !(Number(d.valor_uf) > 0)) { warning('Está en UF: escribe el valor de la UF antes de agregar.'); return; }
+    const monto = cargo ? montoDeCargo(cargo, d.items, d.partidas, calc) ?? 0 : 0;
+    const l: Linea = {
+      id: nuevoId(), partidaId: pid, descripcion, categoria: 'operacion', unidad: 'global', cantidad: 1, costo: monto,
+      imprevistos: 0, margen: 0, precio: 0, iva: IVA, descuento: 0, fuera: true, ganancia: 0, cargo: cargo || null,
+    };
+    agregarLineas(pid, [l]);
+    // Sin % el monto se escribe a mano: el cursor va a ese campo.
+    if (!cargo) setTimeout(() => document.querySelector<HTMLInputElement>(`#cot-partida-${pid} input[aria-label="Monto unitario del cargo (neto)"]:not(:disabled)`)?.focus(), 80);
+  };
+
+  // Los cargos calculados como % se ponen al día solos cuando cambia su base (solo en un borrador).
+  useEffect(() => {
+    if (!editable) return;
+    const cargos = new Set(d.partidas.filter(p => p.tipo === 'cargo').map(p => p.id));
+    const cambios = new Map<string, number>();
+    for (const l of d.items) {
+      if (!l.cargo || !cargos.has(l.partidaId || '')) continue;
+      const m = montoDeCargo(l.cargo, d.items, d.partidas, calc);
+      // Sin base (la partida ya no está): queda el monto de antes.
+      if (m !== null && Math.abs(m - (Number(l.costo) || 0)) > 1e-6) cambios.set(l.id, m);
+    }
+    if (cambios.size) setItems(items => items.map(l => (cambios.has(l.id) ? { ...l, costo: cambios.get(l.id)!, cantidad: 1, ganancia: 0 } : l)));
+  }, [calc, d.items, d.partidas, editable, setItems]);
 
   const agregarLineas = (pid: string, nuevas: Linea[]) => {
     setItems(items => {
@@ -626,13 +696,19 @@ export default function EditorCotizacion({ id, clonarDe, clienteInicial, solicit
       fotos = await fotosService.paraPDF(lev?.data.fotos).catch(() => []);
     }
     const cli = clientes.find(c => c.id === doc.cliente_id) || doc.clientes || null;
+    // De dónde viene (si está activado en Ajustes → Diseño del PDF): «Solicitud SOL-0012».
+    let referencia: string | null = null;
+    if (doc.solicitud_id && datoEncabezadoVisible(ajustes?.pdf_diseno?.encabezado, 'referencia')) {
+      const s = (await supabase.from('solicitudes').select('folio').eq('id', doc.solicitud_id).maybeSingle()).data as { folio: number } | null;
+      if (s?.folio) referencia = `Solicitud SOL-${String(s.folio).padStart(4, '0')}`;
+    }
     return pdf(
       <CotizacionPDF doc={doc} cliente={cli} empresa={empresa} vendedor={vendedor}
         sucursal={sitios.find(s => s.id === doc.sucursal_id) || null}
         contacto={contactos.find(c => c.id === doc.contacto_id) || null}
         importante={ajustes?.importante} correoAceptar={ajustes?.correo_aceptar}
         enlace={doc.token_publico && doc.estado !== 'Borrador' ? linkPublico(doc.token_publico) : null}
-        marca={marca} fotos={fotos} planCobro={planDe(doc)} diseno={ajustes?.pdf_diseno}
+        marca={marca} fotos={fotos} planCobro={planDe(doc)} diseno={ajustes?.pdf_diseno} referencia={referencia}
         aceptacion={doc.estado === 'Aprobada' && doc.respondida_por && doc.respondida_at
           ? { nombre: doc.respondida_por, rut: doc.respondida_rut, fecha: doc.respondida_at, firma: doc.respuesta_firma } : null} />,
     ).toBlob();
@@ -878,6 +954,7 @@ export default function EditorCotizacion({ id, clonarDe, clienteInicial, solicit
           <p className="section-label" style={{ margin: 0 }}>Agregar partida</p>
           <button className="btn btn-ghost" style={{ justifyContent: 'flex-start' }} onClick={() => agregarPartida('instalacion')} title="Cada producto trae su mano de obra, ligada a él"><Plus size={14} /> Partida de instalación</button>
           <button className="btn btn-ghost" style={{ justifyContent: 'flex-start' }} onClick={() => agregarPartida('venta')} title="Venta de producto: solo el producto, sin mano de obra"><Plus size={14} /> Partida de venta</button>
+          <button className="btn btn-ghost" style={{ justifyContent: 'flex-start' }} onClick={() => agregarPartida('cargo')} title="Traslado, logística, viático… Se cobra tal cual: monto fijo o un % de la cotización"><Plus size={14} /> Cargo operacional</button>
           <button className="btn btn-ghost" style={{ justifyContent: 'flex-start' }} onClick={() => setModal('ia')}><Sparkles size={14} /> Cotizar con IA</button>
           <button className="btn btn-ghost" style={{ justifyContent: 'flex-start' }} onClick={() => setModal('planilla')}
             title="Partidas, ítems con costo, textos y plan desde un Excel"><FileSpreadsheet size={14} /> Importar planilla</button>
@@ -1041,7 +1118,7 @@ export default function EditorCotizacion({ id, clonarDe, clienteInicial, solicit
                     {clientesF.length > 0 && (
                       <div style={{ position: 'absolute', zIndex: 20, left: 0, right: 0, marginTop: 4, background: 'var(--bg2)', border: '1px solid var(--border2)', borderRadius: 8, overflow: 'hidden' }}>
                         {clientesF.map(c => (
-                          <button key={c.id} type="button" onClick={() => { set({ cliente_id: c.id, clientes: c, sucursal_id: null, contacto_id: null }); setBuscaCliente(''); }}
+                          <button key={c.id} type="button" onClick={() => { proponerContacto.current = true; set({ cliente_id: c.id, clientes: c, sucursal_id: null, contacto_id: null }); setBuscaCliente(''); }}
                             style={{ display: 'block', width: '100%', textAlign: 'left', padding: '0.5rem 0.75rem', background: 'none', border: 'none', borderBottom: '1px solid var(--border2)', cursor: 'pointer', color: 'var(--text)', fontSize: '0.86rem' }}>
                             <b>{c.nombre_cliente}</b> <span style={{ color: 'var(--muted)', fontSize: '0.76rem' }}>{c.empresa || ''} {c.rut || ''}</span>
                           </button>
@@ -1057,7 +1134,7 @@ export default function EditorCotizacion({ id, clonarDe, clienteInicial, solicit
                   <option value="">{sitios.length ? 'Sin sucursal' : 'El cliente no tiene sucursales'}</option>
                   {sitios.map(s => <option key={s.id} value={s.id}>{s.nombre}{s.comuna ? ` · ${s.comuna}` : ''}</option>)}
                 </select></label>
-              <label><span style={etiqueta}>Atención</span>
+              <label><span style={etiqueta}>Contacto (a quién va dirigida)</span>
                 <select className="input" disabled={!d.cliente_id || !editable} value={d.contacto_id || ''} onChange={e => set({ contacto_id: e.target.value || null })}>
                   <option value="">{contactos.length ? 'Sin contacto' : 'El cliente no tiene contactos'}</option>
                   {contactos.map(c => <option key={c.id} value={c.id}>{c.nombre}{c.email ? ` · ${c.email}` : ' · sin correo'}</option>)}
@@ -1198,7 +1275,7 @@ export default function EditorCotizacion({ id, clonarDe, clienteInicial, solicit
             {d.partidas.map((p, i) => (
               <TarjetaPartida key={p.id} partida={p} indice={i} total={d.partidas.length} lineas={d.items.filter(l => l.partidaId === p.id)}
                 calc={calc} moneda={d.moneda} valorUf={d.valor_uf} queVe={d.que_ve_cliente} verCostos={puedeCostos && verCostos} editable={editable}
-                catalogo={catalogo} recetas={recetas} partidas={d.partidas} recienCreada={recienCreada === p.id}
+                catalogo={catalogo} recetas={recetas} partidas={d.partidas} recienCreada={recienCreada === p.id} descuentoMax={descuentoMax}
                 recetaAgregada={recetaAgregada?.partidaId === p.id ? recetaAgregada : null}
                 lineaAcc={lineaAcc} contextoIA={() => [d.titulo.trim() && `Cotización: ${d.titulo.trim()}`, cliente && `Cliente: ${cliente.empresa || cliente.nombre_cliente}`].filter(Boolean).join('\n')}
                 acciones={{
@@ -1225,7 +1302,7 @@ export default function EditorCotizacion({ id, clonarDe, clienteInicial, solicit
                     if (d.moneda === 'UF' && !(Number(d.valor_uf) > 0)) { warning('Está en UF: escribe el valor de la UF antes de agregar.'); return; }
                     setRecetaNuevaPara(p.id);
                   },
-                  onDescuento: pct => setItems(items => items.map(l => (l.partidaId === p.id ? { ...l, descuento: pct } : l))),
+                  onCargo: (texto, cargo) => agregarCargo(p.id, texto, cargo),
                   onDeshacerReceta: () => { if (recetaAgregada) { setItems(() => recetaAgregada.antes); setRecetaAgregada(null); } },
                   onTraslado: () => setTrasladoPara(p.id),
                 }} />
@@ -1256,7 +1333,8 @@ export default function EditorCotizacion({ id, clonarDe, clienteInicial, solicit
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'center' }}>
                 <button className="btn btn-ghost" onClick={() => agregarPartida('instalacion')}><Plus size={14} /> Partida de instalación</button>
                 <button className="btn btn-ghost" onClick={() => agregarPartida('venta')}><Plus size={14} /> Partida de venta</button>
-                <span style={{ fontSize: '0.74rem', color: 'var(--muted)' }}>En una de instalación, cada producto trae su mano de obra; en una de venta, solo el producto.</span>
+                <button className="btn btn-ghost" onClick={() => agregarPartida('cargo')} title="Traslado, logística, viático… Se cobra tal cual: monto fijo o un % de la cotización"><Plus size={14} /> Cargo operacional</button>
+                <span style={{ fontSize: '0.74rem', color: 'var(--muted)' }}>En una de instalación, cada producto trae su mano de obra; en una de venta, solo el producto; un cargo se cobra tal cual.</span>
               </div>
             )}
             <datalist id="unidades-de-item">{UNIDADES_ITEM.map(u => <option key={u} value={u} />)}</datalist>

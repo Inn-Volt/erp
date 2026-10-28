@@ -27,6 +27,8 @@ export interface CotizacionPublica {
   plan_cobro: HitoCobro[] | null;
   /** Fase 8: diseño del PDF. */
   pdf_diseno: Record<string, unknown> | null;
+  /** De dónde viene (si se activó en el diseño del PDF): «Solicitud SOL-0012». */
+  referencia?: string | null;
   /** Ajustes: si el cliente puede responder en línea, «Importante» y el correo de «Cómo aceptar». */
   responde_en_linea: boolean;
   importante: string | null;

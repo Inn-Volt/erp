@@ -16,6 +16,7 @@ import { useToast } from '@/hooks/useToast';
 import NumeroInput from '@/components/NumeroInput';
 import { supabase } from '@/lib/supabase';
 import { useFase } from '@/lib/fases';
+import { descuentosMaxService } from '@/services/cotizador';
 
 const iniciales = (u: Usuario) =>
   (u.nombre || u.email || '?').split(/[\s._@-]+/).filter(Boolean).slice(0, 2).map(s => s[0]).join('').toUpperCase();
@@ -155,6 +156,35 @@ function CostoHora({ usuarioId }: { usuarioId: string }) {
   );
 }
 
+/** Fase 17: el descuento máximo de la persona al cotizar. Pasarlo pide la aprobación de quien autoriza. */
+function DescuentoMaximo({ usuarioId }: { usuarioId: string }) {
+  const { success, error: toastError } = useToast();
+  const [valor, setValor] = useState<number | null>(null);
+  const [guardado, setGuardado] = useState<number | null>(null);
+  const [guardando, setGuardando] = useState(false);
+  useEffect(() => {
+    descuentosMaxService.de(usuarioId).then(v => { setValor(v); setGuardado(v); }).catch(() => {});
+  }, [usuarioId]);
+  const guardar = async () => {
+    setGuardando(true);
+    try { await descuentosMaxService.fijar(usuarioId, valor); setGuardado(valor); success(valor === null ? 'Sin tope propio de descuento' : 'Descuento máximo guardado'); }
+    catch (e) { toastError(e instanceof Error ? e.message : 'No se pudo guardar'); }
+    finally { setGuardando(false); }
+  };
+  return (
+    <div style={{ display: 'flex', gap: 8, alignItems: 'flex-end', flexWrap: 'wrap' }}>
+      <label style={{ display: 'flex', flexDirection: 'column', gap: 6, maxWidth: 220 }}>
+        <span className="label-muted">Descuento máximo al cotizar</span>
+        <NumeroInput className="input" sufijo="%" min={0} max={100} mostrarCero value={valor} onChange={setValor} onVacio={() => setValor(null)} placeholder="Sin tope propio" />
+      </label>
+      {valor !== guardado && <button className="btn btn-primary btn-sm" onClick={guardar} disabled={guardando}>{guardando ? <Loader2 size={13} className="iv-spin" /> : null} Guardar máximo</button>}
+      <span style={{ fontSize: '0.74rem', color: 'var(--muted)', flex: '1 1 200px' }}>
+        Cuenta el descuento de cada línea junto con el de su partida. Si lo pasa, el cotizador lo marca en rojo y la cotización pide la aprobación de quien autoriza descuentos. Vacío: rige solo el de los ajustes del cotizador.
+      </span>
+    </div>
+  );
+}
+
 function FichaUsuario({ u, roles, asignaciones, empresas, esYo, puedeGestionar, onCambio }: {
   u: Usuario; roles: Rol[]; asignaciones: UsuarioRol[]; empresas: EmpresaBreve[]; esYo: boolean; puedeGestionar: boolean; onCambio: () => void;
 }) {
@@ -164,6 +194,7 @@ function FichaUsuario({ u, roles, asignaciones, empresas, esYo, puedeGestionar, 
   const [enlace, setEnlace] = useState<string | null>(null);
   const editable = puedeGestionar || esYo;
   const fase15 = useFase(15);
+  const fase17 = useFase(17);
   const cambiado = datos.nombre !== (u.nombre || '') || datos.cargo !== (u.cargo || '') || datos.telefono !== (u.telefono || '')
     || datos.empresa_id !== (u.empresa_id || '');
 
@@ -199,6 +230,7 @@ function FichaUsuario({ u, roles, asignaciones, empresas, esYo, puedeGestionar, 
         En el cotizador, «quién cotiza» se toma de esta cuenta: su empresa emisora y su nombre, cargo, teléfono y correo van en el PDF y en el mensaje al cliente.
       </p>
       {puedeGestionar && fase15 && <CostoHora usuarioId={u.id} />}
+      {puedeGestionar && fase17 && <DescuentoMaximo usuarioId={u.id} />}
       {editable && cambiado && (
         <div><button className="btn btn-primary btn-sm" disabled={ocupado === 'datos'}
           onClick={() => correr('datos', () => usuariosService.guardarDatos(u.id, { nombre: datos.nombre.trim() || null, cargo: datos.cargo.trim() || null, telefono: datos.telefono.trim() || null, empresa_id: datos.empresa_id || null }), 'Datos guardados')}>

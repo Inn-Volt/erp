@@ -18,7 +18,7 @@ import FaltaSQL from '@/components/FaltaSQL';
 import NumeroInput from '@/components/NumeroInput';
 import { ajustesService, faltaFase4 } from '@/services/cotizador';
 import { useToast } from '@/hooks/useToast';
-import type { AjustesCot } from '@/lib/cotizador/tipos';
+import { DATOS_ENCABEZADO, datoEncabezadoVisible, type AjustesCot } from '@/lib/cotizador/tipos';
 
 export default function AjustesCotPage() {
   const { success, error: toastError } = useToast();
@@ -150,6 +150,17 @@ export default function AjustesCotPage() {
                       <input type="checkbox" checked={dz[k] !== false} onChange={e => setDz({ [k]: e.target.checked })} style={{ accentColor: 'var(--y-brand)' }} /> {t}</label>
                   ))}
                 </div>
+              </div>
+              <div>
+                <span className="label-muted">Datos del encabezado («Preparado para» y junto al N°)</span>
+                <div style={{ display: 'flex', gap: 14, flexWrap: 'wrap', marginTop: 4 }}>
+                  {DATOS_ENCABEZADO.map(x => (
+                    <label key={x.clave} title={x.ejemplo} style={{ display: 'flex', gap: 6, alignItems: 'center', fontSize: '0.86rem', color: 'var(--text)' }}>
+                      <input type="checkbox" checked={datoEncabezadoVisible(dz.encabezado, x.clave)} style={{ accentColor: 'var(--y-brand)' }}
+                        onChange={e => setDz({ encabezado: { ...(dz.encabezado || {}), [x.clave]: e.target.checked } })} /> {x.nombre}</label>
+                  ))}
+                </div>
+                <p style={{ margin: '4px 0 0', fontSize: '0.74rem', color: 'var(--muted)' }}>El nombre del cliente siempre sale. Lo que no tenga dato no se imprime aunque esté marcado.</p>
               </div>
               <p style={{ margin: 0, fontSize: '0.76rem', color: 'var(--muted)' }}>Para ver cómo queda, abre una plantilla en Cotizaciones → Plantillas y usa «Vista previa».</p>
             </div>

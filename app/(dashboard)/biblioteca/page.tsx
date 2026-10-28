@@ -279,6 +279,17 @@ export default function BibliotecaPage() {
 
   const [itemModal, setItemModal] = useState<{ open: boolean; item: Partial<CatalogoItem> | null }>({ open: false, item: null });
   const [recetaModal, setRecetaModal] = useState<{ open: boolean; receta: RecetaCompleta | null }>({ open: false, receta: null });
+  // Desde el cotizador («Crearlo en la biblioteca»): /biblioteca?nuevo=texto abre «Nuevo ítem» con ese nombre.
+  const nuevoPedido = useRef(false);
+  useEffect(() => {
+    if (nuevoPedido.current || !puedeEditar) return;
+    const texto = new URLSearchParams(window.location.search).get('nuevo')?.trim();
+    if (!texto) return;
+    nuevoPedido.current = true;
+    setTab('items');
+    setItemModal({ open: true, item: { descripcion: texto.slice(0, 200) } });
+    window.history.replaceState(null, '', window.location.pathname);
+  }, [puedeEditar]);
   // Fase 4 (cotizador TecApp): precio de venta, familias de precio y recetas con preguntas.
   const [conFase4, setConFase4] = useState(false);
   const [familiasPrecio, setFamiliasPrecio] = useState<Familia[]>([]);

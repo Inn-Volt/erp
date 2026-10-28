@@ -23,7 +23,8 @@ import { Document, Page, Text, View, StyleSheet, Image } from '@react-pdf/render
 import type { Cliente, Vendedor } from '@/types';
 import type { EmpresaInfo } from '@/components/pdf/PresupuestoPDF';
 import type { CotizacionDoc, Linea, PartidaCot, Seccion } from '@/lib/cotizador/tipos';
-import { planEnPalabras, TITULO_VALORIZACION, type HitoCobro } from '@/lib/cotizador/tipos';
+import { datoEncabezadoVisible, planEnPalabras, TITULO_VALORIZACION, type DatoEncabezado, type HitoCobro } from '@/lib/cotizador/tipos';
+export { DATOS_ENCABEZADO, type DatoEncabezado } from '@/lib/cotizador/tipos';
 import { calcular, cantidadLegible, filasDelCliente, formatMonto, type Resultado } from '@/lib/cotizador/calculo';
 import { formatDate } from '@/utils';
 import { logoDocumento } from '@/lib/logoMarca';
@@ -193,6 +194,8 @@ export interface DisenoPDF {
   color?: string; titulo?: string; pie?: string;
   /** Nombres de las dos columnas del detalle de una partida de instalación (vacío: los de siempre). */
   col_materiales?: string; col_mano_obra?: string;
+  /** Qué datos salen en el encabezado («Preparado para» y la referencia junto al N°). Sin marcar: todos. */
+  encabezado?: Partial<Record<DatoEncabezado, boolean>>;
   mostrar_forma_pago?: boolean; mostrar_importante?: boolean; mostrar_como_aceptar?: boolean; mostrar_banco?: boolean; mostrar_firmas?: boolean;
 }
 
@@ -212,6 +215,8 @@ export interface CotizacionPDFProps {
   marca?: 'BORRADOR' | 'ANULADA' | 'EJEMPLO' | null;
   fotos?: { url: string; caption: string }[];
   aceptacion?: { nombre: string; rut?: string | null; fecha: string; firma?: string | null } | null;
+  /** De dónde viene la cotización (p. ej. «Solicitud SOL-0012»): sale junto al N°. */
+  referencia?: string | null;
 }
 
 export default function CotizacionPDF(p: CotizacionPDFProps) {
@@ -236,6 +241,7 @@ export default function CotizacionPDF(p: CotizacionPDFProps) {
   const acento = /^#[0-9a-f]{6}$/i.test(dz.color || '') ? dz.color! : SPARK;
   const tituloDoc = (dz.titulo || '').trim().toUpperCase() || 'COTIZACIÓN';
   const ver = (k: keyof DisenoPDF) => dz[k] !== false;
+  const enc = (k: DatoEncabezado) => datoEncabezadoVisible(dz.encabezado, k);
   // Columnas del detalle de una partida de instalación: lo que se suministra y lo que se hace.
   const colMateriales = (dz.col_materiales || '').trim() || 'Materiales e insumos';
   const colManoObra = (dz.col_mano_obra || '').trim() || 'Mano de obra y servicios';
@@ -244,6 +250,15 @@ export default function CotizacionPDF(p: CotizacionPDFProps) {
   const lineasDe = (pid: string) => doc.items.filter(l => l.partidaId === pid);
   const sueltas = doc.items.filter(l => !l.partidaId || !partidas.some(x => x.id === l.partidaId));
   const conDescuento = r.totales.descuento > 0;
+  // La columna «DESC.» solo si alguna línea trae el suyo (el de la partida va bajo su nombre).
+  const conDescLineas = (doc.items || []).some(l => (Number(l.descuento) || 0) > 0);
+  /** Bajo el nombre de una partida con descuento: cuánto se descontó (el de sus líneas y el suyo). */
+  const notaDescuento = (pt: PartidaCot) => {
+    const pc = r.partidas.get(pt.id);
+    if (!pc || !(pc.descuento > 0)) return '';
+    const pct = Number(pt.descuento) || 0;
+    return pc.descuento === pc.descuentoPartida && pct ? `Con ${String(pct).replace('.', ',')} % de descuento (${fmt(pc.descuento)})` : `Incluye un descuento de ${fmt(pc.descuento)}`;
+  };
   const enPesos = m === 'UF' && r.totales.totalClp !== null;
 
   const Pie = () => (
@@ -252,7 +267,7 @@ export default function CotizacionPDF(p: CotizacionPDFProps) {
       <Text render={({ pageNumber, totalPages }) => `Página ${pageNumber} de ${totalPages}`} />
     </View>
   );
-  const Marca = () => (p.marca ? <Text style={s.marca} fixed>{p.marca}</Text> : null);
+  const Marca = () => (p.marca ? <Text style={s.marca} fixed hyphenationCallback={sinCortar}>{p.marca}</Text> : null);
   const Barra = () => (
     <View style={s.barra} fixed><View style={{ flex: 1, backgroundColor: INK }} /><View style={{ width: 80, backgroundColor: acento }} /></View>
   );
@@ -279,6 +294,7 @@ export default function CotizacionPDF(p: CotizacionPDFProps) {
       <View style={s.folio}>
         <Text style={[s.folioLbl, { color: acento }]}>{tituloDoc}</Text>
         <Text style={s.folioNum}>{folio}</Text>
+        {enc('referencia') && p.referencia ? <Text style={s.folioSub}>{p.referencia}</Text> : null}
         {doc.revision > 0 ? <Text style={[s.folioSub, { color: acento }]}>Revisión {doc.revision}</Text> : null}
         <Text style={s.folioSub}>Emitida {formatDate(emision)}</Text>
         {doc.valida_hasta ? <Text style={[s.folioSub, { color: acento }]}>Válida hasta {formatDate(doc.valida_hasta)}</Text> : null}
@@ -290,11 +306,11 @@ export default function CotizacionPDF(p: CotizacionPDFProps) {
     <View style={[s.card, { borderLeftColor: acento }]}>
       <Text style={s.rotulo}>PREPARADO PARA</Text>
       <Text style={{ fontSize: 9.5, fontFamily: 'Helvetica-Bold', marginBottom: 4 }}>{cliente?.empresa || cliente?.nombre_cliente || 'Cliente'}</Text>
-      {(p.contacto?.nombre || (cliente?.empresa && cliente?.nombre_cliente)) ? <View style={s.fila}><Text style={s.k}>Atención</Text><Text style={s.v}>{p.contacto?.nombre || cliente?.nombre_cliente}</Text></View> : null}
-      {cliente?.rut ? <View style={s.fila}><Text style={s.k}>RUT</Text><Text style={s.v}>{cliente.rut}</Text></View> : null}
-      {(p.contacto?.telefono || cliente?.telefono) ? <View style={s.fila}><Text style={s.k}>Teléfono</Text><Text style={s.v}>{p.contacto?.telefono || cliente?.telefono}</Text></View> : null}
-      {(p.contacto?.email || cliente?.email) ? <View style={s.fila}><Text style={s.k}>Correo</Text><Text style={s.v}>{p.contacto?.email || cliente?.email}</Text></View> : null}
-      {p.sucursal ? <View style={s.fila}><Text style={s.k}>Lugar</Text><Text style={s.v}>{p.sucursal.nombre}{p.sucursal.direccion ? ` · ${p.sucursal.direccion}${p.sucursal.comuna ? ', ' + p.sucursal.comuna : ''}` : ''}</Text></View>
+      {enc('contacto') && (p.contacto?.nombre || (cliente?.empresa && cliente?.nombre_cliente)) ? <View style={s.fila}><Text style={s.k}>Contacto</Text><Text style={s.v}>{p.contacto?.nombre || cliente?.nombre_cliente}</Text></View> : null}
+      {enc('rut') && cliente?.rut ? <View style={s.fila}><Text style={s.k}>RUT</Text><Text style={s.v}>{cliente.rut}</Text></View> : null}
+      {enc('telefono') && (p.contacto?.telefono || cliente?.telefono) ? <View style={s.fila}><Text style={s.k}>Teléfono</Text><Text style={s.v}>{p.contacto?.telefono || cliente?.telefono}</Text></View> : null}
+      {enc('correo') && (p.contacto?.email || cliente?.email) ? <View style={s.fila}><Text style={s.k}>Correo</Text><Text style={s.v}>{p.contacto?.email || cliente?.email}</Text></View> : null}
+      {!enc('direccion') ? null : p.sucursal ? <View style={s.fila}><Text style={s.k}>Lugar</Text><Text style={s.v}>{p.sucursal.nombre}{p.sucursal.direccion ? ` · ${p.sucursal.direccion}${p.sucursal.comuna ? ', ' + p.sucursal.comuna : ''}` : ''}</Text></View>
         : cliente?.direccion ? <View style={s.fila}><Text style={s.k}>Dirección</Text><Text style={s.v}>{cliente.direccion}</Text></View> : null}
     </View>
   );
@@ -329,12 +345,12 @@ export default function CotizacionPDF(p: CotizacionPDFProps) {
           <View key={pt.id} style={s.resRow} wrap={false}>
             <Text style={s.resNum}>{i + 1}</Text>
             <Text style={s.resNom}>{pt.nombre || 'Partida'}</Text>
-            {doc.que_ve_cliente !== 'total' && <Text style={s.resVal}>{fmt(r.partidas.get(pt.id)?.subtotal)}</Text>}
+            {doc.que_ve_cliente !== 'total' && <Text style={s.resVal}>{fmt(r.partidas.get(pt.id)?.neto)}</Text>}
           </View>
         ))}
         {sueltas.length > 0 && (
           <View style={s.resRow}><Text style={s.resNum}>{partidas.length + 1}</Text><Text style={s.resNom}>Ítems adicionales</Text>
-            {doc.que_ve_cliente !== 'total' && <Text style={s.resVal}>{fmt(sueltas.reduce((a, l) => a + (r.lineas.get(l.id)?.subtotal || 0), 0))}</Text>}</View>
+            {doc.que_ve_cliente !== 'total' && <Text style={s.resVal}>{fmt(sueltas.reduce((a, l) => a + (r.lineas.get(l.id)?.neto || 0), 0))}</Text>}</View>
         )}
       </>}
       <View style={s.inv} wrap={false}>
@@ -368,7 +384,7 @@ export default function CotizacionPDF(p: CotizacionPDFProps) {
     <View style={s.thRow}>
       <Text style={[s.th, { width: 40 }]}>CANT.</Text><Text style={[s.th, { flex: 1 }]}>DESCRIPCIÓN</Text>
       <Text style={[s.th, { width: 74, textAlign: 'right' }]}>VALOR UNIT.</Text>
-      {conDescuento && <Text style={[s.th, { width: 40, textAlign: 'right' }]}>DESC.</Text>}
+      {conDescLineas && <Text style={[s.th, { width: 40, textAlign: 'right' }]}>DESC.</Text>}
       <Text style={[s.th, { width: 80, textAlign: 'right' }]}>TOTAL</Text>
     </View>
   );
@@ -377,7 +393,7 @@ export default function CotizacionPDF(p: CotizacionPDFProps) {
       <Text style={[s.th, { width: 40 }]}>CANT.</Text><Text style={[s.th, { flex: 1 }]}>DESCRIPCIÓN</Text>
       <Text style={[s.th, { width: 76, textAlign: 'right' }]} hyphenationCallback={sinCortar}>{enDosLineas(colMateriales.toUpperCase())}</Text>
       <Text style={[s.th, { width: 76, textAlign: 'right' }]} hyphenationCallback={sinCortar}>{enDosLineas(colManoObra.toUpperCase())}</Text>
-      {conDescuento && <Text style={[s.th, { width: 40, textAlign: 'right' }]}>DESC.</Text>}
+      {conDescLineas && <Text style={[s.th, { width: 40, textAlign: 'right' }]}>DESC.</Text>}
       <Text style={[s.th, { width: 80, textAlign: 'right' }]}>TOTAL</Text>
     </View>
   );
@@ -394,8 +410,8 @@ export default function CotizacionPDF(p: CotizacionPDFProps) {
             <Text style={[s.td, { flex: 1, paddingRight: 6 }]}>{f.descripcion}</Text>
             <Text style={[s.td, { width: 76, textAlign: 'right' }]}>{f.equipo === null ? '' : f.equipoUnitario !== null ? fmt(f.equipoUnitario, true) : '—'}</Text>
             <Text style={[s.td, { width: 76, textAlign: 'right' }]}>{f.hh === null ? '' : f.hhUnitario !== null ? fmt(f.hhUnitario, true) : '—'}</Text>
-            {conDescuento && <Text style={[s.td, { width: 40, textAlign: 'right' }]}>{f.descuentoPct ? `${f.descuentoPct} %` : f.descuento ? fmt(f.descuento) : ''}</Text>}
-            <Text style={[s.td, { width: 80, textAlign: 'right', fontFamily: 'Helvetica-Bold' }]}>{fmt(f.subtotal)}</Text>
+            {conDescLineas && <Text style={[s.td, { width: 40, textAlign: 'right' }]}>{f.descuentoPct ? `${f.descuentoPct} %` : f.descuento ? fmt(f.descuento) : ''}</Text>}
+            <Text style={[s.td, { width: 80, textAlign: 'right', fontFamily: 'Helvetica-Bold' }]}>{fmt(f.neto)}</Text>
           </View>
         )),
       };
@@ -409,8 +425,8 @@ export default function CotizacionPDF(p: CotizacionPDFProps) {
             <Text style={[s.td, { width: 40 }]}>{cantidadLegible(l.cantidad)} {l.unidad}</Text>
             <Text style={[s.td, { flex: 1, paddingRight: 6 }]}>{l.descripcion}</Text>
             <Text style={[s.td, { width: 74, textAlign: 'right' }]}>{fmt(c.precio, true)}</Text>
-            {conDescuento && <Text style={[s.td, { width: 40, textAlign: 'right' }]}>{l.descuento ? `${l.descuento} %` : ''}</Text>}
-            <Text style={[s.td, { width: 80, textAlign: 'right', fontFamily: 'Helvetica-Bold' }]}>{fmt(c.subtotal)}</Text>
+            {conDescLineas && <Text style={[s.td, { width: 40, textAlign: 'right' }]}>{l.descuento ? `${l.descuento} %` : ''}</Text>}
+            <Text style={[s.td, { width: 80, textAlign: 'right', fontFamily: 'Helvetica-Bold' }]}>{fmt(c.neto)}</Text>
           </View>
         );
       }),
@@ -433,7 +449,7 @@ export default function CotizacionPDF(p: CotizacionPDFProps) {
         const { cols, filas } = filasDe(lineas, pt);
         const instal = (pt.tipo || 'instalacion') === 'instalacion';
         const altos = (instal ? filasDelCliente(lineas, r).map(f => f.descripcion) : lineas.map(l => l.descripcion))
-          .map(d => altoFila(d, (instal ? 235 : 315) - (conDescuento ? 40 : 0)));
+          .map(d => altoFila(d, (instal ? 235 : 315) - (conDescLineas ? 40 : 0)));
         const suma = (xs: number[]) => xs.reduce((a, b) => a + b, 0);
         const total = altoCab + 24 + suma(altos);
         if (total <= ALTO_UTIL * 0.75 || filas.length <= 4) {
@@ -446,8 +462,11 @@ export default function CotizacionPDF(p: CotizacionPDFProps) {
       };
       partidas.forEach((pt, i) => grupo(pt.id, <>
         <View style={[s.partidaCab, { borderLeftColor: acento }]}>
-          <Text style={{ fontSize: 8.8, fontFamily: 'Helvetica-Bold', flex: 1 }}>{i + 1}. {pt.nombre || 'Partida'}</Text>
-          <Text style={{ fontSize: 8.8, fontFamily: 'Helvetica-Bold' }}>{fmt(r.partidas.get(pt.id)?.subtotal)}</Text>
+          <View style={{ flex: 1 }}>
+            <Text style={{ fontSize: 8.8, fontFamily: 'Helvetica-Bold' }}>{i + 1}. {pt.nombre || 'Partida'}</Text>
+            {(r.partidas.get(pt.id)?.descuento || 0) > 0 ? <Text style={{ fontSize: 7, color: MUTED, marginTop: 1 }}>{notaDescuento(pt)}</Text> : null}
+          </View>
+          <Text style={{ fontSize: 8.8, fontFamily: 'Helvetica-Bold' }}>{fmt(r.partidas.get(pt.id)?.neto)}</Text>
         </View>
         {pt.descripcion ? <View style={{ padding: '4 8' }}><TextoFormato estilo={{ ...s.texto, fontSize: 7.8 }} texto={pt.descripcion} /></View> : null}
       </>, 30 + (pt.descripcion ? altoTexto(pt.descripcion, 7.8, 1.55, 515) + 8 : 0), lineasDe(pt.id), pt));
@@ -477,11 +496,12 @@ export default function CotizacionPDF(p: CotizacionPDFProps) {
                 <View style={{ flex: 1, paddingRight: 6 }}>
                   <Text style={[s.td, { fontFamily: 'Helvetica-Bold' }]}>{pt.nombre || 'Partida'}</Text>
                   {pt.descripcion ? <TextoFormato estilo={{ ...s.texto, fontSize: 7.5, color: MUTED }} texto={pt.descripcion} /> : null}
+                  {doc.que_ve_cliente === 'partidas' && (pc?.descuento || 0) > 0 ? <Text style={{ fontSize: 7, color: MUTED, marginTop: 1 }}>{notaDescuento(pt)}</Text> : null}
                 </View>
                 {doc.que_ve_cliente === 'partidas' && <>
                   <Text style={[s.td, { width: 56, textAlign: 'center' }]}>{cantidadLegible(pt.cantidad)} {pt.unidad}</Text>
                   <Text style={[s.td, { width: 80, textAlign: 'right' }]}>{exacto ? fmt(pc!.valorUnitario, true) : '—'}</Text>
-                  <Text style={[s.td, { width: 84, textAlign: 'right', fontFamily: 'Helvetica-Bold' }]}>{fmt(pc?.subtotal)}</Text>
+                  <Text style={[s.td, { width: 84, textAlign: 'right', fontFamily: 'Helvetica-Bold' }]}>{fmt(pc?.neto)}</Text>
                 </>}
               </View>
             );
@@ -495,7 +515,7 @@ export default function CotizacionPDF(p: CotizacionPDFProps) {
                 {doc.que_ve_cliente === 'partidas' && <>
                   <Text style={[s.td, { width: 56, textAlign: 'center' }]}>{cantidadLegible(l.cantidad)} {l.unidad}</Text>
                   <Text style={[s.td, { width: 80, textAlign: 'right' }]}>{fmt(c.precio, true)}</Text>
-                  <Text style={[s.td, { width: 84, textAlign: 'right', fontFamily: 'Helvetica-Bold' }]}>{fmt(c.subtotal)}</Text>
+                  <Text style={[s.td, { width: 84, textAlign: 'right', fontFamily: 'Helvetica-Bold' }]}>{fmt(c.neto)}</Text>
                 </>}
               </View>
             );

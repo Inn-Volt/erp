@@ -7,7 +7,7 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint .",
-    "test": "node --experimental-strip-types --no-warnings --test \"tests/unit/*.test.ts\"",
+    "test": "node --experimental-strip-types --no-warnings --import ./tests/unit/registrar.mjs --test \"tests/unit/*.test.ts\"",
     "test:db": "bash tests/sql/correr.sh"
   },
   "dependencies": {

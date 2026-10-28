@@ -7,7 +7,8 @@ import type { Cliente } from '@/types';
 import type { CotizacionDoc } from './tipos';
 import type { Resultado } from './calculo';
 
-export interface Aviso { nivel: 'rojo' | 'ambar'; texto: string; ir?: string }
+/** `confirmar`: rojo que se puede enviar igual si se confirma (p. ej. vender con pérdida a sabiendas). */
+export interface Aviso { nivel: 'rojo' | 'ambar'; texto: string; ir?: string; confirmar?: 'perdida' }
 
 const CUENTA = /\b(cta\.?|cuenta)\s*(cte|corriente|vista|rut)?\b[^\n]{0,30}\d{6,}/i;
 // Lo que la fuente Helvetica del PDF no imprime: emojis y símbolos fuera de Latin-1.
@@ -26,16 +27,26 @@ export function revisar(doc: CotizacionDoc, r: Resultado, cliente: Cliente | nul
   if (cliente?.estado_pago === 'bloqueado') a.push({ nivel: 'rojo', texto: `El cliente está bloqueado por pagos pendientes${cliente.nota_pago ? `: ${cliente.nota_pago}` : ''}. Habla con Facturación.`, ir: 'cot-bloque-cliente' });
   if (cliente?.estado_pago === 'atrasado') a.push({ nivel: 'ambar', texto: `El cliente no está al día con sus pagos${cliente.nota_pago ? `: ${cliente.nota_pago}` : ''}.`, ir: 'cot-bloque-cliente' });
 
+  // El descuento propio de cada partida (un cargo no lleva): cuenta para ver si algo queda bajo el costo.
+  const pctPartida = new Map((doc.partidas || []).map(p => [p.id, p.tipo === 'cargo' ? 0 : Math.min(Math.max(Number(p.descuento) || 0, 0), 100)]));
   for (const l of lineas) {
     const c = r.lineas.get(l.id);
+    const nombre = l.descripcion?.trim() || 'Una línea sin descripción';
     if (!l.descripcion?.trim()) a.push({ nivel: 'ambar', texto: 'Una línea no tiene descripción.', ir: `cot-partida-${l.partidaId}` });
-    else if (c && !(c.precio > 0)) a.push({ nivel: 'ambar', texto: `«${l.descripcion}» tiene precio $0.`, ir: `cot-partida-${l.partidaId}` });
-    if (extra.esQuienCotiza && c && c.margenReal !== null && c.margenReal < 0) a.push({ nivel: 'ambar', texto: `«${l.descripcion}» se vende bajo el costo (solo lo ves tú).`, ir: `cot-partida-${l.partidaId}` });
+    // Una línea en $0 (sin precio o con 100 % de descuento) no sale: o se le pone precio o se quita.
+    if (c && !(c.neto > 0)) a.push({ nivel: 'rojo', texto: `«${nombre}» sale en $0${c.precio > 0 ? ' (100 % de descuento)' : ''}: ponle precio o quítala.`, ir: `cot-partida-${l.partidaId}` });
+    // Bajo el costo con todos los descuentos (el de la línea y el de su partida): se envía solo confirmándolo.
+    const neto = c ? c.neto * (1 - (pctPartida.get(l.partidaId || '') || 0) / 100) : 0;
+    if (extra.esQuienCotiza && c && c.neto > 0 && c.costoConImprevistos > 0 && neto < c.costoConImprevistos - 0.005) {
+      a.push({ nivel: 'rojo', confirmar: 'perdida', ir: `cot-partida-${l.partidaId}`,
+        texto: `«${nombre}» queda bajo el costo${(pctPartida.get(l.partidaId || '') || 0) > 0 || (l.descuento || 0) > 0 ? ' con los descuentos' : ''} (solo lo ves tú).` });
+    }
     if (l.fuera && (l.costo || 0) > 0 && (l.ganancia === null || l.ganancia === undefined)) a.push({ nivel: 'ambar', texto: `«${l.descripcion || 'Una línea fuera del catálogo'}» no tiene ganancia: se vende a costo.`, ir: `cot-partida-${l.partidaId}` });
   }
   for (const p of doc.partidas || []) {
     if (!p.nombre?.trim()) a.push({ nivel: 'ambar', texto: 'Hay una partida sin nombre.', ir: `cot-partida-${p.id}` });
     if (!lineas.some(l => l.partidaId === p.id)) a.push({ nivel: 'ambar', texto: `La partida «${p.nombre || 'sin nombre'}» no tiene líneas.`, ir: `cot-partida-${p.id}` });
+    else if ((pctPartida.get(p.id) || 0) >= 100) a.push({ nivel: 'rojo', texto: `La partida «${p.nombre || 'sin nombre'}» tiene 100 % de descuento: sale en $0.`, ir: `cot-partida-${p.id}` });
     if (doc.que_ve_cliente === 'partidas' && (Number(p.cantidad) !== 1 || p.unidad !== 'global') && r.partidas.get(p.id)?.valorUnitario === null) {
       a.push({ nivel: 'ambar', texto: `En «${p.nombre}» el valor unitario no da exacto: el PDF imprime solo el total.`, ir: `cot-partida-${p.id}` });
     }

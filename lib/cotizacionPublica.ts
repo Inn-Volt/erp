@@ -10,7 +10,7 @@ import type { HitoCobro } from '@/lib/cotizador/tipos';
 import { getSupabaseAdmin } from '@/lib/supabaseAdmin';
 import { diasValidez, sumarDias } from '@/utils';
 import type { CotizacionItem, Partida, Moneda } from '@/types';
-import { IVA, normalizarEstado, type Seccion } from '@/lib/cotizador/tipos';
+import { IVA, datoEncabezadoVisible, normalizarEstado, type DisenoEncabezado, type Seccion } from '@/lib/cotizador/tipos';
 import { qp } from '@/lib/cotizador/calculo';
 import type { CotizacionPublica, FotoPublica } from '@/types/publico';
 import type { EmpresaInfo } from '@/components/pdf/PresupuestoPDF';
@@ -110,8 +110,9 @@ function itemPublico(i: CotizacionItem & { ligadoA?: string | null; porUnidad?: 
   };
 }
 
-function partidaPublica(p: Partida & { tipo?: string }): Partida & { tipo?: string } {
-  return { id: p.id, nombre: p.nombre, descripcion: p.descripcion, cantidad: p.cantidad, unidad: p.unidad, tipo: p.tipo || 'instalacion' };
+function partidaPublica(p: Partida & { tipo?: string; descuento?: number | null }): Partida & { tipo?: string; descuento?: number | null } {
+  // El descuento de la partida va (el cliente lo ve descontado); los % de los cargos, no.
+  return { id: p.id, nombre: p.nombre, descripcion: p.descripcion, cantidad: p.cantidad, unidad: p.unidad, tipo: p.tipo || 'instalacion', descuento: p.descuento ?? null };
 }
 
 /** Ajustes de cotización que ve el cliente (sin la fase 4: valores de siempre). */
@@ -182,6 +183,17 @@ export async function fotosDe(levantamientoId: string | null, incluir: boolean |
     .filter(f => f.url);
 }
 
+/** «Solicitud SOL-0012», si la cotización viene de una y el diseño del PDF lo muestra. */
+async function referenciaDe(solicitudId: string | null, diseno: Record<string, unknown> | null): Promise<string | null> {
+  if (!solicitudId || !datoEncabezadoVisible((diseno?.encabezado ?? null) as DisenoEncabezado | null, 'referencia')) return null;
+  try {
+    const { data } = await getSupabaseAdmin().from('solicitudes').select('folio').eq('id', solicitudId).maybeSingle();
+    return data?.folio ? `Solicitud SOL-${String(data.folio).padStart(4, '0')}` : null;
+  } catch {
+    return null;
+  }
+}
+
 /** Contacto de quien cotizó (solo nombre, cargo, teléfono y correo). */
 async function vendedorDe(id: string | null | undefined): Promise<CotizacionPublica['vendedor']> {
   if (!id) return null;
@@ -201,6 +213,7 @@ export async function aPublica(cot: FilaCotizacion): Promise<CotizacionPublica> 
     ajustesPublicos(), lugarDe(cot.sucursal_id, cot.contacto_id),
   ]);
   const estado = normalizarEstado(cot.estado, !!cot.enviada_at || !!cot.vista_at);
+  const referencia = await referenciaDe(cot.solicitud_id, ajustes.pdf_diseno);
   const c = cot.clientes;
   return {
     folio: cot.folio,
@@ -215,7 +228,7 @@ export async function aPublica(cot: FilaCotizacion): Promise<CotizacionPublica> 
     aclaraciones: cot.aclaraciones ?? [cot.condiciones_servicio, cot.condiciones_comerciales].filter(Boolean).join('\n\n'),
     secciones: cot.secciones || [],
     plan_cobro: (cot.plan_cobro && cot.plan_cobro.length ? cot.plan_cobro : ajustes.plan_base) || null,
-    responde_en_linea: ajustes.responde_en_linea, importante: ajustes.importante, correo_aceptar: ajustes.correo_aceptar, pdf_diseno: ajustes.pdf_diseno,
+    responde_en_linea: ajustes.responde_en_linea, importante: ajustes.importante, correo_aceptar: ajustes.correo_aceptar, pdf_diseno: ajustes.pdf_diseno, referencia,
     ...lugar,
     moneda: (cot.moneda as Moneda) || 'CLP',
     valor_uf: cot.valor_uf,
