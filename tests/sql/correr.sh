@@ -45,7 +45,7 @@ insert into public.cotizaciones (id, cliente_id, estado, total) values
  ('cccccccc-0000-0000-0000-000000000002', 'aaaaaaaa-0000-0000-0000-000000000001', 'Aceptado', 500000);" >/dev/null || fallo=1
 
 for n in 1_usuarios_permisos 2_operacion 3_cotizador 4_cotizador_tecapp 5_tecapp_operacion 6_ot_terreno 7_flujo 8_informes \
-         9_planillas 10_visita_tecnico 11_levantamientos 12_avisos_agenda 13_utilidad 14_push 15_revision 15_revision; do
+         9_planillas 10_visita_tecnico 11_levantamientos 12_avisos_agenda 13_utilidad 14_push 15_revision 15_revision 16_aperturas 16_aperturas; do
   echo "== supabase_fase$n.sql"; correr "supabase_fase$n.sql"
 done
 

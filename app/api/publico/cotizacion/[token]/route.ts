@@ -1,8 +1,9 @@
 // GET /api/publico/cotizacion/[token]
 // Datos PÚBLICOS de una cotización para el link del cliente. Sin sesión:
 // el token (UUID no adivinable) es la llave. Solo precios de venta, nunca
-// costos. Registra la primera vez que el cliente la abre (vista_at), salvo
-// cuando la abre InnVolt como vista previa (?interno=1).
+// costos. Anota cada vez que el cliente la abre (fase 16: avisa desde la segunda;
+// la primera marca vista_at, con su aviso de siempre), salvo cuando la abre
+// InnVolt como vista previa (?interno=1).
 
 import { NextResponse } from 'next/server';
 import { getSupabaseAdmin } from '@/lib/supabaseAdmin';
@@ -22,10 +23,13 @@ export async function GET(req: Request, ctx: { params: Promise<{ token: string }
     if (!cot) return NextResponse.json({ error: 'Cotización no encontrada' }, { status: 404 });
 
     const interno = new URL(req.url).searchParams.get('interno') === '1';
-    if (!interno && !cot.vista_at) {
-      await getSupabaseAdmin().from('cotizaciones')
-        .update({ vista_at: new Date().toISOString() })
-        .eq('id', cot.id).is('vista_at', null);
+    if (!interno) {
+      const admin = getSupabaseAdmin();
+      const { error } = await admin.rpc('registrar_apertura_cotizacion', { p_cot: cot.id, p_navegador: req.headers.get('user-agent') });
+      // Sin la fase 16: como antes, solo la primera vez.
+      if (error && !cot.vista_at) {
+        await admin.from('cotizaciones').update({ vista_at: new Date().toISOString() }).eq('id', cot.id).is('vista_at', null);
+      }
     }
     return NextResponse.json(await aPublica(cot), { headers: { 'Cache-Control': 'no-store' } });
   } catch {
