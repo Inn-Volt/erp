@@ -20,8 +20,8 @@ import { supabase } from '@/lib/supabase';
 import { ajustesService, faltaFase4 } from '@/services/cotizador';
 import { useToast } from '@/hooks/useToast';
 import {
-  GASTOS_SUGERIDOS, precioConUtilidad, recomendacion, TIPOS, utilidadesDe,
-  type EstructuraCostos, type GastoFijo,
+  GASTOS_SUGERIDOS, imprevistosPorOmision, precioConUtilidad, recomendacion, TIPOS, TIPOS_CON_IMPREVISTOS, TOPE_IMPREVISTOS, utilidadesDe,
+  type EstructuraCostos, type GastoFijo, type ImprevistosPorTipo,
 } from '@/lib/cotizador/utilidad';
 import type { CategoriaItem } from '@/types';
 import { formatCLP } from '@/utils';
@@ -36,6 +36,8 @@ export default function UtilidadPage() {
   const [guardando, setGuardando] = useState(false);
   const [e, setE] = useState<EstructuraCostos>({ gastos: GASTOS_SUGERIDOS.map(nombre => ({ nombre, monto: 0 })), ventas_mensuales: 0, ganancia_deseada: 10 });
   const [porTipo, setPorTipo] = useState<Record<CategoriaItem, number>>(utilidadesDe(null));
+  // Fase 18: imprevistos con que entra lo nuevo (null: la fase aún no está en la base).
+  const [imprevistos, setImprevistos] = useState<ImprevistosPorTipo | null>(null);
   const [ventasSugeridas, setVentasSugeridas] = useState<{ promedio: number; cuantas: number } | null>(null);
   const [costoPrueba, setCostoPrueba] = useState<number>(60000);
 
@@ -47,6 +49,7 @@ export default function UtilidadPage() {
         setE({ gastos: g.gastos?.length ? g.gastos : e.gastos, ventas_mensuales: Number(g.ventas_mensuales) || 0, ganancia_deseada: Number(g.ganancia_deseada ?? 10) });
       }
       setPorTipo(utilidadesDe(aj.utilidad_por_tipo));
+      if ('imprevistos_por_tipo' in aj) setImprevistos(aj.imprevistos_por_tipo || {});
     }).catch(err => { if (faltaFase4(err)) setFalta('fase4'); else toastError(err instanceof Error ? err.message : 'No se pudo cargar'); })
       .finally(() => setCargando(false));
     // Lo que se vendió: cotizaciones aprobadas de los últimos 6 meses (neto).
@@ -71,6 +74,7 @@ export default function UtilidadPage() {
       await ajustesService.guardar({
         estructura_costos: { ...e, gastos: e.gastos.filter(g => g.nombre.trim()).map(g => ({ nombre: g.nombre.trim(), monto: Number(g.monto) || 0 })) },
         utilidad_por_tipo: porTipo,
+        ...(imprevistos ? { imprevistos_por_tipo: Object.fromEntries(TIPOS_CON_IMPREVISTOS.map(t => [t.clave, imprevistosPorOmision(imprevistos, t.clave)]).filter(([, v]) => Number(v) > 0)) } : {}),
       });
       success('Guardado: lo nuevo de las cotizaciones entra con estas utilidades');
     } catch (err) {
@@ -202,6 +206,27 @@ export default function UtilidadPage() {
                 Subir a {pct(r.recomendada)} lo que esté bajo</button>
             )}
           </div>
+
+          {imprevistos && (
+            <div className="panel-y" style={tarjeta}>
+              <p className="section-label" style={{ margin: 0 }}>Imprevistos con que entra lo nuevo</p>
+              <p style={{ margin: 0, fontSize: '0.78rem', color: 'var(--muted)' }}>
+                Un colchón sobre el costo para lo que no se ve (mermas, cortes, sorpresas). Lo que tiene su propia utilidad sube su precio para mantenerla;
+                lo de la biblioteca mantiene su precio y la utilidad que ves ya lo descuenta. Los traslados y los cargos no llevan. En cada cotización se cambian
+                en el panel «Interno».
+              </p>
+              {TIPOS_CON_IMPREVISTOS.map(t => (
+                <div key={t.clave} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <span style={{ flex: 1, fontSize: '0.86rem', color: 'var(--text)' }}>{t.nombre}</span>
+                  <div style={{ width: 110 }}>
+                    <NumeroInput className="input" value={imprevistos[t.clave] ?? null} decimales={1} sufijo="%" mostrarCero max={TOPE_IMPREVISTOS} placeholder="0"
+                      onChange={v => setImprevistos(x => ({ ...(x || {}), [t.clave]: Math.min(v ?? 0, TOPE_IMPREVISTOS) }))}
+                      onVacio={() => setImprevistos(x => ({ ...(x || {}), [t.clave]: 0 }))} ariaLabel={`Imprevistos de ${t.nombre}`} />
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
 
           <button className="btn btn-primary" onClick={guardar} disabled={guardando} style={{ alignSelf: 'flex-end' }}>
             {guardando ? <Loader2 size={14} className="iv-spin" /> : <Save size={14} />} Guardar</button>
