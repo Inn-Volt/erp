@@ -20,7 +20,7 @@ import { correoAutomatico, enviarCorreo } from '@/lib/correo';
 import PlanCobro from './PlanCobro';
 import NumeroInput from '@/components/NumeroInput';
 import { textoPlano, tituloCorto } from '@/lib/textoFormato';
-import { gananciaDesdeUtilidad, gananciaPorOmision, imprevistosPorOmision } from '@/lib/cotizador/utilidad';
+import { gananciaDesdeUtilidad, gananciaPorOmision, imprevistosPorOmision, TOPE_IMPREVISTOS } from '@/lib/cotizador/utilidad';
 import EditorFormato from '@/components/EditorFormato';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
@@ -41,7 +41,8 @@ import AsistenteReceta from './AsistenteReceta';
 import EditorReceta from './EditorReceta';
 import TrasladoModal from './TrasladoModal';
 import CalculadoraCuadrilla from './CalculadoraCuadrilla';
-import { hojasExcel } from '@/lib/cotizador/herramientas';
+import { hojasExcel, materialesConsolidados } from '@/lib/cotizador/herramientas';
+import ListadoMaterialesPDF from '@/components/pdf/ListadoMaterialesPDF';
 import { descargarExcel } from '@/lib/excel';
 import { proyectosService, folioProyecto, type Proyecto } from '@/services/fase5';
 import { BloquePlegable, EstadoPill, MenuAcciones, opcionMenu, PedirMotivo, etiqueta } from './ui';
@@ -148,6 +149,10 @@ export default function EditorCotizacion({ id, clonarDe, clienteInicial, solicit
   const [proyectos, setProyectos] = useState<Proyecto[]>([]);
   const [trasladoPara, setTrasladoPara] = useState<string | null>(null);
   const [cuadrillaPara, setCuadrillaPara] = useState<string | null>(null);
+  // Imprevistos de una vez (a todo, a los materiales o a la mano de obra y servicios), con deshacer.
+  const [impA, setImpA] = useState<'todas' | 'material' | 'servicio'>('todas');
+  const [impPct, setImpPct] = useState<number | null>(null);
+  const [antesImp, setAntesImp] = useState<{ id: string; imprevistos: number }[] | null>(null);
   useEffect(() => { proyectosService.listar().then(setProyectos).catch(() => setProyectos([])); }, []);
 
   const editable = puedeEditar && d.estado === 'Borrador';
@@ -823,6 +828,38 @@ export default function EditorCotizacion({ id, clonarDe, clienteInicial, solicit
     }
   };
 
+  const pedirPrecios = async () => {
+    if (!empresa) { toastError('Falta la empresa emisora.'); return; }
+    const materiales = materialesConsolidados(d.items, d.partidas);
+    if (!materiales.length) { warning('Esta cotización no tiene materiales con cantidad.'); return; }
+    try {
+      const folio = d.folio ? folioDe(d.folio) : 'Borrador';
+      const blob = await pdf(
+        <ListadoMaterialesPDF materiales={materiales} folio={folio} titulo={d.titulo} empresa={empresa}
+          contacto={vendedor ? { nombre: vendedor.nombre, email: vendedor.email, telefono: vendedor.telefono } : null} />,
+      ).toBlob();
+      saveAs(blob, `Solicitud_precios_${folio}.pdf`);
+    } catch (e) { toastError(e instanceof Error ? e.message : 'No se pudo armar el PDF'); }
+  };
+
+  const aplicarImprevistos = () => {
+    const v = Math.min(Math.max(impPct ?? 0, 0), TOPE_IMPREVISTOS);
+    // Los cargos y la operación (traslados, fletes) se cobran tal cual: sin imprevistos.
+    const cargos = new Set(d.partidas.filter(x => x.tipo === 'cargo').map(x => x.id));
+    const elegidas = d.items.filter(l => !cargos.has(l.partidaId || '') && l.categoria !== 'operacion'
+      && (impA === 'todas' || (impA === 'material' ? l.categoria === 'material' : l.categoria !== 'material')));
+    if (!elegidas.length) return;
+    setAntesImp(elegidas.map(l => ({ id: l.id, imprevistos: Number(l.imprevistos) || 0 })));
+    const ids = new Set(elegidas.map(l => l.id));
+    setItems(items => items.map(l => (ids.has(l.id) ? { ...l, imprevistos: v } : l)));
+    setImpPct(null);
+  };
+  const deshacerImprevistos = () => {
+    const antes = new Map((antesImp || []).map(x => [x.id, x.imprevistos]));
+    setItems(items => items.map(l => (antes.has(l.id) ? { ...l, imprevistos: antes.get(l.id)! } : l)));
+    setAntesImp(null);
+  };
+
   const recargar = async () => { if (cot) await cargarDoc(cot.id); setModal(null); };
 
   // ── Plantilla ──
@@ -924,6 +961,8 @@ export default function EditorCotizacion({ id, clonarDe, clienteInicial, solicit
   if (cot && d.token_publico && d.estado !== 'Borrador') {
     menuMas.push({ texto: 'Copiar el enlace del cliente', hacer: () => { navigator.clipboard?.writeText(linkPublico(d.token_publico!)); success('Enlace copiado'); } });
   }
+  // Los materiales consolidados, con los precios en blanco, para pedir precios a un proveedor.
+  if (d.items.some(l => l.categoria === 'material' && Number(l.cantidad) > 0)) menuMas.push({ texto: 'Pedir precios a proveedor (PDF)', hacer: pedirPrecios });
   // Excel con costos (la hoja de ítems se vuelve a importar con «Importar planilla»).
   if (puedeCostos && d.items.length) menuMas.push({ texto: 'Descargar Excel (con costos)', hacer: () => {
     descargarExcel(hojasExcel(d, calc), nombrePDF(d, cliente?.nombre_cliente).replace(/\.pdf$/, '.xlsx'))
@@ -965,6 +1004,22 @@ export default function EditorCotizacion({ id, clonarDe, clienteInicial, solicit
             <div style={{ display: 'flex', justifyContent: 'space-between' }}><span>Utilidad</span>
               <b style={{ color: calc.internos.utilidad < 0 ? 'var(--danger)' : 'var(--success)' }}>{formatMonto(calc.internos.utilidad, d.moneda)} ({porcentaje(calc.internos.margen)})</b></div>
           </div>
+          {editable && d.items.length > 0 && (
+            <div style={{ borderTop: '1px solid var(--border2)', marginTop: 8, paddingTop: 8, display: 'flex', flexWrap: 'wrap', gap: 4, alignItems: 'center', fontSize: '0.76rem', color: 'var(--muted)' }}
+              title="Un colchón sobre el costo (mermas, cortes, sorpresas). Lo que tiene su propia utilidad sube su precio para mantenerla; lo de la biblioteca mantiene su precio y la utilidad ya lo descuenta. Los cargos y la operación no llevan.">
+              Imprevistos de
+              <select className="input" value={impA} onChange={e => setImpA(e.target.value as typeof impA)} aria-label="A qué líneas van los imprevistos"
+                style={{ width: 'auto', padding: '0.25rem 0.35rem', fontSize: '0.76rem' }}>
+                <option value="todas">todo</option>
+                <option value="material">los materiales</option>
+                <option value="servicio">la mano de obra y servicios</option>
+              </select>
+              <span style={{ width: 62 }}><NumeroInput className="input" min={0} max={TOPE_IMPREVISTOS} mostrarCero value={impPct} onChange={setImpPct} onVacio={() => setImpPct(null)}
+                ariaLabel="Imprevistos %" style={{ padding: '0.25rem 0.35rem', fontSize: '0.76rem' }} /></span> %
+              <button type="button" className="btn btn-ghost btn-xs" disabled={impPct === null} onClick={aplicarImprevistos}>Aplicar</button>
+              {antesImp && <button type="button" className="btn btn-ghost btn-xs" onClick={deshacerImprevistos}>Deshacer</button>}
+            </div>
+          )}
         </div>
       )}
       {editable && avisos.length > 0 && (
