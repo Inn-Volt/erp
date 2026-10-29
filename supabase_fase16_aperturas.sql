@@ -1,9 +1,10 @@
 -- ═══════════════════════════════════════════════════════════════════════════════
 -- InnVolt ERP · Fase 16: aviso cada vez que el cliente abre la cotización
 -- Antes se avisaba solo la primera vez (vista_at). Ahora cada apertura del enlace queda
--- anotada y, desde la segunda, se le avisa al responsable de la cotización (o a quienes
--- cotizan, si no tiene responsable). Recargar la página dentro de 10 minutos no cuenta como
+-- anotada y cada vez se avisa a los mismos que reciben «El cliente abrió» (quienes cotizan)
+-- y al responsable de la cotización. Recargar la página dentro de 2 minutos no cuenta como
 -- una apertura nueva. La primera vez sigue avisando como siempre.
+-- Si ya la corriste antes (versión con 10 minutos y solo al responsable), córrela de nuevo.
 -- Las aperturas van en su propia tabla: no tocan la cotización (ni llenan la auditoría).
 -- Ejecutar DESPUÉS de las fases anteriores. Es idempotente.
 -- ═══════════════════════════════════════════════════════════════════════════════
@@ -36,8 +37,8 @@ BEGIN
   SELECT * INTO c FROM public.cotizaciones WHERE id = p_cot;
   IF NOT FOUND THEN RETURN 0; END IF;
   SELECT max(created_at), count(*) INTO v_ultima, v_n FROM public.cotizacion_aperturas WHERE cotizacion_id = p_cot;
-  -- Recargar dentro de 10 minutos es la misma apertura.
-  IF v_ultima IS NOT NULL AND v_ultima > NOW() - INTERVAL '10 minutes' THEN RETURN v_n; END IF;
+  -- Recargar dentro de 2 minutos es la misma apertura.
+  IF v_ultima IS NOT NULL AND v_ultima > NOW() - INTERVAL '2 minutes' THEN RETURN v_n; END IF;
 
   INSERT INTO public.cotizacion_aperturas (cotizacion_id, navegador) VALUES (p_cot, left(p_navegador, 300));
   v_n := v_n + 1;
@@ -46,16 +47,17 @@ BEGIN
     UPDATE public.cotizaciones SET vista_at = NOW() WHERE id = p_cot AND vista_at IS NULL;
     RETURN v_n;
   END IF;
-  -- Desde la segunda: aviso al responsable de la cotización.
+  -- Desde la segunda: el mismo aviso que la primera vez (a quienes cotizan) y al responsable,
+  -- aunque no tenga ese permiso (sin repetírselo si ya le llegó).
   SELECT nombre_cliente INTO v_cli FROM public.clientes WHERE id = c.cliente_id;
   v_folio := 'IV-' || lpad(c.folio::TEXT, 4, '0');
   v_titulo := 'El cliente volvió a abrir ' || v_folio;
   v_cuerpo := COALESCE(v_cli, 'El cliente') || ' la abrió por ' || v_n || '.ª vez'
     || CASE c.estado WHEN 'Enviada' THEN ' y aún no responde: buen momento para llamar.' ELSE '.' END;
-  IF c.vendedor_id IS NOT NULL THEN
+  PERFORM public.notificar('cotizaciones.crear', 'cotizacion_vista', v_titulo, v_cuerpo, '/cotizador?edit=' || c.id);
+  IF c.vendedor_id IS NOT NULL AND NOT EXISTS (
+    SELECT 1 FROM public.notificaciones WHERE usuario_id = c.vendedor_id AND titulo = v_titulo AND created_at = NOW()) THEN
     PERFORM public.notificar_usuario(c.vendedor_id, 'cotizacion_vista', v_titulo, v_cuerpo, '/cotizador?edit=' || c.id);
-  ELSE
-    PERFORM public.notificar('cotizaciones.crear', 'cotizacion_vista', v_titulo, v_cuerpo, '/cotizador?edit=' || c.id);
   END IF;
   RETURN v_n;
 END $$;
