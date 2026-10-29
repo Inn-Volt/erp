@@ -29,19 +29,32 @@ INSERT INTO r (ok, txt) SELECT count(*) >= 1 AND count(*) FILTER (WHERE titulo L
 SET ROLE service_role;
 SELECT public.registrar_apertura_cotizacion('c1600000-0000-0000-0000-000000000001', 'Mozilla/5.0 prueba');
 RESET ROLE;
-INSERT INTO r (ok, txt) SELECT count(*) = 1, 'Recargar dentro de 10 minutos no es otra apertura' FROM public.cotizacion_aperturas WHERE cotizacion_id = 'c1600000-0000-0000-0000-000000000001';
+INSERT INTO r (ok, txt) SELECT count(*) = 1, 'Recargar dentro de 2 minutos no es otra apertura' FROM public.cotizacion_aperturas WHERE cotizacion_id = 'c1600000-0000-0000-0000-000000000001';
 
--- 3. Volver a abrirla más tarde: aviso al responsable
-UPDATE public.cotizacion_aperturas SET created_at = NOW() - INTERVAL '2 hours' WHERE cotizacion_id = 'c1600000-0000-0000-0000-000000000001';
+-- 3. Volver a abrirla unos minutos después: aviso a quienes cotizan y al responsable (una vez)
+UPDATE public.cotizacion_aperturas SET created_at = NOW() - INTERVAL '3 minutes' WHERE cotizacion_id = 'c1600000-0000-0000-0000-000000000001';
 SET ROLE service_role;
 SELECT public.registrar_apertura_cotizacion('c1600000-0000-0000-0000-000000000001', 'Mozilla/5.0 prueba');
 RESET ROLE;
 INSERT INTO r (ok, txt) SELECT count(*) = 2, 'Volver a abrirla queda anotado (2 aperturas)' FROM public.cotizacion_aperturas WHERE cotizacion_id = 'c1600000-0000-0000-0000-000000000001';
 INSERT INTO r (ok, txt) SELECT count(*) = 1 AND bool_and(cuerpo LIKE '%por 2.ª vez y aún no responde%'),
-  'Aviso «volvió a abrir» al responsable (' || COALESCE(max(cuerpo), 'nada') || ')'
+  'Aviso «volvió a abrir» al responsable, sin repetírselo (' || COALESCE(max(cuerpo), 'nada') || ')'
   FROM public.notificaciones WHERE usuario_id = :'VENDE' AND titulo = 'El cliente volvió a abrir IV-' || lpad((SELECT folio FROM public.cotizaciones WHERE id = 'c1600000-0000-0000-0000-000000000001')::TEXT, 4, '0');
-INSERT INTO r (ok, txt) SELECT count(*) = 0, 'El «volvió a abrir» no le llega a todo el equipo, solo al responsable'
+INSERT INTO r (ok, txt) SELECT count(*) = 1, 'El «volvió a abrir» le llega a quien cotiza, como «El cliente abrió»'
   FROM public.notificaciones WHERE usuario_id = :'CESAR' AND titulo LIKE 'El cliente volvió%';
+
+-- 3b. Un responsable sin permiso de cotizar igual recibe el aviso
+INSERT INTO auth.users (id, email, raw_user_meta_data) VALUES ('44444444-4444-4444-4444-444444444444', 'tec16@innvolt.cl', '{"nombre":"Tec"}') ON CONFLICT DO NOTHING;
+DELETE FROM public.usuario_roles WHERE usuario_id = '44444444-4444-4444-4444-444444444444';
+INSERT INTO public.usuario_roles (usuario_id, rol_id) SELECT '44444444-4444-4444-4444-444444444444', id FROM public.roles WHERE clave = 'tecnico';
+UPDATE public.cotizaciones SET vendedor_id = '44444444-4444-4444-4444-444444444444' WHERE id = 'c1600000-0000-0000-0000-000000000001';
+UPDATE public.cotizacion_aperturas SET created_at = created_at - INTERVAL '1 hour' WHERE cotizacion_id = 'c1600000-0000-0000-0000-000000000001';
+SET ROLE service_role;
+SELECT public.registrar_apertura_cotizacion('c1600000-0000-0000-0000-000000000001', 'Mozilla/5.0 prueba');
+RESET ROLE;
+INSERT INTO r (ok, txt) SELECT count(*) = 1, 'Responsable sin permiso de cotizar: igual le llega (3.ª vez)'
+  FROM public.notificaciones WHERE usuario_id = '44444444-4444-4444-4444-444444444444' AND cuerpo LIKE '%por 3.ª vez%';
+UPDATE public.cotizaciones SET vendedor_id = :'VENDE' WHERE id = 'c1600000-0000-0000-0000-000000000001';
 
 -- 4. Nadie con sesión registra aperturas a mano; el equipo sí las ve
 SELECT set_config('request.jwt.claim.sub', :'VENDE', false);
@@ -51,7 +64,7 @@ DO $$ BEGIN
   INSERT INTO r (ok, txt) VALUES (FALSE, 'Un usuario no puede registrar aperturas');
 EXCEPTION WHEN insufficient_privilege THEN INSERT INTO r (ok, txt) VALUES (TRUE, 'Un usuario no puede registrar aperturas');
 END $$;
-INSERT INTO r (ok, txt) SELECT count(*) = 2, 'El vendedor ve las aperturas' FROM public.cotizacion_aperturas WHERE cotizacion_id = 'c1600000-0000-0000-0000-000000000001';
+INSERT INTO r (ok, txt) SELECT count(*) = 3, 'El vendedor ve las aperturas' FROM public.cotizacion_aperturas WHERE cotizacion_id = 'c1600000-0000-0000-0000-000000000001';
 RESET ROLE;
 
 SELECT CASE WHEN ok THEN 'OK   ' ELSE 'FALLA' END || ' ' || n || '. ' || txt FROM r ORDER BY n;
