@@ -18,6 +18,9 @@ import { ChipTrabajo } from '@/components/trabajos/TrabajoPanel';
 import AvisosCelular from '@/components/AvisosCelular';
 import { supabase } from '@/lib/supabase';
 import { anticiposService, type Anticipo } from '@/services/fase5';
+import { fondosService } from '@/services/fondos';
+import { faseAplicada } from '@/lib/fases';
+import type { Cuentas } from '@/lib/fondos';
 import type { Tarea } from '@/services/operacion';
 import { usePermisos } from '@/hooks/usePermisos';
 import { fechaLocal, formatCLP, formatDate, sumarDias } from '@/utils';
@@ -54,6 +57,8 @@ export default function MiDiaPage() {
   const [cobros, setCobros] = useState<Cobro[]>([]);
   const [tareas, setTareas] = useState<Tarea[]>([]);
   const [anticipos, setAnticipos] = useState<Anticipo[]>([]);
+  // Fase 19: el fondo de la persona reemplaza a los anticipos sueltos.
+  const [fondo, setFondo] = useState<Cuentas | null>(null);
   const [nombres, setNombres] = useState<Record<string, string>>({});
   const hoy = fechaLocal();
   // Mi día según el rol: lo comercial (solicitudes, cotizaciones esperando, agenda de todos) a quien
@@ -96,7 +101,10 @@ export default function MiDiaPage() {
     }
     supabase.from('tareas').select('*').eq('asignado_id', uid).in('estado', ['pendiente', 'en_progreso']).order('fecha_limite', { ascending: true, nullsFirst: false })
       .then(({ data }) => setTareas((data || []) as Tarea[]));
-    anticiposService.listar(uid).then(a => setAnticipos(a.filter(x => x.estado === 'entregado'))).catch(() => {});
+    faseAplicada(19).then(conFondos => {
+      if (conFondos) fondosService.situacion().then(setFondo).catch(() => setFondo(null));
+      else anticiposService.listar(uid).then(a => setAnticipos(a.filter(x => x.estado === 'entregado'))).catch(() => {});
+    });
   }, [perfil, hoy, puede, comercial]);
 
   const fila: React.CSSProperties = { display: 'flex', gap: 8, alignItems: 'flex-start', fontSize: '0.86rem', color: 'var(--text)', borderBottom: '1px solid var(--border2)', paddingBottom: 6, textDecoration: 'none' };
@@ -211,6 +219,13 @@ export default function MiDiaPage() {
             return enlace ? <Link key={t.id} href={enlace} style={fila}>{contenido}</Link> : <div key={t.id} style={fila}>{contenido}</div>;
           })}
         </Caja>
+        {fondo && (fondo.disponible > 0 || fondo.debemos > 0 || fondo.en_revision > 0) && (
+          <Caja titulo="Mi fondo" icono={<HandCoins size={15} />} href="/gastos">
+            <div style={fila}><span style={{ flex: 1 }}>Tienes para el día a día</span><b>{formatCLP(fondo.disponible)}</b></div>
+            {fondo.debemos > 0 && <div style={fila}><span style={{ flex: 1 }}>Te debemos (lo que pusiste)</span><b style={{ color: '#2563eb' }}>{formatCLP(fondo.debemos)}</b></div>}
+            {fondo.en_revision > 0 && <div style={fila}><span style={{ flex: 1, color: 'var(--danger)' }}>Tienes gastos observados: corrígelos</span><b>{formatCLP(fondo.en_revision)}</b></div>}
+          </Caja>
+        )}
         {anticipos.length > 0 && (
           <Caja titulo="Anticipos por rendir" icono={<HandCoins size={15} />} href="/gastos">
             {anticipos.map(a => (

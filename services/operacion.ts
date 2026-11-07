@@ -102,8 +102,11 @@ export const CATEGORIAS_GASTO: { clave: CategoriaGasto; nombre: string }[] = [
 export interface Gasto {
   id: string; fecha: string; monto: number; categoria: CategoriaGasto; descripcion: string | null; ot_id: string | null;
   usuario_id: string; boleta_path: string | null;
-  /** Fase 6: se rinde y queda «rendido»; quien paga lo marca «reembolsado». Los otros son de antes. */
-  estado: 'rendido' | 'reembolsado' | 'rechazado' | 'pendiente' | 'aprobado';
+  /** Fase 6: se rinde y queda «rendido»; quien paga lo marca «reembolsado». Fase 19: «observado» (con
+   *  motivo, hasta que la persona lo corrige). Los otros son de antes. */
+  estado: 'rendido' | 'reembolsado' | 'rechazado' | 'observado' | 'pendiente' | 'aprobado';
+  /** Fase 19: con qué se pagó (del fondo, mixto, de su bolsillo o la tarjeta de la empresa) y el reparto. */
+  pagado_con?: 'fondo' | 'mixto' | 'propio' | 'empresa' | null; monto_fondo?: number | null; monto_propio?: number | null; sin_boleta?: boolean;
   revisado_por: string | null; revisado_at: string | null; motivo_rechazo: string | null; created_at: string;
   anticipo_id?: string | null;
   /** Fase 7: el trabajo (cotización aprobada) o el proyecto al que va el gasto. */

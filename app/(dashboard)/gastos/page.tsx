@@ -5,12 +5,15 @@
  * Cada uno rinde sus gastos con la foto de la boleta, siempre en un trabajo (cotización
  * aprobada) o un proyecto: el gasto suma al costo real y se compara con lo cotizado. Lo
  * pagado de su bolsillo (sin anticipo) se le reembolsa: quien paga lo marca «Pagado».
+ * Con la fase 19 («Fondos y rendiciones»): cada persona tiene su fondo; los anticipos y
+ * «Rendiciones por pagar» pasan a «Mi fondo» y «Fondos del equipo», quien paga puede
+ * observar un gasto y cada uno descarga su rendición en PDF.
  */
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { useFase } from '@/lib/fases';
-import { Camera, Check, Plus, Trash2 } from 'lucide-react';
+import { Camera, Check, Pencil, Plus, Trash2 } from 'lucide-react';
 import PageHeader from '@/components/PageHeader';
 import FaltaSQL from '@/components/FaltaSQL';
 import NuevoGasto, { type DestinoGasto } from '@/components/gastos/NuevoGasto';
@@ -21,6 +24,10 @@ import {
 } from '@/services/operacion';
 import { vendedoresService } from '@/services/vendedores';
 import Anticipos from '@/components/gastos/Anticipos';
+import { FondosEquipo, LibroFondo, MiFondo } from '@/components/gastos/Fondos';
+import DescargarRendicion from '@/components/gastos/DescargarRendicion';
+import { fondosService, type CuentasDe } from '@/services/fondos';
+import type { Cuentas, MovimientoFondo } from '@/lib/fondos';
 import { anticiposService, folioProyecto, proyectosService, type Anticipo } from '@/services/fase5';
 import { usePermisos } from '@/hooks/usePermisos';
 import { useToast } from '@/hooks/useToast';
@@ -34,6 +41,7 @@ const ESTADOS: Record<Gasto['estado'], { nombre: string; color: string }> = {
   pendiente: { nombre: 'Rendido', color: '#2563eb' },
   aprobado: { nombre: 'Rendido', color: '#2563eb' },
   rechazado: { nombre: 'Rechazado', color: '#dc2626' },
+  observado: { nombre: 'Observado', color: '#dc2626' },
 };
 const categoria = (c: string) => CATEGORIAS_GASTO.find(x => x.clave === c)?.nombre || c;
 const destinoDe = (g: Gasto) => (g.cotizacion_id ? `cot:${g.cotizacion_id}` : g.proyecto_id ? `proy:${g.proyecto_id}` : g.ot_id ? `ot:${g.ot_id}` : '');
@@ -42,6 +50,8 @@ const porPagar = (g: Gasto) => ['rendido', 'aprobado', 'pendiente'].includes(g.e
 export default function GastosPage() {
   const { perfil, puede, puedeAlguno } = usePermisos();
   const fase15 = useFase(15);
+  // Fase 19: fondos por persona (las «Rendiciones 2.0» de TecApp).
+  const fondos = useFase(19);
   const { success, error: toastError } = useToast();
   const verTodos = puedeAlguno(['gastos.ver_todos', 'gastos.aprobar']);
   const paga = puede('gastos.aprobar');
@@ -57,6 +67,12 @@ export default function GastosPage() {
   const [destinoInicial, setDestinoInicial] = useState('');
   const [urlBoleta, setUrlBoleta] = useState<string | null>(null);
   const [anticipos, setAnticipos] = useState<Anticipo[]>([]);
+  const [misCuentas, setMisCuentas] = useState<Cuentas | null>(null);
+  const [equipoFondos, setEquipoFondos] = useState<CuentasDe[]>([]);
+  const [porConfirmar, setPorConfirmar] = useState<MovimientoFondo[]>([]);
+  const [libroDe, setLibroDe] = useState<string | null>(null);
+  const [pdfDe, setPdfDe] = useState<string | null>(null);
+  const [corrigiendo, setCorrigiendo] = useState<Gasto | null>(null);
 
   useEffect(() => {
     // /gastos?cotizacion=<id> o ?proyecto=<id> (desde un trabajo o un proyecto) abre el formulario con ese destino.
@@ -77,9 +93,14 @@ export default function GastosPage() {
         ...p.filter(x => !['terminado', 'cancelado'].includes(x.estado)).map(x => ({ valor: `proy:${x.id}`, etiqueta: `${folioProyecto(x.folio)} · ${x.nombre}`, grupo: 'Proyectos' as const })),
       ]));
       anticiposService.listar(verTodos ? null : perfil.id).then(setAnticipos).catch(() => setAnticipos([]));
+      if (fondos) {
+        fondosService.situacion().then(setMisCuentas).catch(() => setMisCuentas(null));
+        fondosService.movimientos(verTodos ? null : perfil.id).then(m => setPorConfirmar(m.filter(x => x.estado === 'por_confirmar'))).catch(() => setPorConfirmar([]));
+        if (verTodos) fondosService.equipo().then(setEquipoFondos).catch(() => setEquipoFondos([]));
+      }
     } catch (err) { if (faltaFase2(err)) setFalta(true); else toastError('No se pudieron cargar las rendiciones: ' + (err instanceof Error ? err.message : '')); }
     finally { setCargando(false); }
-  }, [perfil, verTodos, toastError]);
+  }, [perfil, verTodos, toastError, fondos]);
   useEffect(() => { cargar(); }, [cargar]);
 
   const lista = useMemo(() => gastos
@@ -105,6 +126,13 @@ export default function GastosPage() {
     catch (e) { toastError(e instanceof Error ? e.message : 'No se pudo actualizar'); }
   };
 
+  const observar = async (g: Gasto) => {
+    const motivo = prompt(`¿Qué hay que corregir en «${g.descripcion || categoria(g.categoria)}» (${formatCLP(Number(g.monto))})?`);
+    if (!motivo?.trim()) return;
+    try { await gastosService.actualizar(g.id, { estado: 'observado', motivo_rechazo: motivo.trim() }); success('Gasto observado: le llega el aviso'); cargar(); }
+    catch (e) { toastError(e instanceof Error ? e.message : 'No se pudo observar'); }
+  };
+
   const eliminar = async (g: Gasto) => {
     if (!confirm('¿Eliminar este gasto?')) return;
     try { await gastosService.eliminar(g.id); if (g.boleta_path) archivosOT.eliminar(g.boleta_path); cargar(); }
@@ -122,12 +150,17 @@ export default function GastosPage() {
     <div className="anim-in">
       {nuevo && <NuevoGasto destinos={destinos} destinoInicial={destinoInicial} anticipos={anticipos.filter(a => a.usuario_id === perfil?.id)}
         onClose={() => setNuevo(false)} onListo={() => { setNuevo(false); cargar(); }} />}
+      {corrigiendo && <NuevoGasto destinos={destinos} destinoInicial="" anticipos={[]} gasto={corrigiendo}
+        onClose={() => setCorrigiendo(null)} onListo={() => { setCorrigiendo(null); cargar(); }} />}
+      {libroDe && <LibroFondo uid={libroDe} nombre={libroDe === perfil?.id ? 'tú' : equipo[libroDe]?.nombre || 'Usuario'} paga={paga}
+        onCerrar={() => setLibroDe(null)} onCambio={cargar} />}
+      {pdfDe && <DescargarRendicion uid={pdfDe} nombre={equipo[pdfDe]?.nombre || perfil?.nombre || 'Usuario'} onCerrar={() => setPdfDe(null)} />}
       {urlBoleta && (
         <div className="modal-overlay" onClick={() => setUrlBoleta(null)}>
           <img src={urlBoleta} alt="Boleta" style={{ maxWidth: '92vw', maxHeight: '88vh', borderRadius: 8 }} />
         </div>
       )}
-      <PageHeader eyebrow="Finanzas" title="Gastos y anticipos" subtitle="Rinde cada gasto con su boleta en el trabajo o el proyecto: suma al costo real y se compara con lo cotizado."
+      <PageHeader eyebrow="Finanzas" title={fondos ? 'Fondos y rendiciones' : 'Gastos y anticipos'} subtitle="Rinde cada gasto con su boleta en el trabajo o el proyecto: suma al costo real y se compara con lo cotizado."
         actions={puede('gastos.crear') ? <button className="btn btn-primary" onClick={() => { setDestinoInicial(''); setNuevo(true); }}><Plus size={14} /> Rendir gasto</button> : null} />
       {fase15 && (puede('compras.gestionar') || puede('compras.ver')) && (
         <p style={{ margin: '-4px 0 12px', fontSize: '0.8rem', color: 'var(--muted)' }}>
@@ -136,13 +169,28 @@ export default function GastosPage() {
 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 160px), 1fr))', gap: 8, marginBottom: 12 }}>
         <div className="kpi-card"><p className="label-muted">Rendí este mes</p><p className="kpi-value">{formatCLP(suma(mios.filter(g => g.fecha.startsWith(mes))))}</p></div>
-        <div className="kpi-card"><p className="label-muted">Me deben</p><p className="kpi-value" style={{ color: '#2563eb' }}>{formatCLP(suma(mios.filter(porPagar)))}</p></div>
-        {paga && <div className="kpi-card"><p className="label-muted">Por pagar a todos</p><p className="kpi-value">{formatCLP(rendicion.reduce((s, [, m]) => s + m, 0))}</p></div>}
+        {fondos && misCuentas ? <>
+          <div className="kpi-card"><p className="label-muted">En mi fondo</p><p className="kpi-value">{formatCLP(misCuentas.disponible)}</p></div>
+          <div className="kpi-card"><p className="label-muted">Me deben</p><p className="kpi-value" style={{ color: '#2563eb' }}>{formatCLP(misCuentas.debemos)}</p></div>
+          {verTodos && <div className="kpi-card"><p className="label-muted">Por pagar a todos</p><p className="kpi-value">{formatCLP(equipoFondos.reduce((t, f) => t + f.debemos, 0))}</p></div>}
+        </> : <>
+          <div className="kpi-card"><p className="label-muted">Me deben</p><p className="kpi-value" style={{ color: '#2563eb' }}>{formatCLP(suma(mios.filter(porPagar)))}</p></div>
+          {paga && <div className="kpi-card"><p className="label-muted">Por pagar a todos</p><p className="kpi-value">{formatCLP(rendicion.reduce((s, [, m]) => s + m, 0))}</p></div>}
+        </>}
       </div>
 
-      <Anticipos anticipos={anticipos} equipo={equipo} destinos={destinos} aprueba={paga} yo={perfil?.id} onCambio={cargar} />
+      {fondos ? <>
+        {perfil && misCuentas && (puede('gastos.crear') || misCuentas.disponible > 0 || misCuentas.debemos > 0) && (
+          <MiFondo uid={perfil.id} cuentas={misCuentas} porConfirmar={porConfirmar.filter(m => m.usuario_id === perfil.id)}
+            onCambio={cargar} onLibro={() => setLibroDe(perfil.id)} onPdf={() => setPdfDe(perfil.id)} />
+        )}
+        {verTodos && (
+          <FondosEquipo filas={equipoFondos} equipo={equipo} porConfirmar={porConfirmar} paga={paga} yo={perfil?.id}
+            onCambio={cargar} onLibro={setLibroDe} onPdf={setPdfDe} />
+        )}
+      </> : <Anticipos anticipos={anticipos} equipo={equipo} destinos={destinos} aprueba={paga} yo={perfil?.id} onCambio={cargar} />}
 
-      {paga && rendicion.length > 0 && (
+      {!fondos && paga && rendicion.length > 0 && (
         <div className="panel-y" style={{ marginBottom: 12 }}>
           <p className="section-label" style={{ margin: 0, padding: '0.8rem 1rem', borderBottom: '1px solid var(--border2)' }}>Rendiciones por pagar</p>
           {rendicion.map(([uid, monto]) => (
@@ -182,13 +230,25 @@ export default function GastosPage() {
                   {g.cotizacion_id ? <> · <Link href={`/cotizador?edit=${g.cotizacion_id}`}>IV-{String(g.cotizaciones?.folio ?? '').padStart(4, '0')}</Link></>
                     : g.proyecto_id ? <> · <Link href={`/proyectos/${g.proyecto_id}`}>{folioProyecto(g.proyectos?.folio ?? 0)}</Link></>
                     : g.ot_id ? <> · {folioOT(g.ordenes_trabajo?.folio)}</> : ''}
-                  {g.anticipo_id ? ' · contra anticipo' : ''}
+                  {g.pagado_con === 'empresa' ? ' · tarjeta de la empresa'
+                    : g.pagado_con === 'mixto' ? ` · ${formatCLP(Number(g.monto_fondo) || 0)} del fondo y ${formatCLP(Number(g.monto_propio) || 0)} de su bolsillo`
+                    : g.pagado_con === 'propio' ? ' · de su bolsillo' : g.pagado_con === 'fondo' ? ' · del fondo'
+                    : g.anticipo_id ? ' · contra anticipo' : ''}
+                  {g.sin_boleta ? ' · sin boleta' : ''}
                 </span>
+                {g.estado === 'observado' && g.motivo_rechazo && <span style={{ display: 'block', fontSize: '0.78rem', color: 'var(--danger)' }}>Observado: {g.motivo_rechazo}</span>}
               </span>
               {g.boleta_path && <button className="btn btn-ghost btn-sm" onClick={() => verBoleta(g.boleta_path!)}><Camera size={13} /> Boleta</button>}
               <strong style={{ fontVariantNumeric: 'tabular-nums', color: 'var(--text)' }}>{formatCLP(Number(g.monto))}</strong>
               <span className="badge" style={{ background: ESTADOS[g.estado].color, color: '#fff', fontSize: '0.7rem' }}>{ESTADOS[g.estado].nombre}</span>
-              {g.usuario_id === perfil?.id && g.estado === 'rendido' && <button className="btn btn-ghost btn-sm" onClick={() => eliminar(g)} aria-label="Eliminar"><Trash2 size={13} /></button>}
+              {fondos && g.usuario_id === perfil?.id && ['rendido', 'observado'].includes(g.estado) && (
+                <button className={g.estado === 'observado' ? 'btn btn-primary btn-sm' : 'btn btn-ghost btn-sm'} onClick={() => setCorrigiendo(g)}
+                  aria-label="Corregir"><Pencil size={13} />{g.estado === 'observado' ? ' Corregir' : ''}</button>
+              )}
+              {fondos && paga && g.estado === 'rendido' && g.usuario_id !== perfil?.id && (
+                <button className="btn btn-ghost btn-sm" onClick={() => observar(g)} title="Pedir que lo corrija: no se paga hasta entonces">Observar</button>
+              )}
+              {g.usuario_id === perfil?.id && ['rendido', 'observado'].includes(g.estado) && <button className="btn btn-ghost btn-sm" onClick={() => eliminar(g)} aria-label="Eliminar"><Trash2 size={13} /></button>}
             </div>
           ))}
         <div style={{ padding: '0.75rem 1rem', borderTop: '1px solid var(--border2)', color: 'var(--muted)', fontSize: '0.78rem' }}>{lista.length} gastos · {formatCLP(suma(lista))}</div>
