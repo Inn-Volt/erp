@@ -1,0 +1,15 @@
+node_modules
+.next
+.netlify
+.git
+.claude
+.env*
+!.env.example
+ops/oracle/.env
+ops/oracle/datos
+ops/oracle/respaldos
+docs/marca
+tests
+*.zip
+*.pdf
+*.log
