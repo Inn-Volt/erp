@@ -1,0 +1,105 @@
+# Vigía del servidor de InnVolt en Oracle (solo InnVolt: VSX tiene el suyo, en su repositorio).
+# La cuenta es Always Free y Oracle puede detener una instancia gratis que pasa 7 días casi sin uso.
+# Cada 6 horas revisa el servidor y, si está detenido, lo enciende y abre un issue para avisar. Al
+# arrancar, Docker levanta la ERP sola. (Cada 6 h y no cada hora: los minutos gratis de GitHub se
+# comparten con el vigía de VSX y las pruebas; así gasta ~120 minutos al mes.)
+#
+# Usa un usuario de Oracle que solo puede ver y encender las instancias del compartimento «innvolt»
+# (usuario vigia-innvolt, grupo vigias-innvolt, política vigia-innvolt). Ver ops/oracle/README.md.
+#   Secreto:   OCI_VIGIA_CLAVE (clave privada de la API del usuario vigia-innvolt)
+#   Variables: OCI_VIGIA_USUARIO, OCI_VIGIA_HUELLA, OCI_TENANCY, OCI_INSTANCIA, OCI_REGION
+#   Pausarlo (ej. para apagar el servidor a propósito): variable VIGIA_PAUSADO = si
+# Mientras no estén las variables (antes de migrar), no hace nada.
+name: Vigía del servidor (Oracle)
+
+on:
+  schedule:
+    - cron: "23 */6 * * *"
+  workflow_dispatch:
+    inputs:
+      probar_permiso:
+        description: "Comprobar que el usuario del vigía puede encender el servidor"
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+  issues: write
+
+concurrency:
+  group: vigia-oracle
+  cancel-in-progress: false
+
+jobs:
+  vigilar:
+    if: vars.OCI_INSTANCIA != '' && vars.VIGIA_PAUSADO != 'si'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Revisar el servidor y encenderlo si está detenido
+        id: revisar
+        env:
+          OCI_CLAVE: ${{ secrets.OCI_VIGIA_CLAVE }}
+          OCI_USUARIO: ${{ vars.OCI_VIGIA_USUARIO }}
+          OCI_HUELLA: ${{ vars.OCI_VIGIA_HUELLA }}
+          OCI_TENANCY: ${{ vars.OCI_TENANCY }}
+          OCI_REGION: ${{ vars.OCI_REGION }}
+          OCI_INSTANCIA: ${{ vars.OCI_INSTANCIA }}
+          PROBAR_PERMISO: ${{ inputs.probar_permiso || false }}
+        run: |
+          pip install --quiet --disable-pip-version-check oci
+          python - <<'PY'
+          import os
+          import oci
+
+          config = {
+              "user": os.environ["OCI_USUARIO"],
+              "fingerprint": os.environ["OCI_HUELLA"],
+              "tenancy": os.environ["OCI_TENANCY"],
+              "region": os.environ["OCI_REGION"],
+              "key_content": os.environ["OCI_CLAVE"],
+          }
+          oci.config.validate_config(config)
+          compute = oci.core.ComputeClient(config)
+          instancia = os.environ["OCI_INSTANCIA"]
+
+          estado = compute.get_instance(instancia).data.lifecycle_state
+          print(f"Estado del servidor de InnVolt: {estado}")
+          encendido = "no"
+          if estado == "STOPPED":
+              compute.instance_action(instancia, "START")
+              print("Estaba detenido: se pidió encenderlo. En un par de minutos la ERP responde sola.")
+              encendido = "si"
+          elif estado == "TERMINATED":
+              raise SystemExit("La instancia fue eliminada: el vigía no puede hacer nada.")
+          elif os.environ.get("PROBAR_PERMISO") == "true" and estado == "RUNNING":
+              # Encender uno ya encendido no hace nada: sirve para comprobar el permiso (sin él, 404).
+              try:
+                  compute.instance_action(instancia, "START")
+                  print("Permiso de encender: correcto.")
+              except oci.exceptions.ServiceError as e:
+                  if e.status == 409:
+                      print(f"Permiso de encender: correcto (Oracle respondió {e.code}: ya está encendido).")
+                  else:
+                      raise
+          with open(os.environ["GITHUB_OUTPUT"], "a") as salida:
+              salida.write(f"estado={estado}\nencendido={encendido}\n")
+          PY
+
+      - name: Avisar con un issue
+        if: steps.revisar.outputs.encendido == 'si'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          URL_ERP: ${{ vars.URL_ERP }}
+        run: |
+          gh issue create --repo "$GITHUB_REPOSITORY" \
+            --title "Oracle detuvo el servidor de la ERP y el vigía lo encendió ($(date -u +%Y-%m-%d))" \
+            --body "El servidor estaba **detenido** (probablemente Oracle lo detuvo por poco uso, cuenta Always Free) y el vigía pidió encenderlo a las $(date -u +%H:%M) UTC.
+
+          Revisa en unos minutos que la ERP responda (${URL_ERP:-la dirección de la ERP}). Si no, enciende la instancia desde la consola de Oracle (compartimento innvolt → Compute → Instances → innvolt-erp → Start).
+
+          Ejecución: $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"

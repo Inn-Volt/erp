@@ -1,5 +1,9 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
+  // En el servidor propio (Oracle, ops/oracle) la app corre sola con `node server.js`: se arma
+  // «standalone». En Netlify no se define y todo sigue como siempre.
+  ...(process.env.NEXT_OUTPUT === 'standalone' ? { output: 'standalone' as const } : {}),
+
   // Permitir acceso desde la red local en desarrollo (celular por IP).
   // Sin la IP correcta aquí, Next 16 bloquea /_next y el móvil queda cargando.
   allowedDevOrigins: [

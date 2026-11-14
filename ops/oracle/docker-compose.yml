@@ -1,0 +1,217 @@
+# La ERP de InnVolt en su propio servidor (Oracle Cloud, región Santiago, plan gratuito).
+# Lo mismo que hoy da Supabase, autoalojado con sus imágenes oficiales, más la app y el HTTPS:
+#   db (PostgreSQL de Supabase, con pg_cron y pg_net) · auth (login) · rest (API) · storage (archivos)
+#   · realtime (la campanita en vivo) · app (Next.js) · caddy (HTTPS y una sola dirección para todo).
+# Todo se configura en ops/oracle/.env (lo crea generar-env.sh). Solo InnVolt: nada de VSX aquí.
+#
+#   docker compose -f ops/oracle/docker-compose.yml --env-file ops/oracle/.env up -d
+
+name: innvolt
+
+x-db-url: &db-pass ${POSTGRES_PASSWORD:?Falta POSTGRES_PASSWORD en ops/oracle/.env}
+
+services:
+  db:
+    image: supabase/postgres:17.6.1.139
+    restart: unless-stopped
+    environment:
+      POSTGRES_HOST: /var/run/postgresql
+      PGPORT: 5432
+      POSTGRES_PORT: 5432
+      PGPASSWORD: *db-pass
+      POSTGRES_PASSWORD: *db-pass
+      PGDATABASE: postgres
+      POSTGRES_DB: postgres
+      JWT_EXP: 3600
+    command:
+      - postgres
+      - -c
+      - config_file=/etc/postgresql/postgresql.conf
+      - -c
+      - log_min_messages=fatal
+      - -c
+      - shared_buffers=${PG_SHARED_BUFFERS:-1GB}
+      - -c
+      - effective_cache_size=${PG_EFFECTIVE_CACHE:-4GB}
+      - -c
+      - work_mem=16MB
+    volumes:
+      - ${DATOS:-./datos}/db:/var/lib/postgresql/data
+      - ./db/roles.sql:/docker-entrypoint-initdb.d/init-scripts/99-roles.sql:ro
+      - ./db/jwt.sql:/docker-entrypoint-initdb.d/init-scripts/99-jwt.sql:ro
+      - ./db/realtime.sql:/docker-entrypoint-initdb.d/migrations/99-realtime.sql:ro
+      - db-config:/etc/postgresql-custom
+    # Solo para un túnel SSH (DBeaver, pgAdmin): nunca abierto a internet.
+    ports:
+      - "127.0.0.1:${PUERTO_DB:-5432}:5432"
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "postgres", "-h", "localhost"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  auth:
+    image: supabase/gotrue:v2.191.0
+    restart: unless-stopped
+    depends_on:
+      db: { condition: service_healthy }
+    environment:
+      GOTRUE_API_HOST: 0.0.0.0
+      GOTRUE_API_PORT: 9999
+      API_EXTERNAL_URL: ${URL_PUBLICA}/auth/v1
+      GOTRUE_DB_DRIVER: postgres
+      GOTRUE_DB_DATABASE_URL: postgres://supabase_auth_admin:${POSTGRES_PASSWORD}@db:5432/postgres
+      GOTRUE_SITE_URL: ${URL_PUBLICA}
+      GOTRUE_URI_ALLOW_LIST: ${URL_PUBLICA}/**
+      # Las cuentas las crea la ERP (Usuarios → Invitar); nadie se registra solo.
+      GOTRUE_DISABLE_SIGNUP: "true"
+      GOTRUE_JWT_ADMIN_ROLES: service_role
+      GOTRUE_JWT_AUD: authenticated
+      GOTRUE_JWT_DEFAULT_GROUP_NAME: authenticated
+      GOTRUE_JWT_EXP: 3600
+      GOTRUE_JWT_SECRET: ${JWT_SECRET}
+      GOTRUE_JWT_ISSUER: ${URL_PUBLICA}/auth/v1
+      GOTRUE_EXTERNAL_EMAIL_ENABLED: "true"
+      GOTRUE_MAILER_AUTOCONFIRM: "true"
+      # Correo para «Olvidé mi contraseña» (Gmail con clave de aplicación, o Resend). Vacío: no se envía.
+      GOTRUE_SMTP_ADMIN_EMAIL: ${SMTP_REMITENTE:-}
+      GOTRUE_SMTP_HOST: ${SMTP_HOST:-}
+      GOTRUE_SMTP_PORT: ${SMTP_PORT:-465}
+      GOTRUE_SMTP_USER: ${SMTP_USUARIO:-}
+      GOTRUE_SMTP_PASS: ${SMTP_CLAVE:-}
+      GOTRUE_SMTP_SENDER_NAME: InnVolt
+      GOTRUE_MAILER_URLPATHS_INVITE: /auth/v1/verify
+      GOTRUE_MAILER_URLPATHS_CONFIRMATION: /auth/v1/verify
+      GOTRUE_MAILER_URLPATHS_RECOVERY: /auth/v1/verify
+      GOTRUE_MAILER_URLPATHS_EMAIL_CHANGE: /auth/v1/verify
+      GOTRUE_EXTERNAL_PHONE_ENABLED: "false"
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:9999/health"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  rest:
+    image: postgrest/postgrest:v14.13
+    restart: unless-stopped
+    depends_on:
+      db: { condition: service_healthy }
+    environment:
+      PGRST_DB_URI: postgres://authenticator:${POSTGRES_PASSWORD}@db:5432/postgres
+      PGRST_DB_SCHEMAS: public
+      PGRST_DB_MAX_ROWS: 1000
+      PGRST_DB_EXTRA_SEARCH_PATH: public,extensions
+      PGRST_DB_ANON_ROLE: anon
+      PGRST_JWT_SECRET: ${JWT_SECRET}
+      PGRST_DB_USE_LEGACY_GUCS: "false"
+      PGRST_APP_SETTINGS_JWT_SECRET: ${JWT_SECRET}
+      PGRST_APP_SETTINGS_JWT_EXP: 3600
+
+  realtime:
+    image: supabase/realtime:v2.148.3
+    restart: unless-stopped
+    depends_on:
+      db: { condition: service_healthy }
+    # El «inquilino» se reconoce por el nombre del servidor: realtime-dev (como en el oficial).
+    hostname: realtime-dev.supabase-realtime
+    environment:
+      PORT: 4000
+      DB_HOST: db
+      DB_PORT: 5432
+      DB_USER: supabase_admin
+      DB_PASSWORD: ${POSTGRES_PASSWORD}
+      DB_NAME: postgres
+      DB_AFTER_CONNECT_QUERY: SET search_path TO _realtime
+      DB_ENC_KEY: supabaserealtime
+      API_JWT_SECRET: ${JWT_SECRET}
+      SECRET_KEY_BASE: ${SECRET_KEY_BASE}
+      METRICS_JWT_SECRET: ${JWT_SECRET}
+      ERL_AFLAGS: -proto_dist inet_tcp
+      DNS_NODES: "''"
+      RLIMIT_NOFILE: "10000"
+      APP_NAME: realtime
+      SEED_SELF_HOST: "true"
+      RUN_JANITOR: "true"
+      DISABLE_HEALTHCHECK_LOGGING: "true"
+
+  storage:
+    image: supabase/storage-api:v1.89.12
+    restart: unless-stopped
+    depends_on:
+      db: { condition: service_healthy }
+      rest: { condition: service_started }
+    environment:
+      ANON_KEY: ${ANON_KEY}
+      SERVICE_KEY: ${SERVICE_ROLE_KEY}
+      POSTGREST_URL: http://rest:3000
+      AUTH_JWT_SECRET: ${JWT_SECRET}
+      DATABASE_URL: postgres://supabase_storage_admin:${POSTGRES_PASSWORD}@db:5432/postgres
+      STORAGE_PUBLIC_URL: ${URL_PUBLICA}
+      REQUEST_ALLOW_X_FORWARDED_PATH: "true"
+      FILE_SIZE_LIMIT: 52428800
+      STORAGE_BACKEND: file
+      GLOBAL_S3_BUCKET: stub
+      FILE_STORAGE_BACKEND_PATH: /var/lib/storage
+      TENANT_ID: stub
+      REGION: local
+      ENABLE_IMAGE_TRANSFORMATION: "false"
+    volumes:
+      - ${DATOS:-./datos}/storage:/var/lib/storage
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://127.0.0.1:5000/status"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  app:
+    build:
+      context: ../..
+      dockerfile: Dockerfile
+      args:
+        NEXT_PUBLIC_SUPABASE_URL: ${URL_PUBLICA}
+        NEXT_PUBLIC_SUPABASE_ANON_KEY: ${ANON_KEY}
+        NEXT_PUBLIC_VAPID_PUBLIC_KEY: ${NEXT_PUBLIC_VAPID_PUBLIC_KEY:-}
+    image: innvolt-erp:actual
+    restart: unless-stopped
+    depends_on:
+      auth: { condition: service_healthy }
+      storage: { condition: service_healthy }
+    environment:
+      NEXT_PUBLIC_SUPABASE_URL: ${URL_PUBLICA}
+      NEXT_PUBLIC_SUPABASE_ANON_KEY: ${ANON_KEY}
+      SUPABASE_SERVICE_ROLE_KEY: ${SERVICE_ROLE_KEY}
+      URL: ${URL_PUBLICA}
+      PUSH_SECRET: ${PUSH_SECRET:-}
+      NEXT_PUBLIC_VAPID_PUBLIC_KEY: ${NEXT_PUBLIC_VAPID_PUBLIC_KEY:-}
+      VAPID_PRIVATE_KEY: ${VAPID_PRIVATE_KEY:-}
+      VAPID_SUBJECT: ${VAPID_SUBJECT:-}
+      RESEND_API_KEY: ${RESEND_API_KEY:-}
+      CORREO_REMITENTE: ${CORREO_REMITENTE:-}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+      GROQ_API_KEY: ${GROQ_API_KEY:-}
+      IA_PROVIDER: ${IA_PROVIDER:-}
+      IA_MODEL: ${IA_MODEL:-}
+      GEMINI_MODEL: ${GEMINI_MODEL:-}
+      GROQ_MODEL: ${GROQ_MODEL:-}
+      GOOGLE_SHEET_ID: ${GOOGLE_SHEET_ID:-}
+
+  caddy:
+    image: caddy:2.10
+    restart: unless-stopped
+    depends_on: [app, auth, rest, storage, realtime]
+    environment:
+      CADDY_SITIO: ${CADDY_SITIO}
+    ports:
+      - "${PUBLICAR_HTTP:-80:80}"
+      - "${PUBLICAR_HTTPS:-443:443}"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - ${DATOS:-./datos}/caddy:/data
+    networks:
+      default:
+        # La app (en el servidor) llama a la misma dirección pública: llega directo a Caddy.
+        aliases: ["${DOMINIO}"]
+
+volumes:
+  db-config:

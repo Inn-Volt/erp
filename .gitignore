@@ -38,3 +38,8 @@ next-env.d.ts
 
 # claude code local settings
 .claude/settings.local.json
+
+# Servidor propio (ops/oracle): claves, datos y respaldos nunca van al repositorio.
+ops/oracle/.env
+ops/oracle/datos/
+ops/oracle/respaldos/

@@ -1,0 +1,35 @@
+# Una sola dirección para todo, como la de Supabase: /auth/v1, /rest/v1, /storage/v1 y
+# /realtime/v1 van a cada servicio; lo demás, a la app. Con un dominio, Caddy saca el certificado
+# HTTPS solo (Let's Encrypt) y lo renueva.
+{$CADDY_SITIO} {
+	encode zstd gzip
+
+	handle_path /auth/v1/* {
+		reverse_proxy auth:9999
+	}
+	handle_path /rest/v1/* {
+		reverse_proxy rest:3000
+	}
+	handle_path /storage/v1/* {
+		reverse_proxy storage:5000 {
+			header_up X-Forwarded-Prefix /storage/v1
+		}
+	}
+	# La campanita en vivo: /realtime/v1/websocket → /socket/websocket del servicio (como el oficial).
+	handle_path /realtime/v1/* {
+		rewrite * /socket{uri}
+		reverse_proxy realtime:4000 {
+			header_up Host realtime-dev.supabase-realtime
+		}
+	}
+	handle {
+		reverse_proxy app:3000
+	}
+
+	header {
+		Strict-Transport-Security "max-age=31536000"
+		X-Content-Type-Options nosniff
+		Referrer-Policy strict-origin-when-cross-origin
+		-Server
+	}
+}
