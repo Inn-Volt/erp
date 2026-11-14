@@ -1,0 +1,7 @@
+# Archivos que corren en el servidor Linux (ops/oracle): siempre con saltos de línea LF, también
+# en una copia de Windows (un .sh con CRLF falla en Ubuntu).
+*.sh text eol=lf
+*.sql text eol=lf
+Dockerfile text eol=lf
+Caddyfile text eol=lf
+ops/oracle/** text eol=lf
