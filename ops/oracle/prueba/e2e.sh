@@ -83,7 +83,11 @@ fin
 
 grupo "3 · Migrar desde el origen y verificar"
 docker network connect --alias origen-db innvolt_default origen-db-1 || falla "No se pudo conectar la base del origen"
-docker network connect --alias origen-caddy innvolt_default origen-caddy-1 || falla "No se pudo conectar el Caddy del origen"
+# El Caddy del origen no se conecta directo: en dos redes vería dos «storage» (el suyo y el del
+# servidor nuevo). Un relevo, que lo busca por su nombre único, lo publica en la red nueva.
+docker run -d --name origen-relevo --network origen_default caddy:2.10 \
+  caddy reverse-proxy --from :9088 --to origen-caddy-1:9088 >/dev/null || falla "No partió el relevo del origen"
+docker network connect --alias origen-caddy innvolt_default origen-relevo || falla "No se pudo conectar el relevo del origen"
 echo "Origen conectado a la red del servidor nuevo."
 ORIGEN="postgresql://postgres:$(val POSTGRES_PASSWORD "$OR/ops/oracle/.env")@origen-db:5432/postgres"
 printf 'MIGRAR\n%s\n%s\n%s\n' "$ORIGEN" "http://origen-caddy:9088" "$(val SERVICE_ROLE_KEY "$OR/ops/oracle/.env")" \
