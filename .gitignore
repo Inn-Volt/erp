@@ -41,5 +41,6 @@ next-env.d.ts
 
 # Servidor propio (ops/oracle): claves, datos y respaldos nunca van al repositorio.
 ops/oracle/.env
+ops/oracle/.env.*
 ops/oracle/datos/
 ops/oracle/respaldos/

@@ -63,6 +63,9 @@ Luego, en la red → **Security Lists → Default Security List for innvolt-vcn 
 - **Para probar:** `IP-CON-GUIONES.sslip.io`. Por ejemplo, con la IP `152.67.10.20` es
   `152-67-10-20.sslip.io`. Funciona sin configurar nada.
 - **Definitiva:** un registro `A` en el DNS de innvolt.cl, por ejemplo `erp` → la IP del servidor.
+  Si es una dirección que hoy nadie usa, conviene ensayar directo en ella. Si es la misma que hoy
+  usa la ERP en Netlify, se ensaya con `sslip.io` y se cambia el día del cambio
+  (`cambiar-direccion.sh`, sección 5).
 
 ## 2. Preparar el servidor (unos 15 minutos)
 
@@ -85,7 +88,13 @@ ssh -i "C:\ruta\clave.key" -t ubuntu@IP "sudo bash /tmp/preparar-servidor.sh erp
 ## 3. Completar las claves de Netlify y levantar la ERP
 
 Copia desde Netlify (*Site configuration → Environment variables*) lo que pide `ops/oracle/.env`:
-avisos (VAPID, PUSH_SECRET), correo (Resend), IA y Google Sheet.
+avisos (VAPID, PUSH_SECRET), correo (Resend), IA y Google Sheet. Las de Supabase **no**: el servidor
+tiene las suyas.
+
+Para «Olvidé mi contraseña» completa también `SMTP_*`. Con Resend es la misma clave:
+`SMTP_HOST=smtp.resend.com`, `SMTP_USUARIO=resend`, `SMTP_CLAVE=` (la `RESEND_API_KEY`) y
+`SMTP_REMITENTE=` (el mismo correo de `CORREO_REMITENTE`). Sin esto, la ERP funciona igual y la
+contraseña se puede reponer con el enlace que genera **Usuarios**.
 
 ```bash
 sudo -u innvolt nano /opt/innvolt/erp/ops/oracle/.env
@@ -98,21 +107,35 @@ sudo -u innvolt bash /opt/innvolt/erp/ops/oracle/actualizar.sh      # la primera
 sudo -u innvolt bash /opt/innvolt/erp/ops/oracle/migrar-desde-supabase.sh
 ```
 
-Pide, sin guardarlos:
+Pide al comienzo, sin guardarlos:
 - la conexión de la base: **Supabase → Connect → Session pooler**;
 - la **URL del proyecto** y la **service_role key** (*Project Settings → API*).
 
-Copia todas las tablas, las cuentas con sus mismas contraseñas y los archivos. Supabase no se toca:
-queda de respaldo. Después:
-1. Entra con tu correo y tu misma contraseña.
-2. En **Configuración → Avisos al celular**, pulsa «Configurar».
-3. Revisa una cotización, su PDF y una boleta.
+Copia todas las tablas, las cuentas con sus mismas contraseñas y los archivos, y deja apuntando a este
+servidor lo que en los datos apuntaba a Supabase o a Netlify (el logo de cada empresa y la dirección
+de los avisos al celular). Supabase no se toca: queda de respaldo. Se puede repetir: cada vez
+reemplaza todo por lo que haya en Supabase en ese momento.
 
-## 5. El cambio definitivo
-1. Apunta la dirección de la ERP a la IP de Oracle.
-2. Avisa al equipo que vuelva a iniciar sesión.
-3. Durante 2 a 4 semanas deja Supabase como estaba. Luego se puede pausar o borrar.
-4. En Netlify, apaga los despliegues automáticos (*Build settings → Stop builds*).
+**Primero un ensayo** (con la dirección `sslip.io`, mientras el equipo sigue en la ERP de siempre):
+1. Entra con tu correo y tu misma contraseña.
+2. Revisa una cotización, su PDF (con el logo), una boleta, la campanita y un aviso al celular.
+3. Lo que se haga en el ensayo se pierde el día del cambio: es solo para probar.
+
+## 5. El cambio definitivo (unos 30 minutos, fuera del horario de trabajo)
+1. Avisa al equipo que no use la ERP durante ese rato.
+2. Vuelve a correr `migrar-desde-supabase.sh`: trae los datos de ese momento.
+3. La dirección:
+   - **Si el ensayo ya fue en la dirección definitiva** (una nueva, como `erp.innvolt.cl`, que nadie
+     usaba): no hay nada más que cambiar.
+   - **Si el ensayo fue con `sslip.io`:** apunta el DNS de la dirección definitiva a la IP de Oracle y
+     después corre `sudo -u innvolt bash /opt/innvolt/erp/ops/oracle/cambiar-direccion.sh erp.innvolt.cl`
+     (cambia la dirección sin tocar claves ni datos y saca el certificado). Si esa dirección hoy la
+     usa Netlify, baja el TTL del registro a 5 minutos el día anterior, para que el cambio se note rápido.
+4. Todos vuelven a iniciar sesión. Si la dirección es distinta a la de antes, cada persona instala la
+   app de nuevo en el celular y activa los avisos (una vez). Con la misma dirección, no hace falta.
+5. En Netlify, apaga los despliegues automáticos (*Build settings → Stop builds*).
+6. Durante 2 a 4 semanas deja Supabase como estaba: para volver atrás basta con usar de nuevo la
+   dirección de Netlify (lo hecho en Oracle mientras tanto no vuelve solo). Luego se puede pausar o borrar.
 
 ## 6. Respaldos fuera del servidor (gratis)
 El cron ya guarda cada día, a las 03:30, los datos y los archivos (7 días en el servidor). Para tener
@@ -146,6 +169,9 @@ seguridad: un usuario que **solo puede ver y encender** el servidor de InnVolt.
 - **Después de cada cambio:** `sudo -u innvolt bash /opt/innvolt/erp/ops/oracle/actualizar.sh`.
 - **Un SQL nuevo** (lo que antes era pegarlo en Supabase):
   `sudo -u innvolt bash /opt/innvolt/erp/ops/oracle/migraciones.sh supabase_faseNN_x.sql`.
+- **Cambiar la dirección de la ERP:**
+  `sudo -u innvolt bash /opt/innvolt/erp/ops/oracle/cambiar-direccion.sh nueva.innvolt.cl`
+  (con el DNS de la nueva ya apuntando al servidor).
 - **Ver qué pasa:** `cd /opt/innvolt/erp && sudo -u innvolt docker compose -f ops/oracle/docker-compose.yml --env-file ops/oracle/.env logs -f app`.
 - **Ver la base con DBeaver o pgAdmin:** túnel SSH
   `ssh -i clave.key -L 5432:127.0.0.1:5432 ubuntu@IP` y conectar a `localhost:5432`, usuario

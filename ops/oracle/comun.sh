@@ -58,3 +58,50 @@ cargar_datos() {   # cargar_datos <carpeta>
   } | psql_en "$LOCAL"
   psql_en "$LOCAL" -c "NOTIFY pgrst, 'reload schema';"
 }
+
+# Lo guardado en los datos con una dirección completa pasa de <vieja> a <nueva>: las direcciones de
+# archivos (el logo de cada empresa, bucket público «logos») y la de los avisos al celular
+# (push_config.url, a la que llama la base). Sin disparadores: no va a la auditoría ni toca «actualizado».
+apuntar_direcciones() {   # apuntar_direcciones <dirección vieja> <dirección nueva>
+  psql_en "$LOCAL" -At -v viejo="${1%/}/storage/v1/" -v nuevo="${2%/}/storage/v1/" -v push="${2%/}/api/push" <<'SQL'
+SET session_replication_role = replica;
+SET migrar.viejo TO :'viejo';
+SET migrar.nuevo TO :'nuevo';
+SET migrar.push TO :'push';
+CREATE TEMP TABLE _cambios (donde TEXT, filas BIGINT);
+DO $$
+DECLARE
+  viejo TEXT := current_setting('migrar.viejo');
+  nuevo TEXT := current_setting('migrar.nuevo');
+  r RECORD; n BIGINT;
+BEGIN
+  FOR r IN
+    SELECT c.table_name AS t, c.column_name AS col, c.data_type AS tipo
+    FROM information_schema.columns c
+    JOIN information_schema.tables x ON x.table_schema = c.table_schema AND x.table_name = c.table_name
+    WHERE c.table_schema = 'public' AND x.table_type = 'BASE TABLE' AND c.is_generated = 'NEVER'
+      AND c.data_type IN ('text', 'character varying', 'jsonb')
+  LOOP
+    BEGIN
+      IF r.tipo = 'jsonb' THEN
+        EXECUTE format('UPDATE public.%I SET %I = replace(%I::text, $1, $2)::jsonb WHERE strpos(%I::text, $1) > 0',
+                       r.t, r.col, r.col, r.col) USING viejo, nuevo;
+      ELSE
+        EXECUTE format('UPDATE public.%I SET %I = replace(%I, $1, $2) WHERE strpos(%I, $1) > 0',
+                       r.t, r.col, r.col, r.col) USING viejo, nuevo;
+      END IF;
+      GET DIAGNOSTICS n = ROW_COUNT;
+      IF n > 0 THEN INSERT INTO _cambios VALUES (r.t || '.' || r.col, n); END IF;
+    EXCEPTION WHEN OTHERS THEN
+      INSERT INTO _cambios VALUES (r.t || '.' || r.col || ' (NO se pudo: ' || SQLERRM || ')', 0);
+    END;
+  END LOOP;
+  IF to_regclass('public.push_config') IS NOT NULL THEN
+    UPDATE public.push_config SET url = current_setting('migrar.push') WHERE COALESCE(url, '') <> '';
+    GET DIAGNOSTICS n = ROW_COUNT;
+    IF n > 0 THEN INSERT INTO _cambios VALUES ('avisos al celular → ' || current_setting('migrar.push'), n); END IF;
+  END IF;
+END $$;
+SELECT '      ' || COALESCE(string_agg(donde || CASE WHEN filas > 0 THEN ': ' || filas ELSE '' END, E'\n      ' ORDER BY donde), 'Nada que cambiar.') FROM _cambios;
+SQL
+}
