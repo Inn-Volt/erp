@@ -196,12 +196,55 @@ services:
       GROQ_MODEL: ${GROQ_MODEL:-}
       GOOGLE_SHEET_ID: ${GOOGLE_SHEET_ID:-}
 
+  # El sitio innvolt.cl (repo Inn-Volt/innvolt.cl, clonado al lado: /opt/innvolt/sitio). Solo corre
+  # con COMPOSE_PROFILES=sitio en .env (lo deja así agregar-sitio.sh). Next normal (next start).
+  # Las NEXT_PUBLIC_* van al construir; Docker las entrega como variables a «npm run build».
+  sitio:
+    profiles: ["sitio"]
+    build:
+      context: ${SITIO_CODIGO:-../../../sitio}
+      dockerfile_inline: |
+        FROM node:22-alpine
+        WORKDIR /app
+        COPY package.json package-lock.json ./
+        RUN NODE_OPTIONS=--dns-result-order=ipv4first npm ci --no-audit --no-fund
+        COPY . .
+        ARG NEXT_PUBLIC_GA_ID
+        ARG NEXT_PUBLIC_EMAILJS_SERVICE
+        ARG NEXT_PUBLIC_EMAILJS_TEMPLATE
+        ARG NEXT_PUBLIC_EMAILJS_KEY
+        ARG NEXT_PUBLIC_EMAILJS_AUTOREPLY
+        ENV NEXT_TELEMETRY_DISABLED=1
+        RUN npm run build && chown -R node:node .next
+        ENV NODE_ENV=production
+        USER node
+        EXPOSE 3000
+        CMD ["node_modules/.bin/next", "start", "-H", "0.0.0.0", "-p", "3000"]
+      args:
+        NEXT_PUBLIC_GA_ID: ${SITIO_GA_ID:-}
+        NEXT_PUBLIC_EMAILJS_SERVICE: ${SITIO_EMAILJS_SERVICE:-}
+        NEXT_PUBLIC_EMAILJS_TEMPLATE: ${SITIO_EMAILJS_TEMPLATE:-}
+        NEXT_PUBLIC_EMAILJS_KEY: ${SITIO_EMAILJS_KEY:-}
+        NEXT_PUBLIC_EMAILJS_AUTOREPLY: ${SITIO_EMAILJS_AUTOREPLY:-}
+    image: innvolt-sitio:actual
+    restart: unless-stopped
+    environment:
+      GOOGLE_PLACES_API_KEY: ${GOOGLE_PLACES_API_KEY:-}
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:3000/"]
+      interval: 30s
+      timeout: 5s
+      start_period: 20s
+
   caddy:
     image: caddy:2.10
     restart: unless-stopped
     depends_on: [app, auth, rest, storage, realtime]
     environment:
       CADDY_SITIO: ${CADDY_SITIO}
+      # Sin sitio: una dirección interna que nunca pide certificado.
+      SITIO_CADDY: ${SITIO_CADDY:-http://sitio.localhost}
+      SITIO: ${SITIO:-sitio.localhost}
     ports:
       - "${PUBLICAR_HTTP:-80:80}"
       - "${PUBLICAR_HTTPS:-443:443}"

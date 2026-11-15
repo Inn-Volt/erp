@@ -71,6 +71,14 @@ GEMINI_MODEL=
 GROQ_MODEL=
 GOOGLE_SHEET_ID=
 
+# El sitio innvolt.cl (lo que hoy está en Netlify para el sitio). Se activa con agregar-sitio.sh.
+SITIO_GA_ID=
+SITIO_EMAILJS_SERVICE=
+SITIO_EMAILJS_TEMPLATE=
+SITIO_EMAILJS_KEY=
+SITIO_EMAILJS_AUTOREPLY=
+GOOGLE_PLACES_API_KEY=
+
 # Respaldo diario fuera del servidor: URL de escritura (PAR) del bucket «innvolt-respaldos» en Object
 # Storage, terminada en «/o/». Vacío: el respaldo queda solo en el servidor.
 RESPALDO_PAR_URL=

@@ -33,3 +33,19 @@
 		-Server
 	}
 }
+
+# El sitio innvolt.cl (agregar-sitio.sh): SITIO_CADDY = «innvolt.cl, www.innvolt.cl»; www va a la
+# dirección sin www. Sin sitio, esta dirección es interna (http://sitio.localhost) y no hace nada.
+{$SITIO_CADDY} {
+	encode zstd gzip
+	@www host www.{$SITIO}
+	redir @www https://{$SITIO}{uri} permanent
+	reverse_proxy sitio:3000
+
+	header {
+		Strict-Transport-Security "max-age=31536000"
+		X-Content-Type-Options nosniff
+		Referrer-Policy strict-origin-when-cross-origin
+		-Server
+	}
+}

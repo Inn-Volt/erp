@@ -68,7 +68,11 @@ fi
 
 paso "Claves del servidor (ops/oracle/.env)"
 sudo -u "$USUARIO" bash "$APP/ops/oracle/generar-env.sh" "$DOMINIO"
-sudo -u "$USUARIO" sed -i "s/^PG_SHARED_BUFFERS=.*/PG_SHARED_BUFFERS=2GB/; s/^PG_EFFECTIVE_CACHE=.*/PG_EFFECTIVE_CACHE=6GB/" "$APP/ops/oracle/.env"
+# La base según la memoria de la máquina: 1/6 para su caché y la mitad como estimación del sistema
+# (6 GB → ~1 GB y ~3 GB; 12 GB → ~2 GB y ~6 GB). Si la máquina cambia de tamaño, repetir este script.
+RAM_MB=$(awk '/MemTotal/ {print int($2 / 1024)}' /proc/meminfo)
+sudo -u "$USUARIO" sed -i "s/^PG_SHARED_BUFFERS=.*/PG_SHARED_BUFFERS=$((RAM_MB / 6))MB/; s/^PG_EFFECTIVE_CACHE=.*/PG_EFFECTIVE_CACHE=$((RAM_MB / 2))MB/" "$APP/ops/oracle/.env"
+echo "Memoria: ${RAM_MB} MB → caché de la base $((RAM_MB / 6)) MB."
 
 paso "Base de datos, login, archivos, API y avisos en vivo"
 cd "$APP"
@@ -89,3 +93,4 @@ echo "Listo el servidor. Falta:"
 echo "  1. Completar lo de Netlify en $APP/ops/oracle/.env (sudo -u $USUARIO nano $APP/ops/oracle/.env)."
 echo "  2. Construir y levantar la app:  sudo -u $USUARIO bash $APP/ops/oracle/actualizar.sh"
 echo "  3. Traer los datos de Supabase:  sudo -u $USUARIO bash $APP/ops/oracle/migrar-desde-supabase.sh"
+echo "  4. El sitio innvolt.cl:          sudo -u $USUARIO bash $APP/ops/oracle/agregar-sitio.sh <dominio>"
