@@ -17,7 +17,7 @@ VIEJA="$URL_PUBLICA"
 echo "Hoy: $VIEJA   →   Nueva: https://$NUEVO"
 echo "Según el DNS, $NUEVO apunta a: $(getent ahostsv4 "$NUEVO" | awk 'NR==1{print $1}' || true)"
 echo "(debe ser la IP pública de este servidor)."
-read -r -p "Escribe CAMBIAR para seguir: " ok
+read -r -p "Escribe CAMBIAR para seguir: " ok || true
 [[ "$ok" == "CAMBIAR" ]] || { echo "Cancelado."; exit 1; }
 
 cp ops/oracle/.env "ops/oracle/.env.antes-$(date +%F-%H%M)"

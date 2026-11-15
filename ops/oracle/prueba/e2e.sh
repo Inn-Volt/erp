@@ -82,8 +82,9 @@ espera "Caddy → app" curl -fsS -o /dev/null http://erp.innvolt.test:8088/login
 fin
 
 grupo "3 · Migrar desde el origen y verificar"
-docker network connect --alias origen-db innvolt_default origen-db-1
-docker network connect --alias origen-caddy innvolt_default origen-caddy-1
+docker network connect --alias origen-db innvolt_default origen-db-1 || falla "No se pudo conectar la base del origen"
+docker network connect --alias origen-caddy innvolt_default origen-caddy-1 || falla "No se pudo conectar el Caddy del origen"
+echo "Origen conectado a la red del servidor nuevo."
 ORIGEN="postgresql://postgres:$(val POSTGRES_PASSWORD "$OR/ops/oracle/.env")@origen-db:5432/postgres"
 printf 'MIGRAR\n%s\n%s\n%s\n' "$ORIGEN" "http://origen-caddy:9088" "$(val SERVICE_ROLE_KEY "$OR/ops/oracle/.env")" \
   | bash ops/oracle/migrar-desde-supabase.sh

@@ -9,7 +9,7 @@ cd "$(dirname "$0")/../.."
 source ops/oracle/comun.sh
 DATOS_TGZ="${1:?Uso: restaurar.sh <innvolt-FECHA-datos.tgz> [innvolt-FECHA-archivos.tgz]}"
 ARCHIVOS_TGZ="${2:-}"
-read -r -p "Esto REEMPLAZA todos los datos actuales por los del respaldo. Escribe RESTAURAR: " ok
+read -r -p "Esto REEMPLAZA todos los datos actuales por los del respaldo. Escribe RESTAURAR: " ok || true
 [[ "$ok" == "RESTAURAR" ]] || { echo "Cancelado."; exit 1; }
 TMP=$(mktemp -d); trap 'rm -rf "$TMP"' EXIT
 tar -xzf "$DATOS_TGZ" -C "$TMP"

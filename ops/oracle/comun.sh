@@ -22,7 +22,15 @@ tgz_a_archivos() {
     sh -c "rm -rf /d/storage.antes; [ -d /d/storage ] && mv /d/storage /d/storage.antes; tar -xzf /o/$(basename "$1") -C /d"
 }
 
-psql_en() { "${DC[@]}" exec -T db psql "$1" -v ON_ERROR_STOP=1 -q "${@:2}"; }
+# psql dentro del contenedor de la base. Con -c (una consulta), sin entrada: «docker compose exec»
+# se come lo que llega por la entrada, y en un script que después pregunta algo, se comería la respuesta.
+psql_en() {
+  local a
+  for a in "${@:2}"; do
+    [[ "$a" == -c ]] && { "${DC[@]}" exec -T db psql "$1" -v ON_ERROR_STOP=1 -q "${@:2}" < /dev/null; return; }
+  done
+  "${DC[@]}" exec -T db psql "$1" -v ON_ERROR_STOP=1 -q "${@:2}"
+}
 
 # Columnas comunes (no generadas) de una tabla de auth entre el origen y la base local.
 columnas_comunes() {   # columnas_comunes <conexión origen> <tabla>
@@ -33,7 +41,7 @@ columnas_comunes() {   # columnas_comunes <conexión origen> <tabla>
 # Saca los datos a <carpeta>/public.sql y <carpeta>/auth.sql.
 sacar_datos() {   # sacar_datos <conexión origen> <carpeta>
   local origen="$1" dir="$2" t cols
-  "${DC[@]}" exec -T db pg_dump "$origen" --data-only --no-owner --no-privileges -n public > "$dir/public.sql"
+  "${DC[@]}" exec -T db pg_dump "$origen" --data-only --no-owner --no-privileges -n public < /dev/null > "$dir/public.sql"
   : > "$dir/auth.sql"
   for t in users identities; do
     cols=$(columnas_comunes "$origen" "$t")

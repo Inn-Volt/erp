@@ -18,17 +18,17 @@ hay=$(psql_en "$LOCAL" -At -c "select count(*) from public.profiles" 2>/dev/null
 if [[ "$hay" != "0" ]]; then
   echo "OJO: esta base ya tiene $hay cuentas. Migrar REEMPLAZA todos sus datos por los de Supabase."
 fi
-read -r -p "Escribe MIGRAR para seguir: " ok
+read -r -p "Escribe MIGRAR para seguir: " ok || true
 [[ "$ok" == "MIGRAR" ]] || { echo "Cancelado."; exit 1; }
 
 # Todo lo que hay que pegar, al comienzo: después corre solo.
-read -r -s -p "Conexión de Supabase (postgresql://postgres.xxxx:CLAVE@aws-…pooler.supabase.com:5432/postgres): " ORIGEN; echo
+read -r -s -p "Conexión de Supabase (postgresql://postgres.xxxx:CLAVE@aws-…pooler.supabase.com:5432/postgres): " ORIGEN || true; echo
 [[ "$ORIGEN" == postgres* ]] || { echo "No parece una conexión de PostgreSQL."; exit 1; }
 psql_en "$ORIGEN" -At -c "select 'Conectado a Supabase: ' || count(*) || ' cuentas' from public.profiles"
-read -r -p "URL del proyecto de Supabase (https://xxxx.supabase.co): " ORIGEN_URL
+read -r -p "URL del proyecto de Supabase (https://xxxx.supabase.co): " ORIGEN_URL || true
 ORIGEN_URL="${ORIGEN_URL%/}"
 [[ "$ORIGEN_URL" =~ ^https?://[A-Za-z0-9.-]+(:[0-9]+)?$ ]] || { echo "La URL debe ser como https://xxxx.supabase.co"; exit 1; }
-read -r -s -p "service_role key de Supabase: " ORIGEN_CLAVE; echo
+read -r -s -p "service_role key de Supabase: " ORIGEN_CLAVE || true; echo
 curl -fsS -o /dev/null -H "apikey: $ORIGEN_CLAVE" -H "Authorization: Bearer $ORIGEN_CLAVE" "$ORIGEN_URL/storage/v1/bucket" \
   || { echo "Supabase no aceptó esa URL o esa clave (se necesita la service_role, no la anon)."; exit 1; }
 [[ "$URL_PUBLICA" =~ ^https?://[A-Za-z0-9.:-]+$ ]] || { echo "URL_PUBLICA de ops/oracle/.env no es válida: $URL_PUBLICA"; exit 1; }

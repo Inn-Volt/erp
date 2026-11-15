@@ -14,7 +14,7 @@ TMP=$(mktemp -d); trap 'rm -rf "$TMP"' EXIT
 sacar_datos "$LOCAL" "$TMP" >/dev/null
 # El registro de los archivos en la base (qué hay, de quién, con qué versión): sin él, los archivos
 # restaurados quedan en el disco pero la ERP no los ve. Sin la tabla de versiones de Storage.
-"${DC[@]}" exec -T db pg_dump "$LOCAL" --data-only --no-owner --no-privileges -n storage -T storage.migrations > "$TMP/storage.sql"
+"${DC[@]}" exec -T db pg_dump "$LOCAL" --data-only --no-owner --no-privileges -n storage -T storage.migrations < /dev/null > "$TMP/storage.sql"
 tar -czf "$DESTINO/innvolt-$FECHA-datos.tgz" -C "$TMP" public.sql auth.sql storage.sql
 # Los archivos (Storage), completos para restaurar de una vez.
 archivos_a_tgz "$PWD/$DESTINO/innvolt-$FECHA-archivos.tgz"
