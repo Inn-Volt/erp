@@ -76,18 +76,26 @@ async function verificar() {
   const avisos = await sb.from('notificaciones').select('titulo');
   ok(avisos.data?.some(a => a.titulo === 'Aviso de antes de migrar'), 'el aviso de antes de migrar está');
 
-  // La campanita en vivo: lo mismo que hooks/useAvisos.ts.
+  // La campanita en vivo: lo mismo que hooks/useAvisos.ts. La primera suscripción de un servidor
+  // recién encendido tarda unos segundos en empezar a escuchar la base: se manda un aviso cada 2 s
+  // (hasta 40 s) y basta con que llegue uno.
   const llego = await new Promise(resolve => {
-    const t = setTimeout(() => resolve(false), 20000);
+    let intervalo = null, n = 0;
+    const terminar = v => { clearInterval(intervalo); clearTimeout(t); sb.removeChannel(canal); resolve(v); };
+    const t = setTimeout(() => terminar(false), 40000);
     const canal = sb.channel(`avisos-${cesar}-prueba`)
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'notificaciones', filter: `usuario_id=eq.${cesar}` }, p => {
-        if (p.new?.titulo === 'Aviso en vivo') { clearTimeout(t); sb.removeChannel(canal); resolve(true); }
+        if (String(p.new?.titulo).startsWith('Aviso en vivo')) { console.log(`  llegó «${p.new.titulo}»`); terminar(true); }
       })
-      .subscribe(async estado => {
-        if (estado === 'SUBSCRIBED') {
-          const ins = await admin.from('notificaciones').insert({ usuario_id: cesar, tipo: 'prueba', titulo: 'Aviso en vivo' });
-          if (ins.error) { console.log(`  (no se pudo crear el aviso: ${ins.error.message})`); clearTimeout(t); resolve(false); }
-        } else if (estado === 'CHANNEL_ERROR' || estado === 'TIMED_OUT') { clearTimeout(t); resolve(false); }
+      .on('system', {}, m => console.log(`  realtime: ${m?.extension ?? ''} ${m?.status ?? ''} ${m?.message ?? JSON.stringify(m)}`))
+      .subscribe(estado => {
+        console.log(`  canal: ${estado}`);
+        if (estado === 'SUBSCRIBED' && !intervalo) {
+          intervalo = setInterval(async () => {
+            const ins = await admin.from('notificaciones').insert({ usuario_id: cesar, tipo: 'prueba', titulo: `Aviso en vivo ${++n}` });
+            if (ins.error) console.log(`  (no se pudo crear el aviso: ${ins.error.message})`);
+          }, 2000);
+        } else if (estado === 'CHANNEL_ERROR' || estado === 'TIMED_OUT') terminar(false);
       });
   });
   ok(llego, 'la campanita recibe el aviso en vivo (realtime)');

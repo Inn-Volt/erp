@@ -65,7 +65,7 @@ cargar_datos() {   # cargar_datos <carpeta>
     echo "DELETE FROM auth.identities; DELETE FROM auth.sessions; DELETE FROM auth.refresh_tokens; DELETE FROM auth.users;"
     cat "$dir/public.sql" "$dir/auth.sql"
     echo "COMMIT;"
-  } | psql_en "$LOCAL"
+  } | psql_en "$LOCAL" > /dev/null   # sin el eco de cada setval; los errores sí salen
   psql_en "$LOCAL" -c "NOTIFY pgrst, 'reload schema';"
 }
 

@@ -93,6 +93,13 @@ ORIGEN="postgresql://postgres:$(val POSTGRES_PASSWORD "$OR/ops/oracle/.env")@ori
 printf 'MIGRAR\n%s\n%s\n%s\n' "$ORIGEN" "http://origen-caddy:9088" "$(val SERVICE_ROLE_KEY "$OR/ops/oracle/.env")" \
   | bash ops/oracle/migrar-desde-supabase.sh
 export URL=http://erp.innvolt.test:8088 ANON=$(val ANON_KEY ops/oracle/.env) SERVICE=$(val SERVICE_ROLE_KEY ops/oracle/.env)
+echo "Publicación de realtime: $(sql "select string_agg(tablename, ', ' order by tablename) from pg_publication_tables where pubname = 'supabase_realtime'")"
+[[ "$(sql "select count(*) from pg_publication_tables where pubname = 'supabase_realtime' and tablename = 'notificaciones'")" == 1 ]] \
+  || falla "notificaciones no está en la publicación supabase_realtime"
+ws=$(curl -s -o /dev/null -w '%{http_code}' --http1.1 --max-time 5 -H 'Connection: Upgrade' -H 'Upgrade: websocket' \
+     -H 'Sec-WebSocket-Version: 13' -H 'Sec-WebSocket-Key: SW5uVm9sdFBydWViYQ==' "$URL/realtime/v1/websocket?apikey=$ANON&vsn=1.0.0" || true)
+[[ "$ws" == 101 ]] || falla "El websocket de realtime no responde por Caddy (HTTP $ws)"
+echo "OK   websocket de realtime por Caddy (101)"
 node ops/oracle/prueba/cliente.mjs verificar
 [[ "$(sql "select url from public.push_config")" == "$URL/api/push" ]] || falla "push_config.url no quedó en el servidor nuevo"
 [[ "$(sql "select to_regclass('public.fondo_movimientos') is not null")" == t ]] || falla "No se corrió la fase 19 que faltaba en el origen"

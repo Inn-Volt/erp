@@ -28,7 +28,7 @@ if [[ -n "$ARCHIVOS_TGZ" ]]; then
     END \$\$;"
     cat "$TMP/storage.sql"
     echo "COMMIT;"
-  } | psql_en "$LOCAL"
+  } | psql_en "$LOCAL" > /dev/null   # sin el eco de cada setval; los errores sí salen
   tgz_a_archivos "$ARCHIVOS_TGZ"
   "${DC[@]}" start storage
   echo "Archivos restaurados (los anteriores quedaron en storage.antes)."

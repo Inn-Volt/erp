@@ -43,4 +43,7 @@ jobs:
             docker compose -p "$p" -f ops/oracle/docker-compose.yml --env-file ops/oracle/.env logs --tail 60 --no-color 2>/dev/null || true
             echo "::endgroup::"
           done
+          echo "::group::Realtime (servidor nuevo, completo)"
+          docker logs innvolt-realtime-1 2>&1 | grep -viE "PromEx|ETS table|Billing metrics|IpVersionIsIpv4" | tail -150 || true
+          echo "::endgroup::"
           docker ps -a --format 'table {{.Names}}\t{{.Status}}'
