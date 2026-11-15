@@ -66,10 +66,14 @@ Luego, en la red → **Security Lists → Default Security List for innvolt-vcn 
 ### 1.4 La dirección
 - **Para probar:** `IP-CON-GUIONES.sslip.io`. Por ejemplo, con la IP `152.67.10.20` es
   `152-67-10-20.sslip.io`. Funciona sin configurar nada.
-- **Definitiva:** un registro `A` en el DNS de innvolt.cl, por ejemplo `erp` → la IP del servidor.
-  Si es una dirección que hoy nadie usa, conviene ensayar directo en ella. Si es la misma que hoy
-  usa la ERP en Netlify, se ensaya con `sslip.io` y se cambia el día del cambio
-  (`cambiar-direccion.sh`, sección 5).
+- **Definitiva: `app.innvolt.cl`** para la app (el sitio sigue en `innvolt.cl`). Es un registro `A`
+  llamado `app` → la IP del servidor, TTL 5 minutos. Como `app` es nueva, el ensayo se hace directo
+  ahí.
+- **Dónde se crea:** innvolt.cl está registrado en **NIC Chile**, que solo guarda el dominio. En
+  nic.cl, en tu cuenta, mira sus *servidores de nombre*: los registros se crean ahí (`nsone.net` o
+  `netlify` = Netlify → *Domains*; `cloudflare.com` = Cloudflare). No toques los registros `MX` ni
+  `TXT` (el correo y Resend).
+- Si algún día la app cambia de dirección: `cambiar-direccion.sh` (sección 5).
 
 ## 2. Preparar el servidor (unos 15 minutos)
 
@@ -78,7 +82,7 @@ Desde la carpeta del repositorio, en PowerShell. Si la clave «es demasiado abie
 
 ```powershell
 scp -i "C:\ruta\clave.key" ops/oracle/preparar-servidor.sh ubuntu@IP:/tmp/
-ssh -i "C:\ruta\clave.key" -t ubuntu@IP "sudo bash /tmp/preparar-servidor.sh erp.innvolt.cl"
+ssh -i "C:\ruta\clave.key" -t ubuntu@IP "sudo bash /tmp/preparar-servidor.sh app.innvolt.cl"
 ```
 
 (o la dirección `sslip.io`). El script:
@@ -128,15 +132,12 @@ reemplaza todo por lo que haya en Supabase en ese momento.
 ## 5. El cambio definitivo (unos 30 minutos, fuera del horario de trabajo)
 1. Avisa al equipo que no use la ERP durante ese rato.
 2. Vuelve a correr `migrar-desde-supabase.sh`: trae los datos de ese momento.
-3. La dirección:
-   - **Si el ensayo ya fue en la dirección definitiva** (una nueva, como `erp.innvolt.cl`, que nadie
-     usaba): no hay nada más que cambiar.
-   - **Si el ensayo fue con `sslip.io`:** apunta el DNS de la dirección definitiva a la IP de Oracle y
-     después corre `sudo -u innvolt bash /opt/innvolt/erp/ops/oracle/cambiar-direccion.sh erp.innvolt.cl`
-     (cambia la dirección sin tocar claves ni datos y saca el certificado). Si esa dirección hoy la
-     usa Netlify, baja el TTL del registro a 5 minutos el día anterior, para que el cambio se note rápido.
-4. Todos vuelven a iniciar sesión. Si la dirección es distinta a la de antes, cada persona instala la
-   app de nuevo en el celular y activa los avisos (una vez). Con la misma dirección, no hace falta.
+3. La dirección: la app ya está en `app.innvolt.cl` desde el ensayo, así que no hay nada que cambiar.
+   (Si el ensayo fue con `sslip.io`: apunta `app` a la IP y corre
+   `sudo -u innvolt bash /opt/innvolt/erp/ops/oracle/cambiar-direccion.sh app.innvolt.cl`, que cambia
+   la dirección sin tocar claves ni datos y saca el certificado.)
+4. Todos entran a `app.innvolt.cl` con su misma contraseña. En el celular instalan la app de nuevo y
+   activan los avisos (una vez): la dirección es nueva.
 5. En Netlify, apaga los despliegues automáticos (*Build settings → Stop builds*).
 6. Durante 2 a 4 semanas deja Supabase como estaba: para volver atrás basta con usar de nuevo la
    dirección de Netlify (lo hecho en Oracle mientras tanto no vuelve solo). Luego se puede pausar o borrar.
@@ -151,6 +152,9 @@ No tiene base de datos: se puede pasar antes o después que la ERP.
    y revisa el sitio, el formulario de contacto y las reseñas.
 3. **Definitiva:** en el DNS de innvolt.cl, cambia el registro `A` de `innvolt.cl` y el de `www` (o su
    `CNAME`) a la IP del servidor. **No toques los registros `MX` ni `TXT`** (el correo y Resend).
+   Si el DNS está en Netlify, antes quita innvolt.cl del sitio en Netlify (*Domain management*):
+   mientras esté conectado, Netlify no deja cambiar esos registros. No borres el dominio de
+   *Domains*: ahí vive tu DNS.
    Después: `sudo -u innvolt bash /opt/innvolt/erp/ops/oracle/agregar-sitio.sh innvolt.cl`
    (queda también `www.innvolt.cl`, que lleva a `innvolt.cl`).
 4. Si Google Places limita la clave por dirección o IP, agrega la del servidor en Google Cloud.
@@ -245,6 +249,6 @@ gratis y paga lo que pase de ella; si VSX se va a una cuenta propia, InnVolt tie
 | Disco extra sobre 200 GB | más archivos y respaldos | ≈ US$ 4 por cada 100 GB | igual |
 
 - **Antes de pagar:** en el mismo servidor gratis se puede montar una **copia de pruebas**
-  (`pruebas.erp.innvolt.cl`, con su propia base) para probar fases nuevas sin tocar la de verdad.
+  (`pruebas.innvolt.cl`, con su propia base) para probar fases nuevas sin tocar la de verdad.
 - **Al pasar a pago:** crear un **presupuesto con aviso** (*Billing → Budgets*, por ejemplo US$ 10)
   para que avise si algo empieza a cobrar.

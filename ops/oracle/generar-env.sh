@@ -2,7 +2,7 @@
 # Crea ops/oracle/.env con claves nuevas para el servidor de InnVolt (solo la primera vez: si ya
 # existe, no lo toca). Las claves quedan solo en el servidor; nunca van al repositorio.
 #
-#   bash ops/oracle/generar-env.sh erp.innvolt.cl
+#   bash ops/oracle/generar-env.sh app.innvolt.cl
 #   bash ops/oracle/generar-env.sh 127-0-0-1.sslip.io --prueba-local     (en un computador, para probar)
 set -euo pipefail
 cd "$(dirname "$0")"

@@ -5,11 +5,11 @@
 # Solo InnVolt: no toca nada de otros sistemas (VSX vive en otro servidor y otro compartimento).
 #
 # En el servidor, como «ubuntu»:
-#   sudo bash preparar-servidor.sh erp.innvolt.cl
+#   sudo bash preparar-servidor.sh app.innvolt.cl
 #
 # Se puede repetir sin romper nada: lo que ya existe (claves, .env, swap, datos) se respeta.
 set -euo pipefail
-DOMINIO="${1:?Uso: sudo bash preparar-servidor.sh <dominio>   (ej. erp.innvolt.cl o 146-1-2-3.sslip.io)}"
+DOMINIO="${1:?Uso: sudo bash preparar-servidor.sh <dominio>   (ej. app.innvolt.cl o 146-1-2-3.sslip.io)}"
 USUARIO=innvolt
 BASE=/opt/innvolt
 APP=$BASE/erp

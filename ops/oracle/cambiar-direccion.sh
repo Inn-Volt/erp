@@ -1,13 +1,13 @@
 #!/usr/bin/env bash
-# Cambia la dirección de la ERP (por ejemplo, del ensayo con sslip.io a erp.innvolt.cl) sin tocar las
+# Cambia la dirección de la ERP (por ejemplo, del ensayo con sslip.io a app.innvolt.cl) sin tocar las
 # claves ni los datos: ajusta ops/oracle/.env, reconstruye la app (la dirección va dentro del código
 # del navegador), Caddy saca el certificado nuevo y lo guardado en los datos pasa a la nueva dirección.
 # El DNS de la nueva dirección tiene que apuntar YA a este servidor (si no, no hay certificado).
 #
-#   sudo -u innvolt bash /opt/innvolt/erp/ops/oracle/cambiar-direccion.sh erp.innvolt.cl
+#   sudo -u innvolt bash /opt/innvolt/erp/ops/oracle/cambiar-direccion.sh app.innvolt.cl
 set -euo pipefail
 cd "$(dirname "$0")/../.."
-NUEVO="${1:?Uso: cambiar-direccion.sh <dominio>   (ej. erp.innvolt.cl)}"
+NUEVO="${1:?Uso: cambiar-direccion.sh <dominio>   (ej. app.innvolt.cl)}"
 [[ "$NUEVO" =~ ^[A-Za-z0-9.-]+\.[A-Za-z]{2,}$ ]] || { echo "Dominio no válido: $NUEVO"; exit 1; }
 source ops/oracle/comun.sh
 [[ "${PUBLICAR_HTTP:-}" == "80:80" ]] || { echo "Es para el servidor: la prueba local se rehace con generar-env.sh."; exit 1; }
