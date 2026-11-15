@@ -194,6 +194,10 @@ seguridad: un usuario que **solo puede ver y encender** el servidor de InnVolt.
   `sudo -u innvolt bash /opt/innvolt/erp/ops/oracle/cambiar-direccion.sh nueva.innvolt.cl`
   (con el DNS de la nueva ya apuntando al servidor).
 - **Ver qué pasa:** `cd /opt/innvolt/erp && sudo -u innvolt docker compose -f ops/oracle/docker-compose.yml --env-file ops/oracle/.env logs -f app`.
+- **Prueba completa del kit:** cada cambio del servidor, la app o la base corre
+  `.github/workflows/prueba-servidor.yml` (ARM, como el Ampere): origen con datos → migrar → verificar
+  → respaldo y restauración → sitio → cambio de dirección. También a mano: *Actions → Prueba del
+  servidor (Oracle) → Run workflow*.
 - **Ver la base con DBeaver o pgAdmin:** túnel SSH
   `ssh -i clave.key -L 5432:127.0.0.1:5432 ubuntu@IP` y conectar a `localhost:5432`, usuario
   `postgres`, con la clave `POSTGRES_PASSWORD` del `.env`.
