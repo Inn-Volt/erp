@@ -44,3 +44,4 @@ ops/oracle/.env
 ops/oracle/.env.*
 ops/oracle/datos/
 ops/oracle/respaldos/
+ops/oracle/prueba/estado.json

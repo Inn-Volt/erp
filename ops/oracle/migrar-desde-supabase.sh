@@ -27,7 +27,7 @@ read -r -s -p "Conexión de Supabase (postgresql://postgres.xxxx:CLAVE@aws-…po
 psql_en "$ORIGEN" -At -c "select 'Conectado a Supabase: ' || count(*) || ' cuentas' from public.profiles"
 read -r -p "URL del proyecto de Supabase (https://xxxx.supabase.co): " ORIGEN_URL
 ORIGEN_URL="${ORIGEN_URL%/}"
-[[ "$ORIGEN_URL" =~ ^https://[A-Za-z0-9.-]+$ ]] || { echo "La URL debe ser como https://xxxx.supabase.co"; exit 1; }
+[[ "$ORIGEN_URL" =~ ^https?://[A-Za-z0-9.-]+(:[0-9]+)?$ ]] || { echo "La URL debe ser como https://xxxx.supabase.co"; exit 1; }
 read -r -s -p "service_role key de Supabase: " ORIGEN_CLAVE; echo
 curl -fsS -o /dev/null -H "apikey: $ORIGEN_CLAVE" -H "Authorization: Bearer $ORIGEN_CLAVE" "$ORIGEN_URL/storage/v1/bucket" \
   || { echo "Supabase no aceptó esa URL o esa clave (se necesita la service_role, no la anon)."; exit 1; }

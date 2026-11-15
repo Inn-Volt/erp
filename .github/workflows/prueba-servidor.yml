@@ -1,0 +1,46 @@
+# Prueba completa del servidor propio (ops/oracle) en una máquina ARM limpia, como el Ampere de
+# Oracle: origen con datos → servidor nuevo → migrar → verificar → respaldo y restauración → sitio
+# innvolt.cl → cambio de dirección con HTTPS. Detalle en ops/oracle/prueba/e2e.sh.
+# Corre cuando cambia algo del servidor, de la app o de la base, y a mano (Actions → Run workflow).
+name: Prueba del servidor (Oracle)
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - "ops/oracle/**"
+      - "Dockerfile"
+      - "next.config.ts"
+      - "package-lock.json"
+      - "supabase_*.sql"
+      - ".github/workflows/prueba-servidor.yml"
+
+concurrency:
+  group: prueba-servidor
+  cancel-in-progress: true
+
+jobs:
+  e2e:
+    name: De punta a punta (ARM)
+    # Gratis en repositorios públicos. Si el repositorio pasa a privado: ubuntu-latest (x86).
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 75
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci --no-audit --no-fund
+      - name: Prueba completa
+        run: bash ops/oracle/prueba/e2e.sh
+      - name: Registros si algo falló
+        if: failure()
+        run: |
+          for p in innvolt origen; do
+            echo "::group::Registros de $p"
+            docker compose -p "$p" -f ops/oracle/docker-compose.yml --env-file ops/oracle/.env logs --tail 60 --no-color 2>/dev/null || true
+            echo "::endgroup::"
+          done
+          docker ps -a --format 'table {{.Names}}\t{{.Status}}'

@@ -15,7 +15,20 @@ TMP=$(mktemp -d); trap 'rm -rf "$TMP"' EXIT
 tar -xzf "$DATOS_TGZ" -C "$TMP"
 cargar_datos "$TMP"
 if [[ -n "$ARCHIVOS_TGZ" ]]; then
+  [[ -f "$TMP/storage.sql" ]] || { echo "Este respaldo no trae el registro de los archivos (es anterior): restaura solo los datos."; exit 1; }
   "${DC[@]}" stop storage
+  # Los archivos y su registro en la base van juntos (todo o nada en la base).
+  {
+    echo "BEGIN;"
+    echo "SET session_replication_role = replica;"
+    echo "DO \$\$ DECLARE t TEXT; BEGIN
+      SELECT string_agg(format('%I.%I', schemaname, tablename), ', ') INTO t FROM pg_tables
+       WHERE schemaname = 'storage' AND tablename <> 'migrations';
+      IF t IS NOT NULL THEN EXECUTE 'TRUNCATE ' || t || ' CASCADE'; END IF;
+    END \$\$;"
+    cat "$TMP/storage.sql"
+    echo "COMMIT;"
+  } | psql_en "$LOCAL"
   tgz_a_archivos "$ARCHIVOS_TGZ"
   "${DC[@]}" start storage
   echo "Archivos restaurados (los anteriores quedaron en storage.antes)."

@@ -9,7 +9,9 @@
 DC=(docker compose -f ops/oracle/docker-compose.yml --env-file ops/oracle/.env)
 # shellcheck disable=SC1091
 set -a; source ops/oracle/.env; set +a
-LOCAL="postgresql://postgres:${POSTGRES_PASSWORD}@localhost:5432/postgres"
+# Como supabase_admin (el superusuario del servidor): cargar datos pide apagar los disparadores
+# (session_replication_role) y tocar las tablas del login y de los archivos, que no son de postgres.
+LOCAL="postgresql://supabase_admin:${POSTGRES_PASSWORD}@localhost:5432/postgres"
 # Dónde están los datos (en .env la ruta es relativa a ops/oracle, como en docker-compose.yml).
 case "${DATOS:-./datos}" in /*) DIR_DATOS="$DATOS" ;; *) DIR_DATOS="$PWD/ops/oracle/${DATOS#./}" ;; esac
 # Los archivos los escribe el servicio de Storage como root: se empaquetan desde un contenedor
