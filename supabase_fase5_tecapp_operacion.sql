@@ -58,7 +58,11 @@ CREATE TRIGGER trg_ot_hereda_proyecto BEFORE INSERT ON public.ordenes_trabajo
   FOR EACH ROW EXECUTE FUNCTION public.ot_hereda_proyecto();
 
 -- Resumen del proyecto: venta aprobada, costo de materiales, gastos y avance por OT.
-CREATE OR REPLACE VIEW public.proyecto_resumen WITH (security_invoker = true) AS
+-- Solo si la vista aún no existe o no tiene más columnas que esta versión: una fase posterior la
+-- amplía, y volver a correr esta (p. ej. todas en orden sobre una base ya al día) no debe achicarla.
+DO $guarda$ BEGIN
+  IF (SELECT count(*) FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'proyecto_resumen') <= 7 THEN
+    EXECUTE $v$CREATE OR REPLACE VIEW public.proyecto_resumen WITH (security_invoker = true) AS
 SELECT p.id AS proyecto_id,
   COALESCE((SELECT SUM(COALESCE(c.total_clp, c.total)) FROM public.cotizaciones c WHERE c.proyecto_id = p.id AND c.estado = 'Aprobada'), 0) AS venta,
   COALESCE((SELECT SUM(COALESCE(c.total_clp, c.total)) FROM public.cotizaciones c WHERE c.proyecto_id = p.id AND c.estado = 'Enviada'), 0) AS por_aprobar,
@@ -69,7 +73,9 @@ SELECT p.id AS proyecto_id,
             WHERE o.proyecto_id = p.id AND g.estado <> 'rechazado'), 0) AS gastos,
   (SELECT COUNT(*) FROM public.ordenes_trabajo o WHERE o.proyecto_id = p.id AND o.estado <> 'anulada') AS ots,
   (SELECT COUNT(*) FROM public.ordenes_trabajo o WHERE o.proyecto_id = p.id AND o.estado IN ('ejecutada','cerrada')) AS ots_terminadas
-FROM public.proyectos p;
+FROM public.proyectos p$v$;
+  END IF;
+END $guarda$;
 
 -- ─── 2. OT como ticket: visitas, bitácora, tipo de servicio y etiquetas ──────
 ALTER TABLE public.ordenes_trabajo ADD COLUMN IF NOT EXISTS tipo_servicio TEXT;

@@ -255,7 +255,11 @@ CREATE TRIGGER trg_aviso_gasto_rendido AFTER INSERT ON public.gastos
 
 -- ─── 5. Resultado: costo real vs. cotizado ───────────────────────────────────
 -- Por trabajo: venta neta y costo cotizado en pesos, gastos reales, lo facturado y lo cobrado.
-CREATE OR REPLACE VIEW public.cotizacion_resultado WITH (security_invoker = true) AS
+-- Solo si la vista aún no existe o no tiene más columnas que esta versión: una fase posterior la
+-- amplía, y volver a correr esta (p. ej. todas en orden sobre una base ya al día) no debe achicarla.
+DO $guarda$ BEGIN
+  IF (SELECT count(*) FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'cotizacion_resultado') <= 7 THEN
+    EXECUTE $v$CREATE OR REPLACE VIEW public.cotizacion_resultado WITH (security_invoker = true) AS
 SELECT c.id AS cotizacion_id,
   CASE WHEN c.moneda = 'UF' THEN round(COALESCE(c.subtotal, 0) * COALESCE(c.valor_uf, 0)) ELSE COALESCE(c.subtotal, 0) END AS venta_neta,
   CASE WHEN c.moneda = 'UF' THEN round(COALESCE(c.costo_directo, 0) * COALESCE(c.valor_uf, 0)) ELSE COALESCE(c.costo_directo, 0) END AS costo_cotizado,
@@ -264,11 +268,17 @@ SELECT c.id AS cotizacion_id,
   COALESCE((SELECT SUM(f.monto_pagado) FROM public.por_facturar f WHERE f.cotizacion_id = c.id), 0) AS cobrado,
   COALESCE((SELECT SUM(f.monto) FROM public.por_facturar f WHERE f.cotizacion_id = c.id AND f.etapa <> 'sin_cobro'), 0) AS por_cobrar_total
 FROM public.cotizaciones c
-WHERE c.estado = 'Aprobada';
+WHERE c.estado = 'Aprobada'$v$;
+  END IF;
+END $guarda$;
 GRANT SELECT ON public.cotizacion_resultado TO authenticated;
 
 -- Proyecto: suma sus trabajos y los gastos puestos directo en él.
-CREATE OR REPLACE VIEW public.proyecto_resumen WITH (security_invoker = true) AS
+-- Solo si la vista aún no existe o no tiene más columnas que esta versión: una fase posterior la
+-- amplía, y volver a correr esta (p. ej. todas en orden sobre una base ya al día) no debe achicarla.
+DO $guarda$ BEGIN
+  IF (SELECT count(*) FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'proyecto_resumen') <= 12 THEN
+    EXECUTE $v$CREATE OR REPLACE VIEW public.proyecto_resumen WITH (security_invoker = true) AS
 SELECT p.id AS proyecto_id,
   COALESCE((SELECT SUM(COALESCE(c.total_clp, c.total)) FROM public.cotizaciones c WHERE c.proyecto_id = p.id AND c.estado = 'Aprobada'), 0) AS venta,
   COALESCE((SELECT SUM(COALESCE(c.total_clp, c.total)) FROM public.cotizaciones c WHERE c.proyecto_id = p.id AND c.estado = 'Enviada'), 0) AS por_aprobar,
@@ -286,7 +296,9 @@ SELECT p.id AS proyecto_id,
   COALESCE((SELECT SUM(r.cobrado) FROM public.cotizacion_resultado r JOIN public.cotizaciones c ON c.id = r.cotizacion_id WHERE c.proyecto_id = p.id), 0) AS cobrado,
   (SELECT COUNT(*) FROM public.cotizaciones c WHERE c.proyecto_id = p.id AND c.estado = 'Aprobada') AS trabajos,
   (SELECT COUNT(*) FROM public.cotizaciones c WHERE c.proyecto_id = p.id AND c.trabajo_estado = 'terminado') AS trabajos_terminados
-FROM public.proyectos p;
+FROM public.proyectos p$v$;
+  END IF;
+END $guarda$;
 GRANT SELECT ON public.proyecto_resumen TO authenticated;
 
 -- ─── 6. Más avisos ───────────────────────────────────────────────────────────
