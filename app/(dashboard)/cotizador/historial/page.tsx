@@ -28,6 +28,12 @@ import { fechaLocal, formatDate } from '@/utils';
 type Filtro = 'abiertas' | 'todas' | 'vencidas' | 'seguir' | EstadoCot;
 const folioDe = (n: number) => `IV-${String(n || 0).padStart(4, '0')}`;
 const montoClp = (c: CotizacionDoc) => Number(c.total_clp ?? c.total ?? 0);
+// Solo lo que muestra la lista: sin las líneas, los textos ni la firma del cliente (una imagen de
+// hasta 250 KB por cotización aceptada), que se traen al abrir cada una.
+const CLIENTE_LISTA = 'clientes(id, nombre_cliente, empresa, rut, telefono, email)';
+const COLUMNAS_LISTA = 'id, folio, estado, titulo, total, total_clp, moneda, revision, created_at, enviada_at, vista_at, aceptada_at, '
+  + `valida_hasta, seguimiento_at, seguimientos, vendedor_id, fecha_emision, motivo_perdida, cliente_id, ${CLIENTE_LISTA}`;
+const COLUMNAS_TODO = `*, ${CLIENTE_LISTA}`;
 
 export default function HistorialCotizacionesPage() {
   const router = useRouter();
@@ -44,18 +50,21 @@ export default function HistorialCotizacionesPage() {
 
   const cargar = useCallback(async () => {
     try {
-      const filas: CotizacionDoc[] = [];
-      for (let desde = 0; ; desde += 1000) {
-        const { data, error } = await supabase.from('cotizaciones').select('*, clientes(id, nombre_cliente, empresa, rut, telefono, email)')
-          .order('folio', { ascending: false }).range(desde, desde + 999);
-        if (error) throw error;
-        filas.push(...(data || []).map(f => aDoc(f as Record<string, unknown>)));
-        if (!data || data.length < 1000) break;
-      }
-      setCots(filas);
+      // El equipo y las OT, a la vez que la lista (cada viaje a la base cuenta).
       vendedoresService.mapa().then(setEquipo);
       supabase.from('ordenes_trabajo').select('id, folio, cotizacion_id').not('cotizacion_id', 'is', null)
         .then(({ data }) => setOtDe(Object.fromEntries((data || []).map(x => [x.cotizacion_id as string, { id: x.id as string, folio: x.folio as number }]))));
+      const filas: CotizacionDoc[] = [];
+      let columnas = COLUMNAS_LISTA;
+      for (let desde = 0; ; desde += 1000) {
+        const { data, error } = await supabase.from('cotizaciones').select(columnas).order('folio', { ascending: false }).range(desde, desde + 999);
+        // Una base a la que le falte alguna columna: como antes, con todo.
+        if (error && columnas !== COLUMNAS_TODO) { columnas = COLUMNAS_TODO; desde = -1000; filas.length = 0; continue; }
+        if (error) throw error;
+        filas.push(...((data || []) as unknown as Record<string, unknown>[]).map(f => aDoc(f)));
+        if (!data || data.length < 1000) break;
+      }
+      setCots(filas);
     } catch (e) { toastError('No se pudo cargar: ' + (e instanceof Error ? e.message : '')); }
     finally { setCargando(false); }
   }, [toastError]);
