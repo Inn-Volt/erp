@@ -65,3 +65,24 @@ test('Cargo operacional calculado como %', () => {
   // Si la partida base ya no está, no hay monto (queda el de antes).
   assert.equal(montoDeCargo({ pct: 10, base: 'no-existe' }, lineas, partidas, r), null);
 });
+
+test('Sin imprevistos: con utilidad 0 % una línea se vende a su costo (875.000 → 875.000 neto)', () => {
+  const l = linea('mo', 'p1', 0, { categoria: 'mano_obra', unidad: 'global', costo: 875000, itemId: undefined, fuera: true, ganancia: 0 });
+  const r = calcular([l], [{ id: 'p1', nombre: 'Mano de obra', cantidad: 1, unidad: 'global' }], 'CLP');
+  const c = r.lineas.get('mo')!;
+  assert.equal(c.precio, 875000);
+  assert.equal(c.subtotal, 875000);
+  assert.equal(c.utilidad, 0);
+  assert.equal(r.partidas.get('p1')!.costo, 875000);
+  assert.equal(r.totales.neto, 875000);
+  assert.equal(r.totales.iva, 166250);          // el IVA se suma solo en el total
+  assert.equal(r.totales.total, 1041250);
+});
+
+test('Material con IVA adentro (de antes): se calcula con su neto', () => {
+  const l = linea('m', 'p1', 0, { costo: 119000, itemId: undefined, fuera: true, ganancia: 0, ivaIncluido: true });
+  const r = calcular([l], [{ id: 'p1', nombre: 'P', cantidad: 1, unidad: 'global' }], 'CLP');
+  assert.equal(r.lineas.get('m')!.precio, 100000);
+  assert.equal(r.totales.iva, 19000);
+  assert.equal(r.totales.total, 119000);
+});

@@ -5,7 +5,8 @@
  *
  * Hojas que se reconocen por sus encabezados (el nombre de la hoja no importa):
  *   · Ítems: Partida · Descripción de la partida · Cant. partida · Unidad partida · Tipo ·
- *     Ítem · Unidad · Cantidad · Costo unitario neto · Utilidad % · Imprevistos % · Código.
+ *     Ítem · Unidad · Cantidad · Costo unitario neto · Utilidad % · Código.
+ *     (Una columna «Imprevistos %» de las planillas de antes se ignora: InnVolt cotiza solo con utilidad.)
  *     Basta con Partida, Ítem y Costo; una fila sin partida sigue en la partida de arriba.
  *   · Textos: Campo · Texto («Título» va al título; lo demás, a la introducción).
  *   · Plan: Etapa · Inicio (día) · Días.
@@ -23,6 +24,8 @@ export interface PlanillaLeida {
   partidas: PartidaIAResuelta[];
   avisos: string[];
 }
+
+export const SIN_IMPREVISTOS = 'La planilla trae imprevistos: no se usan (el precio sale solo del costo y la utilidad).';
 
 const clave = (s: unknown) => String(s ?? '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9]/g, '');
 const texto = (v: unknown) => (v === null || v === undefined ? '' : String(v).replace(/\s+/g, ' ').trim());
@@ -137,7 +140,8 @@ function leerItems(filas: unknown[][], avisos: string[]): PartidaIAResuelta[] | 
     const costo = numeroCelda(celda(fila, 'costo'));
     if (!Number.isFinite(costo)) avisos.push(`Fila ${f + 1}: «${item}» sin costo; entra en 0.`);
     const utilidad = porcentajeCelda(celda(fila, 'utilidad'));
-    const imprevistos = porcentajeCelda(celda(fila, 'imprevistos'));
+    // InnVolt no trabaja con imprevistos: si la planilla los trae, no se usan (se avisa una vez).
+    if (porcentajeCelda(celda(fila, 'imprevistos')) && !avisos.includes(SIN_IMPREVISTOS)) avisos.push(SIN_IMPREVISTOS);
     const codigo = texto(celda(fila, 'codigo'));
     actual.componentes.push({
       descripcion: item, categoria, unidad: texto(celda(fila, 'unidad')) || 'un',
@@ -146,7 +150,6 @@ function leerItems(filas: unknown[][], avisos: string[]): PartidaIAResuelta[] | 
       matched: false,
       ...(codigo ? { codigo } : {}),
       ...(utilidad !== undefined ? { utilidad } : {}),
-      ...(imprevistos ? { imprevistos } : {}),
     });
   }
   const vacias = partidas.filter(p => !p.componentes.length);
@@ -232,11 +235,11 @@ export const PLANILLA_EJEMPLO: { nombre: string; filas: (string | number)[][] }[
   {
     nombre: 'Items',
     filas: [
-      ['Partida', 'Descripción de la partida', 'Cant. partida', 'Unidad partida', 'Tipo', 'Ítem', 'Unidad', 'Cantidad', 'Costo unitario neto', 'Utilidad %', 'Imprevistos %', 'Código'],
-      ['Tablero general', 'Suministro, armado y montaje de tablero nuevo', 1, 'global', 'Material', 'Gabinete metálico 2000×800×600 mm', 'un', 1, 1050000, '', 10, ''],
-      ['', '', '', '', 'Material', 'Interruptor caja moldeada 160 A 3P', 'un', 2, 400000, '', 10, ''],
-      ['', '', '', '', 'Mano de obra', 'Armado y cableado en taller', 'global', 1, 850000, '', 10, ''],
-      ['Pruebas y entrega', 'Ensayos, puesta en servicio y documentación', 1, 'global', 'Servicio', 'Pruebas y puesta en servicio', 'global', 1, 300000, '', '', ''],
+      ['Partida', 'Descripción de la partida', 'Cant. partida', 'Unidad partida', 'Tipo', 'Ítem', 'Unidad', 'Cantidad', 'Costo unitario neto', 'Utilidad %', 'Código'],
+      ['Tablero general', 'Suministro, armado y montaje de tablero nuevo', 1, 'global', 'Material', 'Gabinete metálico 2000×800×600 mm', 'un', 1, 1050000, '', ''],
+      ['', '', '', '', 'Material', 'Interruptor caja moldeada 160 A 3P', 'un', 2, 400000, '', ''],
+      ['', '', '', '', 'Mano de obra', 'Armado y cableado en taller', 'global', 1, 850000, '', ''],
+      ['Pruebas y entrega', 'Ensayos, puesta en servicio y documentación', 1, 'global', 'Servicio', 'Pruebas y puesta en servicio', 'global', 1, 300000, '', ''],
     ],
   },
   {

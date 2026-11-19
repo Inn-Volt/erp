@@ -17,7 +17,7 @@ import { MenuAcciones, opcionMenu, campoChico } from './ui';
 import type { ArticuloCatalogo, CargoPorcentaje, Linea, Moneda, PartidaCot, QueVe, TipoPartida } from '@/lib/cotizador/tipos';
 import { CARGOS_RAPIDOS, IVA, UNIDADES_ITEM, UNIDADES_PARTIDA } from '@/lib/cotizador/tipos';
 import { CATEGORIA_COLORS, CATEGORIA_LABELS } from '@/types';
-import { agrupar, cantidadLegible, filasDelCliente, formatMonto, porcentaje, q, qp, type Resultado } from '@/lib/cotizador/calculo';
+import { agrupar, cantidadLegible, factorIva, filasDelCliente, formatMonto, porcentaje, q, qp, type Resultado } from '@/lib/cotizador/calculo';
 import type { RecetaCompleta } from '@/lib/cotizador/recetas';
 
 export interface AccionesPartida {
@@ -561,7 +561,8 @@ function FilaLinea({ l, esLigada, cols, calc, moneda, fila, ligadas, conMano, de
         <CeldaNum valor={c?.margenReal} decimales={1} sufijo="%" etiqueta="Utilidad: de lo que paga el cliente, qué parte queda para InnVolt" color={bajoCosto ? 'var(--danger)' : undefined}
           onCambiar={v => { if (v !== null) acc.ajustar(l.id, { ganancia: gananciaParaUtilidad(v, l.descuento) }); }} />
       </> : <>
-        <span style={{ ...der, color: 'var(--muted)' }}>{formatMonto(l.costo, moneda, true)}{costoConIva && <span style={nota}>con IVA adentro</span>}</span>
+        <span style={{ ...der, color: 'var(--muted)' }}>{formatMonto(l.costo, moneda, true)}{costoConIva && <span style={nota}>con IVA adentro</span>}
+          <NotaImprevistos l={l} moneda={moneda} /></span>
         <span style={{ ...der, color: bajoCosto ? 'var(--danger)' : 'var(--muted)', fontWeight: bajoCosto ? 700 : 400 }}>{porcentaje(c?.margenReal)}</span>
       </>) : (
         <span style={der}>{formatMonto(c?.precio, moneda, true)}</span>
@@ -683,6 +684,24 @@ function QuitarIva({ l, moneda, onCosto }: { l: Linea; moneda: Moneda; onCosto: 
   return (
     <button type="button" style={enlace} title={`¿El costo trae IVA (precio de mercado)? Lo deja en neto: ${formatMonto(costo, moneda, true)} ÷ 1,19 = ${formatMonto(sinIva(costo), moneda, true)}`}
       onClick={() => { const sin = sinIva(costo); setAntes({ con: costo, sin }); onCosto({ costo: sin }); }}>quitar IVA</button>
+  );
+}
+
+/**
+ * InnVolt no trabaja con imprevistos (solo con la utilidad): un borrador nunca los lleva. Una
+ * cotización ya enviada de antes puede traerlos; aquí se ve cuánto subieron su costo y su precio.
+ */
+function NotaImprevistos({ l, moneda }: { l: Linea; moneda: Moneda }) {
+  const imp = Number(l.imprevistos) || 0;
+  if (imp <= 0) return null;
+  // Un material con precio de mercado puede traer el IVA adentro: los imprevistos van sobre su neto.
+  const conIva = factorIva(l) !== 1;
+  const costo = (l.costo || 0) / factorIva(l);
+  return (
+    <span style={{ display: 'block', fontSize: '0.66rem', fontWeight: 400, color: '#d97706', whiteSpace: 'nowrap' }}
+      title={`Cotización de antes: costo${conIva ? ' neto (sin el IVA que trae)' : ''} ${formatMonto(costo, moneda, true)} + ${porcentaje(imp)} de imprevistos = ${formatMonto(costo * (1 + imp / 100), moneda, true)} por unidad.`}>
+      + {porcentaje(imp)} imprevistos
+    </span>
   );
 }
 

@@ -20,7 +20,7 @@ import { correoAutomatico, enviarCorreo } from '@/lib/correo';
 import PlanCobro from './PlanCobro';
 import NumeroInput from '@/components/NumeroInput';
 import { textoPlano, tituloCorto } from '@/lib/textoFormato';
-import { gananciaDesdeUtilidad, gananciaPorOmision, imprevistosPorOmision, TOPE_IMPREVISTOS } from '@/lib/cotizador/utilidad';
+import { gananciaDesdeUtilidad, gananciaPorOmision } from '@/lib/cotizador/utilidad';
 import EditorFormato from '@/components/EditorFormato';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
@@ -149,10 +149,6 @@ export default function EditorCotizacion({ id, clonarDe, clienteInicial, solicit
   const [proyectos, setProyectos] = useState<Proyecto[]>([]);
   const [trasladoPara, setTrasladoPara] = useState<string | null>(null);
   const [cuadrillaPara, setCuadrillaPara] = useState<string | null>(null);
-  // Imprevistos de una vez (a todo, a los materiales o a la mano de obra y servicios), con deshacer.
-  const [impA, setImpA] = useState<'todas' | 'material' | 'servicio'>('todas');
-  const [impPct, setImpPct] = useState<number | null>(null);
-  const [antesImp, setAntesImp] = useState<{ id: string; imprevistos: number }[] | null>(null);
   useEffect(() => { proyectosService.listar().then(setProyectos).catch(() => setProyectos([])); }, []);
 
   const editable = puedeEditar && d.estado === 'Borrador';
@@ -335,6 +331,17 @@ export default function EditorCotizacion({ id, clonarDe, clienteInicial, solicit
   const setItems = useCallback((f: (items: Linea[]) => Linea[]) => setD(x => ({ ...x, items: f(x.items) })), []);
   const setPartidas = useCallback((f: (p: PartidaCot[]) => PartidaCot[]) => setD(x => ({ ...x, partidas: f(x.partidas) })), []);
 
+  // InnVolt no trabaja con imprevistos, solo con la utilidad: un borrador nunca los lleva. Los que
+  // traiga uno de antes (o una plantilla, una copia o una planilla) se quitan aquí, y se avisa.
+  // Lo enviado o aprobado no se toca: conserva los precios que vio el cliente.
+  useEffect(() => {
+    if (!editable) return;
+    const n = d.items.filter(l => (Number(l.imprevistos) || 0) !== 0).length;
+    if (!n) return;
+    setItems(items => items.map(l => ((Number(l.imprevistos) || 0) !== 0 ? { ...l, imprevistos: 0 } : l)));
+    warning(`Se quitaron los imprevistos de ${n} línea${n === 1 ? '' : 's'}: el precio sale solo del costo y la utilidad. Revisa los totales.`);
+  }, [editable, d.items, setItems, warning]);
+
   const agregarPartida = (tipo: TipoPartida, despuesDe?: string | null) => {
     const p: PartidaCot = { id: nuevoId(), nombre: tipo === 'cargo' ? 'Cargo operacional' : '', cantidad: 1, unidad: 'global', tipo };
     setPartidas(ps => {
@@ -407,13 +414,9 @@ export default function EditorCotizacion({ id, clonarDe, clienteInicial, solicit
   }, [calc, d.items, d.partidas, editable, setItems]);
 
   const agregarLineas = (pid: string, nuevasSin: Linea[]) => {
-    // Lo nuevo entra con los imprevistos de cada tipo (Utilidad → imprevistos). Un cargo y la
-    // operación (traslados, fletes) se cobran tal cual: sin imprevistos.
-    const enCargo = d.partidas.find(p => p.id === pid)?.tipo === 'cargo';
-    const nuevas = enCargo ? nuevasSin : nuevasSin.map(l => {
-      const imp = imprevistosPorOmision(ajustes?.imprevistos_por_tipo, l.categoria);
-      return imp > 0 && !(l.imprevistos || 0) ? { ...l, imprevistos: imp } : l;
-    });
+    // Lo nuevo entra siempre sin imprevistos (venga de la biblioteca, de una receta o de una planilla):
+    // el precio sale solo del costo y la utilidad (con utilidad 0 % se vende a su costo).
+    const nuevas = nuevasSin.map(l => ((l.imprevistos || 0) ? { ...l, imprevistos: 0 } : l));
     setItems(items => {
       // Al final de su partida (para que queden juntas en el orden del documento).
       let ultima = -1;
@@ -423,7 +426,18 @@ export default function EditorCotizacion({ id, clonarDe, clienteInicial, solicit
   };
 
   const lineaAcc: AccionesLinea = {
-    cambiar: (lid, patch) => setItems(items => items.map(l => (l.id === lid ? { ...l, ...patch } : l))),
+    cambiar: (lid, patch) => setItems(items => items.map(l => {
+      if (l.id !== lid) return l;
+      // Lo escrito en el buscador entra como material, con su utilidad. Si se le cambia el tipo, pasa
+      // a la utilidad del tipo nuevo, salvo que ya se haya cambiado a mano.
+      if (patch.categoria && patch.categoria !== l.categoria && l.fuera && !l.cargo && patch.ganancia === undefined
+        && l.ganancia !== null && l.ganancia !== undefined
+        && d.partidas.find(p => p.id === l.partidaId)?.tipo !== 'cargo'
+        && Math.abs(l.ganancia - gananciaPorOmision(ajustes?.utilidad_por_tipo, l.categoria)) < 1e-6) {
+        return { ...l, ...patch, ganancia: gananciaPorOmision(ajustes?.utilidad_por_tipo, patch.categoria) };
+      }
+      return { ...l, ...patch };
+    })),
     // Cambiar el costo o la ganancia de algo del catálogo: queda «ajustada» en esta cotización
     // (se calcula desde su costo y su ganancia) y la biblioteca no se toca. Parte de la ganancia
     // que hoy tiene, para que el precio no salte hasta que se cambie algo.
@@ -548,7 +562,7 @@ export default function EditorCotizacion({ id, clonarDe, clienteInicial, solicit
         } else {
           items.push({
             id: nuevoId(), partidaId: p.id, descripcion: c.descripcion, categoria: c.categoria, unidad: c.unidad || 'un',
-            cantidad: c.cantidad ?? 1, costo: aMoneda(c.costo || 0, moneda, valorUf, true), imprevistos: c.imprevistos || 0, margen: 0, precio: 0,
+            cantidad: c.cantidad ?? 1, costo: aMoneda(c.costo || 0, moneda, valorUf, true), imprevistos: 0, margen: 0, precio: 0,
             iva: IVA, descuento: 0, fuera: true,
             // La planilla importada puede traer su propia utilidad; si no, la de Ajustes.
             ganancia: c.utilidad !== undefined ? gananciaDesdeUtilidad(c.utilidad) : gananciaPorOmision(ajustes?.utilidad_por_tipo, c.categoria),
@@ -842,24 +856,6 @@ export default function EditorCotizacion({ id, clonarDe, clienteInicial, solicit
     } catch (e) { toastError(e instanceof Error ? e.message : 'No se pudo armar el PDF'); }
   };
 
-  const aplicarImprevistos = () => {
-    const v = Math.min(Math.max(impPct ?? 0, 0), TOPE_IMPREVISTOS);
-    // Los cargos y la operación (traslados, fletes) se cobran tal cual: sin imprevistos.
-    const cargos = new Set(d.partidas.filter(x => x.tipo === 'cargo').map(x => x.id));
-    const elegidas = d.items.filter(l => !cargos.has(l.partidaId || '') && l.categoria !== 'operacion'
-      && (impA === 'todas' || (impA === 'material' ? l.categoria === 'material' : l.categoria !== 'material')));
-    if (!elegidas.length) return;
-    setAntesImp(elegidas.map(l => ({ id: l.id, imprevistos: Number(l.imprevistos) || 0 })));
-    const ids = new Set(elegidas.map(l => l.id));
-    setItems(items => items.map(l => (ids.has(l.id) ? { ...l, imprevistos: v } : l)));
-    setImpPct(null);
-  };
-  const deshacerImprevistos = () => {
-    const antes = new Map((antesImp || []).map(x => [x.id, x.imprevistos]));
-    setItems(items => items.map(l => (antes.has(l.id) ? { ...l, imprevistos: antes.get(l.id)! } : l)));
-    setAntesImp(null);
-  };
-
   const recargar = async () => { if (cot) await cargarDoc(cot.id); setModal(null); };
 
   // ── Plantilla ──
@@ -1004,22 +1000,6 @@ export default function EditorCotizacion({ id, clonarDe, clienteInicial, solicit
             <div style={{ display: 'flex', justifyContent: 'space-between' }}><span>Utilidad</span>
               <b style={{ color: calc.internos.utilidad < 0 ? 'var(--danger)' : 'var(--success)' }}>{formatMonto(calc.internos.utilidad, d.moneda)} ({porcentaje(calc.internos.margen)})</b></div>
           </div>
-          {editable && d.items.length > 0 && (
-            <div style={{ borderTop: '1px solid var(--border2)', marginTop: 8, paddingTop: 8, display: 'flex', flexWrap: 'wrap', gap: 4, alignItems: 'center', fontSize: '0.76rem', color: 'var(--muted)' }}
-              title="Un colchón sobre el costo (mermas, cortes, sorpresas). Lo que tiene su propia utilidad sube su precio para mantenerla; lo de la biblioteca mantiene su precio y la utilidad ya lo descuenta. Los cargos y la operación no llevan.">
-              Imprevistos de
-              <select className="input" value={impA} onChange={e => setImpA(e.target.value as typeof impA)} aria-label="A qué líneas van los imprevistos"
-                style={{ width: 'auto', padding: '0.25rem 0.35rem', fontSize: '0.76rem' }}>
-                <option value="todas">todo</option>
-                <option value="material">los materiales</option>
-                <option value="servicio">la mano de obra y servicios</option>
-              </select>
-              <span style={{ width: 62 }}><NumeroInput className="input" min={0} max={TOPE_IMPREVISTOS} mostrarCero value={impPct} onChange={setImpPct} onVacio={() => setImpPct(null)}
-                ariaLabel="Imprevistos %" style={{ padding: '0.25rem 0.35rem', fontSize: '0.76rem' }} /></span> %
-              <button type="button" className="btn btn-ghost btn-xs" disabled={impPct === null} onClick={aplicarImprevistos}>Aplicar</button>
-              {antesImp && <button type="button" className="btn btn-ghost btn-xs" onClick={deshacerImprevistos}>Deshacer</button>}
-            </div>
-          )}
         </div>
       )}
       {editable && avisos.length > 0 && (

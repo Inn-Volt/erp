@@ -69,7 +69,7 @@ export default function ImportarPlanilla({ moneda, previsualizar, onInsertar, on
 
         <div style={{ padding: '1rem 1.25rem', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 14 }}>
           <p style={{ margin: 0, fontSize: '0.84rem', color: 'var(--muted)' }}>
-            Sube un Excel con una fila por ítem: <b>Partida · Tipo · Ítem · Unidad · Cantidad · Costo unitario neto</b> (y si quieres Utilidad %, Imprevistos %, Código).
+            Sube un Excel con una fila por ítem: <b>Partida · Tipo · Ítem · Unidad · Cantidad · Costo unitario neto</b> (y si quieres Utilidad %, Código).
             Opcional: una hoja <b>Textos</b> (Campo · Texto) y una hoja <b>Plan</b> (Etapa · Inicio · Días) para la carta Gantt.
           </p>
           <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>

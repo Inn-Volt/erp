@@ -110,7 +110,6 @@ export function hojasExcel(doc: Pick<CotizacionDoc, 'titulo' | 'descripcion_gene
       const c = r.lineas.get(l.id);
       const f = l.ivaIncluido && (l.iva ?? IVA) !== 0 ? 1 + IVA / 100 : 1;
       const costo = (Number(l.costo) || 0) / f;
-      const costoCI = costo * (1 + (Number(l.imprevistos) || 0) / 100);
       const precio = c?.precio || 0;
       items.push({
         'Partida': g.nombre,
@@ -122,9 +121,9 @@ export function hojasExcel(doc: Pick<CotizacionDoc, 'titulo' | 'descripcion_gene
         'Unidad': l.unidad || 'un',
         'Cantidad': Number(l.cantidad) || 0,
         'Costo unitario neto': redondeo(costo),
-        // Sobre el precio antes del descuento: lo mismo que lee el importador.
-        'Utilidad %': precio > 0 && costoCI > 0 ? r2((1 - costoCI / precio) * 100) : '',
-        'Imprevistos %': Number(l.imprevistos) || '',
+        // Sobre el precio antes del descuento: lo mismo que lee el importador. Sin imprevistos (InnVolt
+        // cotiza solo con utilidad): al volver a importarla, cada línea queda con el mismo precio.
+        'Utilidad %': precio > 0 && costo > 0 ? r2((1 - costo / precio) * 100) : '',
         'Código': l.codigo || '',
         'Precio unitario': precio,
         'Descuento línea %': Number(l.descuento) || '',
@@ -155,8 +154,7 @@ export function hojasExcel(doc: Pick<CotizacionDoc, 'titulo' | 'descripcion_gene
     { 'N°': '', 'Partida': `Total (${doc.moneda})`, 'Neto': t.total },
   );
   const porTipo = r.internos.porCategoria.map(c => ({
-    'Tipo': TIPO_NOMBRE[c.categoria] || c.categoria, 'Neto': c.neto, 'Costo directo': c.costo,
-    'Costo con imprevistos': c.costoConImprevistos, 'Utilidad': c.utilidad,
+    'Tipo': TIPO_NOMBRE[c.categoria] || c.categoria, 'Neto': c.neto, 'Costo': c.costoConImprevistos, 'Utilidad': c.utilidad,
   }));
   const textos = [
     { 'Campo': 'Título', 'Texto': doc.titulo || '' },

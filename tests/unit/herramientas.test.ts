@@ -54,7 +54,7 @@ test('El Excel se vuelve a importar con las mismas partidas, cantidades, costos 
     { id: 'p2', nombre: 'Tablero', cantidad: 1, unidad: 'global' },
   ];
   const items = [
-    linea('Gabinete', 'p1', { cantidad: 2, costo: 100000, ganancia: 50, imprevistos: 10, codigo: 'GAB-1' }),
+    linea('Gabinete', 'p1', { cantidad: 2, costo: 100000, ganancia: 50, codigo: 'GAB-1' }),
     linea('Armado', 'p1', { categoria: 'mano_obra', unidad: 'global', costo: 80000, ganancia: 100 }),
     linea('Pruebas', 'p2', { categoria: 'servicio', costo: 50000, ganancia: 25 }),
   ];
@@ -70,9 +70,8 @@ test('El Excel se vuelve a importar con las mismas partidas, cantidades, costos 
   const gab = leida.partidas[0].componentes[0];
   assert.equal(gab.costo, 100000);
   assert.equal(gab.cantidad, 2);
-  assert.equal(gab.imprevistos, 10);
   assert.equal(gab.codigo, 'GAB-1');
-  // Ganancia 50 % sobre el costo con imprevistos = utilidad 33,33 % sobre el precio.
+  // Ganancia 50 % sobre el costo = utilidad 33,33 % sobre el precio.
   assert.ok(Math.abs((gab.utilidad ?? 0) - 33.33) < 0.01, String(gab.utilidad));
   assert.equal(leida.partidas[0].componentes[1].categoria, 'mano_obra');
   assert.equal(leida.partidas[1].componentes[0].categoria, 'servicio');

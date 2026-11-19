@@ -1,7 +1,7 @@
 // Pruebas de «importar planilla» al cotizador. Correr: npm test
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { leerPlanilla, numeroCelda, tipoCelda, planEnTexto, introduccionDePlanilla, PLANILLA_EJEMPLO } from '../../lib/cotizador/planilla.ts';
+import { leerPlanilla, numeroCelda, tipoCelda, planEnTexto, introduccionDePlanilla, PLANILLA_EJEMPLO, SIN_IMPREVISTOS } from '../../lib/cotizador/planilla.ts';
 
 test('Números con formato chileno, de Excel y porcentajes', () => {
   assert.equal(numeroCelda('$1.050.000'), 1050000);
@@ -31,7 +31,7 @@ test('La planilla de ejemplo se lee completa', () => {
   assert.equal(tablero.descripcion, 'Suministro, armado y montaje de tablero nuevo');
   assert.equal(tablero.componentes.length, 3);
   assert.deepEqual(tablero.componentes[1], {
-    descripcion: 'Interruptor caja moldeada 160 A 3P', categoria: 'material', unidad: 'un', cantidad: 2, costo: 400000, matched: false, imprevistos: 10,
+    descripcion: 'Interruptor caja moldeada 160 A 3P', categoria: 'material', unidad: 'un', cantidad: 2, costo: 400000, matched: false,
   });
   assert.equal(tablero.componentes[2].categoria, 'mano_obra');
   assert.equal(pruebas.componentes[0].categoria, 'servicio');
@@ -60,6 +60,18 @@ test('Encabezados con otro orden, títulos arriba, totales y filas sin partida',
   assert.equal(r.avisos.length, 2);
   assert.match(r.avisos[0], /no tiene partida/);
   assert.match(r.avisos[1], /sin costo/);
+});
+
+test('Una planilla de antes con imprevistos: se ignoran y se avisa una vez (solo utilidad)', () => {
+  const r = leerPlanilla([{ nombre: 'Items', filas: [
+    ['Partida', 'Tipo', 'Ítem', 'Cantidad', 'Costo unitario neto', 'Utilidad %', 'Imprevistos %'],
+    ['Control de acceso', 'Mano de obra', 'Instalación', 1, 875000, 0, 15],
+    ['', 'Material', 'Cerradura', 2, 50000, 25, 10],
+  ] }]);
+  assert.deepEqual(r.avisos, [SIN_IMPREVISTOS]);
+  for (const c of r.partidas[0].componentes) assert.equal('imprevistos' in c, false);
+  assert.equal(r.partidas[0].componentes[0].costo, 875000);
+  assert.equal(r.partidas[0].componentes[0].utilidad, 0);
 });
 
 test('Sin hoja de ítems avisa', () => {
