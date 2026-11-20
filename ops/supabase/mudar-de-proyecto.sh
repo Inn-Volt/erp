@@ -152,6 +152,9 @@ for t in users identities; do
 done
 echo "      $(grep -c '^COPY ' "$TMP/public.sql") tablas de la ERP · $(( $(wc -l < "$TMP/auth.sql") - 4 )) filas de cuentas"
 {
+  # Si este PC pierde la conexión, el servidor se da cuenta en menos de un minuto y deshace la carga
+  # (sin esto, la carga cortada queda colgada en el servidor bloqueando las tablas por mucho rato).
+  echo "SET tcp_keepalives_idle = 20; SET tcp_keepalives_interval = 5; SET tcp_keepalives_count = 3;"
   echo "BEGIN;"
   echo "SET session_replication_role = replica;"
   echo "DO \$\$ DECLARE t TEXT; BEGIN
@@ -161,7 +164,21 @@ echo "      $(grep -c '^COPY ' "$TMP/public.sql") tablas de la ERP · $(( $(wc -
   echo "DELETE FROM auth.identities; DELETE FROM auth.sessions; DELETE FROM auth.refresh_tokens; DELETE FROM auth.users;"
   cat "$TMP/public.sql" "$TMP/auth.sql"
   echo "COMMIT;"
-} | pd > /dev/null
+} > "$TMP/carga.sql"
+# Es una sola transacción: si la conexión se corta a mitad de camino, la base deshace todo y se
+# reintenta (antes se cierra la carga anterior, por si quedó colgada en el servidor). Un error de
+# los datos no se reintenta.
+for intento in 1 2 3; do
+  if err=$(PGAPPNAME=mudanza-carga pd -f "$TMP/carga.sql" 2>&1 >/dev/null); then break; fi
+  echo "$err" | tail -4 | sed 's/^/      /'
+  grep -qiE "closed the connection|connection to server was lost|SSL SYSCALL|invalid socket|could not (connect|translate|receive|send)|timeout expired" <<<"$err" \
+    || { echo "La carga falló (no se cambió nada en el proyecto nuevo)."; exit 1; }
+  (( intento < 3 )) || { echo "Se cortó la conexión 3 veces (no se cambió nada en el proyecto nuevo)."; exit 1; }
+  echo "      Se cortó la conexión; se reintenta ($((intento + 1))/3)…"
+  sleep 30
+  pd -At -c "select count(pg_terminate_backend(pid)) from pg_stat_activity where application_name = 'mudanza-carga'" >/dev/null 2>&1 || true
+  sleep 3
+done
 
 echo "3/6 · Fases que el origen no tenía…"
 if (( ${#faltan[@]} )); then correr_fases "${faltan[@]}"; else echo "      ninguna"; fi
