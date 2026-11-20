@@ -88,6 +88,14 @@ comprobar() {
 
 }
 if $SOLO_COMPROBAR; then TMP=$(mktemp -d); trap 'rm -rf "$TMP"' EXIT; comprobar; exit 0; fi
+# Seguro: si el proyecto nuevo ya tiene algo más reciente que el origen, es porque ya es el de
+# producción (la mudanza se hizo) y esto lo pisaría con datos viejos. Solo se sigue con FORZAR=si.
+q_reciente="select coalesce(greatest((select max(created_at) from public.cotizaciones), (select max(created_at) from public.ordenes_trabajo), (select max(last_sign_in_at) from auth.users))::text, '')"
+ro=$(po -At -c "$q_reciente" 2>/dev/null | tr -d '\r' || true); rd=$(pd -At -c "$q_reciente" 2>/dev/null | tr -d '\r' || true)
+if [[ -n "$rd" && "$rd" > "$ro" && "${FORZAR:-}" != si ]]; then
+  echo "El proyecto nuevo tiene datos más recientes que el origen ($rd > ${ro:-nada}):"
+  echo "parece que ya es el de producción. No se mudó nada (para pisarlo igual: FORZAR=si)."; exit 1
+fi
 if [[ "${MUDAR:-}" != si ]]; then
   read -r -p "Escribe MUDAR para seguir: " ok || true
   [[ "$ok" == MUDAR ]] || { echo "Cancelado."; exit 1; }
