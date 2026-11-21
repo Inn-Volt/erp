@@ -5,9 +5,10 @@
 --     «Sin partida»). Es el id de la partida en cotizaciones.partidas (JSON): la app revisa que
 --     exista al guardar y la limpia si cambia el trabajo.
 --   · Cada compra dice qué tipo de costo es (material, mano de obra, servicio u operación).
---   · Equipo: el personal interno con su sueldo y su jornada (horas, colación, movilización…) da
---     el costo por día y por hora; los externos y subcontratos, su valor por jornada (líquido) y si
---     dan boleta de honorarios (entonces el costo real incluye la retención, que se paga al SII).
+--   · Equipo: el personal interno con su sueldo LÍQUIDO y sus descuentos (AFP, salud, cesantía y
+--     otros, los de cada uno) da el bruto; con los aportes del empleador y su jornada (horas,
+--     colación, movilización…), el costo por día y por hora. Los externos y subcontratos, su valor
+--     por jornada (líquido) y si dan boleta de honorarios (el costo incluye la retención del SII).
 --   · Mano de obra del trabajo, día a día: horas de los internos y pagos a externos. El costo lo
 --     calcula la base y queda fijo (si después cambia el sueldo, lo ya registrado no cambia).
 --   · Al aprobar se puede fijar el primer pago (en $): el plan de cobro se ajusta solo.
@@ -59,8 +60,14 @@ CREATE TABLE IF NOT EXISTS public.trabajadores (
   oficio           TEXT,                        -- cargo u oficio: maestro eléctrico, ayudante, subcontrato…
   usuario_id       UUID UNIQUE REFERENCES public.profiles(id) ON DELETE SET NULL,   -- si tiene cuenta (registra sus horas)
   activo           BOOLEAN NOT NULL DEFAULT TRUE,
-  -- Interno: costo del día = sueldo bruto × (1 + aportes del empleador) ÷ días del mes + colación + movilización + otros.
-  sueldo_bruto     NUMERIC(12,0) NOT NULL DEFAULT 0 CHECK (sueldo_bruto >= 0),
+  -- Interno: el sueldo líquido (sin colación ni movilización) y los descuentos de la persona dan el
+  -- bruto: (líquido + otros descuentos) ÷ (1 − AFP − salud − cesantía). Costo del día = bruto ×
+  -- (1 + aportes del empleador) ÷ días del mes + colación + movilización + otros.
+  sueldo_liquido   NUMERIC(12,0) NOT NULL DEFAULT 0 CHECK (sueldo_liquido >= 0),
+  afp_pct          NUMERIC(5,2)  NOT NULL DEFAULT 11.5 CHECK (afp_pct >= 0),       -- 10 % + comisión de su AFP
+  salud_pct        NUMERIC(5,2)  NOT NULL DEFAULT 7 CHECK (salud_pct >= 0),        -- Fonasa o Isapre
+  cesantia_pct     NUMERIC(5,2)  NOT NULL DEFAULT 0.6 CHECK (cesantia_pct >= 0),   -- 0,6 % indefinido; 0 a plazo fijo
+  otros_descuentos NUMERIC(12,0) NOT NULL DEFAULT 0 CHECK (otros_descuentos >= 0), -- $ al mes: Isapre adicional, impuesto…
   aportes_pct      NUMERIC(5,2)  NOT NULL DEFAULT 0 CHECK (aportes_pct >= 0 AND aportes_pct <= 100),
   dias_mes         NUMERIC(4,1)  NOT NULL DEFAULT 22 CHECK (dias_mes > 0 AND dias_mes <= 31),
   horas_dia        NUMERIC(4,2)  NOT NULL DEFAULT 9 CHECK (horas_dia > 0 AND horas_dia <= 24),
@@ -85,10 +92,27 @@ CREATE POLICY trabajadores_todo ON public.trabajadores FOR ALL TO authenticated
 DROP TRIGGER IF EXISTS trg_trabajadores_updated ON public.trabajadores;
 CREATE TRIGGER trg_trabajadores_updated BEFORE UPDATE ON public.trabajadores FOR EACH ROW EXECUTE FUNCTION public.set_updated_at();
 
+-- Al día: las fichas de la primera versión de esta fase guardaban el sueldo bruto; ahora se guarda
+-- el líquido y los descuentos de cada uno (el bruto se calcula).
+ALTER TABLE public.trabajadores ADD COLUMN IF NOT EXISTS sueldo_liquido NUMERIC(12,0) NOT NULL DEFAULT 0 CHECK (sueldo_liquido >= 0);
+ALTER TABLE public.trabajadores ADD COLUMN IF NOT EXISTS afp_pct NUMERIC(5,2) NOT NULL DEFAULT 11.5 CHECK (afp_pct >= 0);
+ALTER TABLE public.trabajadores ADD COLUMN IF NOT EXISTS salud_pct NUMERIC(5,2) NOT NULL DEFAULT 7 CHECK (salud_pct >= 0);
+ALTER TABLE public.trabajadores ADD COLUMN IF NOT EXISTS cesantia_pct NUMERIC(5,2) NOT NULL DEFAULT 0.6 CHECK (cesantia_pct >= 0);
+ALTER TABLE public.trabajadores ADD COLUMN IF NOT EXISTS otros_descuentos NUMERIC(12,0) NOT NULL DEFAULT 0 CHECK (otros_descuentos >= 0);
+ALTER TABLE public.trabajadores DROP COLUMN IF EXISTS sueldo_bruto;
+ALTER TABLE public.trabajadores DROP CONSTRAINT IF EXISTS trabajadores_descuentos_check;
+ALTER TABLE public.trabajadores ADD CONSTRAINT trabajadores_descuentos_check CHECK (afp_pct + salud_pct + cesantia_pct < 100);
+
+/** Sueldo bruto del interno: su líquido más sus descuentos. */
+CREATE OR REPLACE FUNCTION public.trabajador_sueldo_bruto(t public.trabajadores)
+RETURNS NUMERIC LANGUAGE sql IMMUTABLE AS $$
+  SELECT round((t.sueldo_liquido + t.otros_descuentos) / (1 - (t.afp_pct + t.salud_pct + t.cesantia_pct) / 100));
+$$;
+
 /** Costo de un día del interno (en pesos). */
 CREATE OR REPLACE FUNCTION public.trabajador_costo_dia(t public.trabajadores)
 RETURNS NUMERIC LANGUAGE sql IMMUTABLE AS $$
-  SELECT round(t.sueldo_bruto * (1 + t.aportes_pct / 100) / t.dias_mes + t.colacion_dia + t.movilizacion_dia + t.otros_dia);
+  SELECT round(public.trabajador_sueldo_bruto(t) * (1 + t.aportes_pct / 100) / t.dias_mes + t.colacion_dia + t.movilizacion_dia + t.otros_dia);
 $$;
 
 /** Quién es «yo» en el equipo (la ficha ligada a mi cuenta). */

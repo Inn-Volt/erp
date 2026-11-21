@@ -16,6 +16,16 @@ SELECT set_config('request.jwt.claim.sub', '', false);
 INSERT INTO public.usuario_roles (usuario_id, rol_id) SELECT :'CESAR', id FROM public.roles WHERE clave = 'admin' ON CONFLICT DO NOTHING;
 DELETE FROM public.usuario_roles WHERE usuario_id = :'JOAQUIN';
 INSERT INTO public.usuario_roles (usuario_id, rol_id) SELECT :'JOAQUIN', id FROM public.roles WHERE clave = 'tecnico';
+-- Producción tiene la primera versión de esta fase (ficha con sueldo bruto): se simula y se pone al
+-- día volviendo a correr el archivo, como se hará allá.
+ALTER TABLE public.trabajadores DROP COLUMN IF EXISTS sueldo_liquido, DROP COLUMN IF EXISTS afp_pct, DROP COLUMN IF EXISTS salud_pct,
+  DROP COLUMN IF EXISTS cesantia_pct, DROP COLUMN IF EXISTS otros_descuentos;
+ALTER TABLE public.trabajadores ADD COLUMN IF NOT EXISTS sueldo_bruto NUMERIC(12,0) NOT NULL DEFAULT 0;
+\i /tmp/supabase_fase20_control_proyecto.sql
+SELECT set_config('request.jwt.claim.sub', '', false);
+INSERT INTO r (ok, txt) SELECT count(*) FILTER (WHERE column_name = 'sueldo_bruto') = 0 AND count(*) FILTER (WHERE column_name IN ('sueldo_liquido','afp_pct','salud_pct','cesantia_pct','otros_descuentos')) = 5,
+  'La ficha de la primera versión (sueldo bruto) queda con el líquido y los descuentos'
+  FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'trabajadores';
 UPDATE public.ajustes_cotizacion SET retencion_honorarios = 15.25,
   plan_cobro = '[{"nombre":"Anticipo","porcentaje":50,"cuando":"aprobar"},{"nombre":"Saldo","porcentaje":50,"cuando":"terminar"}]' WHERE id = 1;
 
@@ -85,12 +95,20 @@ INSERT INTO r (ok, txt) SELECT count(*) = 1, 'El gasto quedó en la partida p2' 
 INSERT INTO r (ok, txt) SELECT count(*) = 1, 'La compra quedó en la partida p1 como material' FROM public.compras WHERE cotizacion_id = :'COT' AND partida_id = 'p1' AND tipo_costo = 'material';
 
 -- ═══ 4. Equipo y mano de obra ═══
--- Interno: $900.000 + 5 % de aportes ÷ 22 días + colación 3.000 + movilización 2.000 = $47.955 al día (9 h).
-INSERT INTO public.trabajadores (id, tipo, nombre, usuario_id, sueldo_bruto, aportes_pct, dias_mes, horas_dia, colacion_dia, movilizacion_dia)
-VALUES (:'INT', 'interno', 'Joaquín', :'JOAQUIN', 900000, 5, 22, 9, 3000, 2000);
+-- Interno: $728.100 líquidos con AFP 11,5 % + salud 7 % + cesantía 0,6 % = $900.000 brutos;
+-- + 5 % de aportes ÷ 22 días + colación 3.000 + movilización 2.000 = $47.955 al día (9 h).
+INSERT INTO public.trabajadores (id, tipo, nombre, usuario_id, sueldo_liquido, afp_pct, salud_pct, cesantia_pct, aportes_pct, dias_mes, horas_dia, colacion_dia, movilizacion_dia)
+VALUES (:'INT', 'interno', 'Joaquín', :'JOAQUIN', 728100, 11.5, 7, 0.6, 5, 22, 9, 3000, 2000);
 INSERT INTO public.trabajadores (id, tipo, nombre, valor_jornada, honorarios) VALUES (:'EXT', 'externo', 'Pedro (ayudante)', 50000, TRUE);
+INSERT INTO r (ok, txt) SELECT public.trabajador_sueldo_bruto(t) = 900000, 'Del líquido y sus descuentos sale el bruto: $900.000 (' || public.trabajador_sueldo_bruto(t) || ')'
+  FROM public.trabajadores t WHERE id = :'INT';
 INSERT INTO r (ok, txt) SELECT public.trabajador_costo_dia(t) = 47955, 'Costo del día del interno: $47.955 (' || public.trabajador_costo_dia(t) || ')'
   FROM public.trabajadores t WHERE id = :'INT';
+DO $$ BEGIN
+  INSERT INTO public.trabajadores (tipo, nombre, afp_pct, salud_pct, cesantia_pct) VALUES ('interno', 'Imposible', 60, 30, 10);
+  INSERT INTO r (ok, txt) VALUES (FALSE, 'Los descuentos no pueden sumar 100 % o más');
+EXCEPTION WHEN check_violation THEN INSERT INTO r (ok, txt) VALUES (TRUE, 'Los descuentos no pueden sumar 100 % o más');
+END $$;
 
 SELECT pg_temp.como(:'JOAQUIN');
 SET ROLE authenticated;
@@ -123,7 +141,7 @@ INSERT INTO r (ok, txt) SELECT costo = 58997 AND retencion_pct = 15.25, 'Externo
   FROM public.mano_obra WHERE trabajador_id = :'EXT';
 INSERT INTO r (ok, txt) SELECT costo = 30000 AND fecha_pago IS NOT NULL, 'Sin boleta cuesta lo líquido; pagado queda con su fecha'
   FROM public.mano_obra WHERE nombre = 'Flete sin ficha';
-UPDATE public.trabajadores SET sueldo_bruto = 2000000 WHERE id = :'INT';
+UPDATE public.trabajadores SET sueldo_liquido = 2000000 WHERE id = :'INT';
 INSERT INTO r (ok, txt) SELECT costo = 23978, 'Si después cambia el sueldo, lo ya registrado no cambia' FROM public.mano_obra WHERE trabajador_id = :'INT';
 INSERT INTO r (ok, txt) SELECT gastos = 20000 AND compras = 100000 AND mano_obra = 23978 + 58997 + 30000,
   'El resultado del trabajo suma la mano de obra (' || mano_obra || ')' FROM public.cotizacion_resultado WHERE cotizacion_id = :'COT';

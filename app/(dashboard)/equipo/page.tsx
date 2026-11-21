@@ -2,8 +2,9 @@
 
 /**
  * Finanzas → Equipo y costos (fase 20): de quién sale la mano de obra de los trabajos.
- *   · Personal interno: su sueldo y su jornada (horas, días del mes, colación, movilización…) dan
- *     el costo de un día y de una hora. Si tiene cuenta en el ERP, puede registrar sus propias horas.
+ *   · Personal interno: su sueldo líquido y sus descuentos (AFP, salud, cesantía y otros, los de cada
+ *     uno) dan el bruto; con los aportes del empleador y su jornada (horas, días del mes, colación,
+ *     movilización…), el costo de un día y de una hora. Con cuenta en el ERP registra sus horas.
  *   · Externos y subcontratos: lo que se les paga líquido por jornada y si dan boleta de honorarios
  *     (entonces el costo incluye la retención que se paga al SII; el % está aquí mismo).
  * Lo ve y lo cambia quien paga las rendiciones o configura el sistema (los sueldos no los ve nadie más).
@@ -17,7 +18,7 @@ import NumeroInput from '@/components/NumeroInput';
 import { Modal } from '@/components/cotizador/ui';
 import { fichaVacia, manoObraService, type NuevoTrabajador, type TipoTrabajador, type Trabajador } from '@/services/manoObra';
 import { vendedoresService } from '@/services/vendedores';
-import { costoDia, costoExterno, costoHora, RETENCION_HONORARIOS } from '@/lib/manoObra';
+import { costoDia, costoExterno, costoHora, descuentos, RETENCION_HONORARIOS } from '@/lib/manoObra';
 import { avisoRut, formatearRut } from '@/lib/rut';
 import { useToast } from '@/hooks/useToast';
 import { formatCLP } from '@/utils';
@@ -38,6 +39,7 @@ function FormFicha({ ficha, retencion, cuentas, onCerrar, onListo }: {
   const guardar = async () => {
     if (!d.nombre.trim()) { toastError('Indica el nombre'); return; }
     if (d.rut && avisoRut(d.rut)) { toastError(avisoRut(d.rut) || 'RUT inválido'); return; }
+    if (interno && d.afp_pct + d.salud_pct + d.cesantia_pct >= 100) { toastError('Los descuentos (AFP + salud + cesantía) deben sumar menos de 100 %.'); return; }
     setGuardando(true);
     try {
       await manoObraService.guardarFicha(id, { ...d, rut: d.rut ? formatearRut(d.rut) : null, usuario_id: interno ? d.usuario_id : null });
@@ -47,7 +49,7 @@ function FormFicha({ ficha, retencion, cuentas, onCerrar, onListo }: {
     finally { setGuardando(false); }
   };
 
-  const dia = costoDia(d), hora = costoHora(d);
+  const dia = costoDia(d), hora = costoHora(d), desc = descuentos(d);
   const bruto = costoExterno(d.valor_jornada, d.honorarios, retencion);
   return (
     <Modal titulo={<>{interno ? <UserRound size={15} /> : <HardHat size={15} />} {id ? 'Editar' : 'Nuevo'} {interno ? 'interno' : 'externo o subcontrato'}</>}
@@ -64,9 +66,17 @@ function FormFicha({ ficha, retencion, cuentas, onCerrar, onListo }: {
         <div><label className="label-muted" style={lbl}>{interno ? 'Cargo' : 'Oficio'}</label>
           <input className="input" value={d.oficio || ''} onChange={e => set({ oficio: e.target.value })} placeholder={interno ? 'Maestro eléctrico' : 'Ayudante, subcontrato…'} /></div>
         {interno ? <>
-          <div><label className="label-muted" style={lbl}>Sueldo bruto mensual</label>
-            <NumeroInput className="input" prefijo="$" value={d.sueldo_bruto} onChange={v => set({ sueldo_bruto: v })} /></div>
-          <div><label className="label-muted" style={lbl} title="Seguro de cesantía, SIS, mutual… (lo que paga la empresa sobre el sueldo)">Aportes del empleador (%)</label>
+          <div><label className="label-muted" style={lbl} title="Lo que recibe al mes, sin colación ni movilización">Sueldo líquido mensual</label>
+            <NumeroInput className="input" prefijo="$" value={d.sueldo_liquido} onChange={v => set({ sueldo_liquido: v })} /></div>
+          <div><label className="label-muted" style={lbl} title="10 % + la comisión de su AFP">AFP (%)</label>
+            <NumeroInput className="input" sufijo="%" mostrarCero value={d.afp_pct} onChange={v => set({ afp_pct: v })} max={30} /></div>
+          <div><label className="label-muted" style={lbl} title="7 % (Fonasa o lo legal de la Isapre)">Salud (%)</label>
+            <NumeroInput className="input" sufijo="%" mostrarCero value={d.salud_pct} onChange={v => set({ salud_pct: v })} max={30} /></div>
+          <div><label className="label-muted" style={lbl} title="0,6 % con contrato indefinido; 0 % a plazo fijo">Seguro de cesantía (%)</label>
+            <NumeroInput className="input" sufijo="%" mostrarCero value={d.cesantia_pct} onChange={v => set({ cesantia_pct: v })} max={10} /></div>
+          <div><label className="label-muted" style={lbl} title="Plan adicional de la Isapre, impuesto único, otros descuentos fijos">Otros descuentos ($ al mes)</label>
+            <NumeroInput className="input" prefijo="$" value={d.otros_descuentos} onChange={v => set({ otros_descuentos: v })} /></div>
+          <div><label className="label-muted" style={lbl} title="Seguro de cesantía del empleador, SIS, mutual… (lo que paga la empresa sobre el bruto)">Aportes del empleador (%)</label>
             <NumeroInput className="input" sufijo="%" value={d.aportes_pct} onChange={v => set({ aportes_pct: v })} max={100} /></div>
           <div><label className="label-muted" style={lbl}>Días trabajados al mes</label>
             <NumeroInput className="input" value={d.dias_mes} onChange={v => set({ dias_mes: v })} min={1} max={31} /></div>
@@ -84,9 +94,11 @@ function FormFicha({ ficha, retencion, cuentas, onCerrar, onListo }: {
               {cuentas.map(c => <option key={c.id} value={c.id}>{c.nombre}</option>)}
             </select></div>
           <p style={{ gridColumn: '1 / -1', margin: 0, padding: '0.55rem 0.8rem', borderRadius: 8, background: 'var(--bg3)', fontSize: '0.84rem', color: 'var(--text)' }}>
-            Un día cuesta <b>{formatCLP(dia)}</b> · la hora <b>{formatCLP(hora)}</b>
+            Sueldo bruto <b>{formatCLP(desc.bruto)}</b> · un día cuesta <b>{formatCLP(dia)}</b> · la hora <b>{formatCLP(hora)}</b>
             <span style={{ display: 'block', fontSize: '0.76rem', color: 'var(--muted)' }}>
-              = {formatCLP(d.sueldo_bruto)} × (1 + {pctTxt(d.aportes_pct)} %) ÷ {pctTxt(d.dias_mes)} días + colación, movilización y otros. Con cuenta en el ERP puede registrar sus propias horas.</span>
+              Bruto = {formatCLP(d.sueldo_liquido)} líquido + AFP {formatCLP(desc.afp)} + salud {formatCLP(desc.salud)} + cesantía {formatCLP(desc.cesantia)}
+              {desc.otros ? ` + otros ${formatCLP(desc.otros)}` : ''}. Día = bruto × (1 + {pctTxt(d.aportes_pct)} %) ÷ {pctTxt(d.dias_mes)} días + colación, movilización y otros.
+              Con cuenta en el ERP puede registrar sus propias horas.</span>
           </p>
         </> : <>
           <div><label className="label-muted" style={lbl}>Valor por jornada (líquido)</label>
