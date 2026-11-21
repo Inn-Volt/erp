@@ -129,6 +129,8 @@ INSERT INTO r (ok, txt) SELECT gastos = 20000 AND compras = 100000 AND mano_obra
   'El resultado del trabajo suma la mano de obra (' || mano_obra || ')' FROM public.cotizacion_resultado WHERE cotizacion_id = :'COT';
 
 -- ═══ 5. Aprobar fijando el primer pago ═══
+-- La cotización enviada la crea «el servidor» (sin sesión): con sesión, la base la dejaría en borrador.
+SELECT set_config('request.jwt.claim.sub', '', false);
 INSERT INTO public.cotizaciones (id, cliente_id, estado, titulo, subtotal, iva, total, items, enviada_at, valida_hasta)
 VALUES (:'ENV', :'CLI', 'Enviada', 'Para aprobar', 840336, 159664, 1000000, '[]', NOW(), CURRENT_DATE + 10);
 SELECT pg_temp.como(:'CESAR');
@@ -136,7 +138,8 @@ SET ROLE authenticated;
 SELECT public.cot_aprobar_con_anticipo(:'ENV', 'Correo del cliente', NULL, NULL, 300000);
 RESET ROLE;
 INSERT INTO r (ok, txt) SELECT estado = 'Aprobada' AND jsonb_array_length(plan_cobro) = 2, 'Se aprueba con el primer pago' FROM public.cotizaciones WHERE id = :'ENV';
-INSERT INTO r (ok, txt) SELECT monto = 300000, 'El anticipo nace exacto en Por facturar: $300.000 (' || monto || ')' FROM public.por_facturar WHERE cotizacion_id = :'ENV' AND hito = 'Anticipo';
+INSERT INTO r (ok, txt) SELECT COALESCE(max(monto), 0) = 300000, 'El anticipo nace exacto en Por facturar: $300.000 (' || COALESCE(max(monto), 0) || ')'
+  FROM public.por_facturar WHERE cotizacion_id = :'ENV' AND hito = 'Anticipo';
 INSERT INTO r (ok, txt) SELECT round((plan_cobro->1->>'porcentaje')::NUMERIC, 6) = 70 AND plan_cobro->1->>'cuando' = 'terminar', 'El saldo queda en 70 % al terminar'
   FROM public.cotizaciones WHERE id = :'ENV';
 
