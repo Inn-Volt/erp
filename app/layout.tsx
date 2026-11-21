@@ -1,4 +1,5 @@
 import type { Metadata, Viewport } from 'next';
+import Script from 'next/script';
 import { Archivo, Barlow } from 'next/font/google';
 import './globals.css';
 import PWARegister from '@/components/PWARegister';
@@ -38,16 +39,25 @@ export const viewport: Viewport = {
 /**
  * Aplica el tema guardado ANTES del primer pintado (sin destello). Si la
  * persona nunca eligió, se respeta la preferencia de su equipo.
- * Además quita el comentario que Netlify agrega en <head> («This site is hosted
- * on Netlify…»): React no lo espera al hidratar y lanza el error #418.
  */
 const APLICAR_TEMA = `(function(){try{
   var t = localStorage.getItem('innvolt-tema');
   if (!t) t = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
   if (t === 'dark') document.documentElement.classList.add('dark');
-}catch(e){}
-try{
-  for (var n = document.head.firstChild; n;) { var s = n.nextSibling; if (n.nodeType === 8 && /Netlify/.test(n.nodeValue)) n.remove(); n = s; }
+}catch(e){}})();`;
+
+/**
+ * Netlify agrega en <head> un salto de línea y un comentario («This site is hosted on Netlify…»)
+ * que React no espera al hidratar: lanza el error #418 y rehace la página entera en el navegador.
+ * Se quitan (el comentario y los textos en blanco sueltos: React nunca pone texto directo en
+ * <head>) con beforeInteractive, que Next corre siempre ANTES de hidratar.
+ */
+const SIN_COMENTARIO_NETLIFY = `(function(){try{
+  for (var n = document.head.firstChild; n;) {
+    var s = n.nextSibling;
+    if ((n.nodeType === 8 && /Netlify/.test(n.nodeValue)) || (n.nodeType === 3 && !n.nodeValue.trim())) n.remove();
+    n = s;
+  }
 }catch(e){}})();`;
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
@@ -55,6 +65,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     <html lang="es" suppressHydrationWarning className={`${archivo.variable} ${barlow.variable}`}>
       <head>
         <script dangerouslySetInnerHTML={{ __html: APLICAR_TEMA }} />
+        <Script id="sin-comentario-netlify" strategy="beforeInteractive">{SIN_COMENTARIO_NETLIFY}</Script>
       </head>
       <body>
         {children}
