@@ -7,7 +7,7 @@
  */
 
 import { Document, Page, Text, View, StyleSheet, Image } from '@react-pdf/renderer';
-import type { EmpresaInfo } from '@/components/pdf/PresupuestoPDF';
+import type { EmpresaInfo } from '@/types';
 import { folioMovimiento, NOMBRE_MOVIMIENTO, type MovimientoFondo } from '@/lib/fondos';
 
 const INK = '#1a1813';

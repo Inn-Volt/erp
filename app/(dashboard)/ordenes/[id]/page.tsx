@@ -27,7 +27,7 @@ import VisitasOT from '@/components/ot/VisitasOT';
 import PedidosMaterial from '@/components/bodega/PedidosMaterial';
 import { plantillasInformeService, proyectosService, folioProyecto, type PlantillaInforme, type Proyecto } from '@/services/fase5';
 import { TIPO_SERVICIO_OPCIONES } from '@/types/solicitud';
-import type { EmpresaInfo } from '@/components/pdf/PresupuestoPDF';
+import type { EmpresaInfo } from '@/types';
 import {
   bodegaService, CATEGORIAS_GASTO, faltaFase2, folioOT, gastosService, informesService, otService, RESULTADOS,
   type Bodega, type CotizacionDeOT, type EstadoOT, type Gasto, type InformeOT, type Movimiento, type NotaOT, type OrdenTrabajo, type ResultadoOT,

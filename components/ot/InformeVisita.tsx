@@ -16,7 +16,7 @@ import { ArrowLeft, Camera, Check, FileDown, Loader2, PenLine, RotateCcw, Trash2
 import FirmaPad from '@/components/FirmaPad';
 import NumeroInput from '@/components/NumeroInput';
 import InformePDF from '@/components/pdf/InformePDF';
-import type { EmpresaInfo } from '@/components/pdf/PresupuestoPDF';
+import type { EmpresaInfo } from '@/types';
 import {
   archivosOT, dataUriABlob, folioOT, informesService, RESULTADOS,
   type InformeOT, type ItemChecklist, type MaterialInforme, type OrdenTrabajo,

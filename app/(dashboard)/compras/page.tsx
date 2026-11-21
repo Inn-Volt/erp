@@ -4,6 +4,8 @@
  * Finanzas → Compras a proveedores (fase 15). Cada factura, boleta o nota de crédito de lo que
  * se compra, con su neto e IVA (libro de compras), a qué trabajo o proyecto va (costo real) y si
  * ya se pagó. Desde un trabajo se llega con ?trabajo=<id>.
+ * Con la fase 20: la partida del trabajo (opcional) y el tipo de costo (material por omisión), y
+ * «Leer con IA» la foto o el PDF del documento (prellena; lo leído queda en amarillo para revisar).
  */
 
 import { Suspense, useCallback, useEffect, useMemo, useState } from 'react';
@@ -21,6 +23,12 @@ import { folioProyecto, proyectosService } from '@/services/fase5';
 import { avisoRut, formatearRut } from '@/lib/rut';
 import { descargarExcel } from '@/lib/excel';
 import { finDeMes, mesDe, nombreMes } from '@/lib/meses';
+import { useFase } from '@/lib/fases';
+import { etiquetaPartida, nombreTipo, partidaValida, TIPOS_COSTO, type TipoCosto } from '@/lib/controlProyecto';
+import { controlProyectoService } from '@/services/controlProyecto';
+import SelectorPartida, { usePartidasDe } from '@/components/trabajos/SelectorPartida';
+import LeerDocumentoIA from '@/components/LeerDocumentoIA';
+import type { LecturaDocumento } from '@/lib/leerDocumento';
 import { usePermisos } from '@/hooks/usePermisos';
 import { useToast } from '@/hooks/useToast';
 import { fechaLocal, formatCLP, formatDate } from '@/utils';
@@ -42,6 +50,27 @@ function FormCompra({ compra, destinos, proveedores, destinoInicial, onClose, on
   const [guardando, setGuardando] = useState(false);
   const set = (p: Partial<NuevaCompra>) => setD(x => ({ ...x, ...p }));
   const conIva = tipoDoc(d.tipo_doc).conIva;
+  // Fase 20: partida del trabajo (opcional) y tipo de costo.
+  const fase20 = useFase(20);
+  const partidas = usePartidasDe(destino.startsWith('cot:') ? destino.slice(4) : null, fase20);
+  // «Leer con IA»: lo que leyó queda en amarillo hasta guardar.
+  const [deIA, setDeIA] = useState<Set<string>>(new Set());
+  const [avisosIA, setAvisosIA] = useState<string[]>([]);
+  const ia = (k: string): React.CSSProperties | undefined => (deIA.has(k) ? { background: 'var(--y-soft)' } : undefined);
+  const aplicarIA = ({ doc, leidos, avisos }: LecturaDocumento) => {
+    const tipo = leidos.includes('tipo_doc') ? doc.tipo_doc : d.tipo_doc;
+    const montos = tipoDoc(tipo).conIva ? { neto: doc.neto, iva: doc.iva, exento: doc.exento, total: doc.total }
+      : { neto: 0, iva: 0, exento: tipo === 'factura_exenta' ? doc.exento || doc.total : 0, total: doc.total };
+    set({
+      tipo_doc: tipo,
+      ...(doc.folio ? { folio: doc.folio } : {}), ...(doc.fecha ? { fecha: doc.fecha } : {}),
+      ...(doc.proveedor_nombre ? { proveedor_nombre: doc.proveedor_nombre } : {}), ...(doc.proveedor_rut ? { proveedor_rut: doc.proveedor_rut } : {}),
+      ...(doc.total ? montos : {}), ...(doc.descripcion ? { descripcion: doc.descripcion } : {}),
+    });
+    setDeIA(new Set(leidos));
+    setAvisosIA(avisos);
+    if (!leidos.length) toastError('La IA no encontró datos en el documento: complétalo a mano.');
+  };
 
   const elegirProveedor = (nombre: string) => {
     const p = proveedores.find(x => x.nombre.toLowerCase() === nombre.trim().toLowerCase());
@@ -57,6 +86,7 @@ function FormCompra({ compra, destinos, proveedores, destinoInicial, onClose, on
     if (!d.proveedor_nombre.trim()) { toastError('Indica el proveedor'); return; }
     if (!(d.total > 0)) { toastError('Indica el monto'); return; }
     if (d.proveedor_rut && avisoRut(d.proveedor_rut)) { toastError(avisoRut(d.proveedor_rut) || 'RUT inválido'); return; }
+    if (fase20 && partidas.length && !partidaValida(d.partida_id, partidas)) { toastError('Esa partida ya no está en el trabajo: elige otra.'); return; }
     setGuardando(true);
     try {
       const archivo_path = archivo ? await comprasService.subirArchivo(archivo) : d.archivo_path;
@@ -65,6 +95,7 @@ function FormCompra({ compra, destinos, proveedores, destinoInicial, onClose, on
         proveedor_rut: d.proveedor_rut ? formatearRut(d.proveedor_rut) : null, descripcion: d.descripcion?.trim() || null,
         cotizacion_id: destino.startsWith('cot:') ? destino.slice(4) : null, proyecto_id: destino.startsWith('proy:') ? destino.slice(5) : null,
         fecha_pago: d.pagada ? d.fecha_pago || d.fecha : null, vencimiento: d.vencimiento || null,
+        ...(fase20 ? { partida_id: destino.startsWith('cot:') && d.partida_id ? d.partida_id : null, tipo_costo: d.tipo_costo || 'material' } : {}),
       });
       success(compra ? 'Compra actualizada' : 'Compra ingresada');
       onListo();
@@ -81,50 +112,59 @@ function FormCompra({ compra, destinos, proveedores, destinoInicial, onClose, on
         </div>
         <div style={{ padding: '1.1rem 1.25rem', overflowY: 'auto', display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 170px), 1fr))', gap: 12 }}>
           <div><label className="label-muted" style={lbl}>Documento</label>
-            <select aria-label="Documento" className="input" value={d.tipo_doc} onChange={e => cambiarTipo(e.target.value as TipoDoc)}>
+            <select aria-label="Documento" className="input" style={ia('tipo_doc')} value={d.tipo_doc} onChange={e => cambiarTipo(e.target.value as TipoDoc)}>
               {TIPOS_DOC.map(t => <option key={t.clave} value={t.clave}>{t.nombre}</option>)}
             </select></div>
           <div><label className="label-muted" style={lbl}>N° (folio)</label>
-            <input aria-label="N° (folio)" className="input" value={d.folio || ''} onChange={e => set({ folio: e.target.value })} placeholder="12345" /></div>
+            <input aria-label="N° (folio)" className="input" style={ia('folio')} value={d.folio || ''} onChange={e => set({ folio: e.target.value })} placeholder="12345" /></div>
           <div><label className="label-muted" style={lbl}>Fecha del documento</label>
-            <input aria-label="Fecha del documento" className="input" type="date" value={d.fecha} onChange={e => set({ fecha: e.target.value })} /></div>
+            <input aria-label="Fecha del documento" className="input" style={ia('fecha')} type="date" value={d.fecha} onChange={e => set({ fecha: e.target.value })} /></div>
           <div style={{ gridColumn: 'span 2' }}><label className="label-muted" style={lbl}>Proveedor *</label>
-            <input aria-label="Proveedor" className="input" list="proveedores" value={d.proveedor_nombre} onChange={e => elegirProveedor(e.target.value)} placeholder="Electro Sur Ltda." />
+            <input aria-label="Proveedor" className="input" style={ia('proveedor_nombre')} list="proveedores" value={d.proveedor_nombre} onChange={e => elegirProveedor(e.target.value)} placeholder="Electro Sur Ltda." />
             <datalist id="proveedores">{proveedores.map(p => <option key={p.nombre} value={p.nombre} />)}</datalist></div>
           <div><label className="label-muted" style={lbl}>RUT proveedor</label>
-            <input aria-label="RUT proveedor" className="input" value={d.proveedor_rut || ''} onChange={e => set({ proveedor_rut: e.target.value })}
+            <input aria-label="RUT proveedor" className="input" style={ia('proveedor_rut')} value={d.proveedor_rut || ''} onChange={e => set({ proveedor_rut: e.target.value })}
               onBlur={() => d.proveedor_rut && set({ proveedor_rut: formatearRut(d.proveedor_rut) })} placeholder="76.123.456-7" />
             {d.proveedor_rut && avisoRut(d.proveedor_rut) && <span style={{ fontSize: '0.72rem', color: 'var(--danger)' }}>{avisoRut(d.proveedor_rut)}</span>}</div>
 
           {conIva ? <>
             <div><label className="label-muted" style={lbl}>Neto</label>
-              <NumeroInput ariaLabel="Neto" className="input" prefijo="$" value={d.neto} onChange={v => set(desdeNeto(v, d.exento))} /></div>
+              <NumeroInput ariaLabel="Neto" className="input" style={ia('neto')} prefijo="$" value={d.neto} onChange={v => set(desdeNeto(v, d.exento))} /></div>
             <div><label className="label-muted" style={lbl}>IVA 19 %</label>
-              <NumeroInput ariaLabel="IVA 19 %" className="input" prefijo="$" value={d.iva} onChange={v => set({ iva: v, total: d.neto + d.exento + v })} /></div>
+              <NumeroInput ariaLabel="IVA 19 %" className="input" style={ia('iva')} prefijo="$" value={d.iva} onChange={v => set({ iva: v, total: d.neto + d.exento + v })} /></div>
             <div><label className="label-muted" style={lbl}>Exento</label>
-              <NumeroInput ariaLabel="Exento" className="input" prefijo="$" value={d.exento} onChange={v => set(desdeNeto(d.neto, v))} /></div>
+              <NumeroInput ariaLabel="Exento" className="input" style={ia('exento')} prefijo="$" value={d.exento} onChange={v => set(desdeNeto(d.neto, v))} /></div>
             <div><label className="label-muted" style={lbl}>Total</label>
-              <NumeroInput ariaLabel="Total" className="input" prefijo="$" value={d.total} onChange={v => set(desdeTotal(v, d.exento))} title="Si escribes el total, el neto y el IVA se calculan solos" /></div>
+              <NumeroInput ariaLabel="Total" className="input" style={ia('total')} prefijo="$" value={d.total} onChange={v => set(desdeTotal(v, d.exento))} title="Si escribes el total, el neto y el IVA se calculan solos" /></div>
           </> : (
             <div><label className="label-muted" style={lbl}>Total</label>
-              <NumeroInput ariaLabel="Total" className="input" prefijo="$" value={d.total} onChange={v => set({ total: v, neto: 0, iva: 0, exento: d.tipo_doc === 'factura_exenta' ? v : 0 })} /></div>
+              <NumeroInput ariaLabel="Total" className="input" style={ia('total')} prefijo="$" value={d.total} onChange={v => set({ total: v, neto: 0, iva: 0, exento: d.tipo_doc === 'factura_exenta' ? v : 0 })} /></div>
           )}
           <p style={{ gridColumn: '1 / -1', margin: '-4px 0 0', fontSize: '0.74rem', color: 'var(--muted)' }}>
             {conIva ? 'Escribe el neto o el total: lo demás se calcula. Con factura, el costo del trabajo es el neto (el IVA se recupera).'
               : 'Sin IVA recuperable: el costo del trabajo es el total.'}</p>
 
           <div style={{ gridColumn: '1 / -1' }}><label className="label-muted" style={lbl}>¿Para qué es? (centro de costo)</label>
-            <select aria-label="¿Para qué es? (centro de costo)" className="input" value={destino} onChange={e => setDestino(e.target.value)}>
+            <select aria-label="¿Para qué es? (centro de costo)" className="input" value={destino} onChange={e => { setDestino(e.target.value); set({ partida_id: null }); }}>
               <option value="">Gasto general de la empresa</option>
               {(['Trabajos', 'Proyectos'] as const).map(g => destinos.some(x => x.grupo === g) && (
                 <optgroup key={g} label={g}>{destinos.filter(x => x.grupo === g).map(x => <option key={x.valor} value={x.valor}>{x.etiqueta}</option>)}</optgroup>
               ))}
             </select></div>
+          {fase20 && partidas.length > 0 && (
+            <div style={{ gridColumn: 'span 2' }}><SelectorPartida partidas={partidas} value={d.partida_id} onChange={v => set({ partida_id: v || null })} /></div>
+          )}
+          {fase20 && (
+            <div><label className="label-muted" style={lbl}>Tipo de costo</label>
+              <select aria-label="Tipo de costo" className="input" value={d.tipo_costo || 'material'} onChange={e => set({ tipo_costo: e.target.value as TipoCosto })}>
+                {TIPOS_COSTO.map(t => <option key={t.clave} value={t.clave}>{t.nombre}</option>)}
+              </select></div>
+          )}
           <div><label className="label-muted" style={lbl}>Categoría</label>
             <input aria-label="Categoría" className="input" list="categorias-compra" value={d.categoria || ''} onChange={e => set({ categoria: e.target.value })} />
             <datalist id="categorias-compra">{CATEGORIAS_COMPRA.map(c => <option key={c} value={c} />)}</datalist></div>
           <div style={{ gridColumn: 'span 2' }}><label className="label-muted" style={lbl}>Detalle</label>
-            <input aria-label="Detalle" className="input" value={d.descripcion || ''} onChange={e => set({ descripcion: e.target.value })} placeholder="Cable 6 mm², automáticos, canaleta…" /></div>
+            <input aria-label="Detalle" className="input" style={ia('descripcion')} value={d.descripcion || ''} onChange={e => set({ descripcion: e.target.value })} placeholder="Cable 6 mm², automáticos, canaleta…" /></div>
           <div><label className="label-muted" style={lbl}>Vence (pago al proveedor)</label>
             <input aria-label="Vence (pago al proveedor)" className="input" type="date" value={d.vencimiento || ''} onChange={e => set({ vencimiento: e.target.value })} /></div>
           <label style={{ display: 'flex', gap: 8, alignItems: 'center', fontSize: '0.86rem', color: 'var(--text)', cursor: 'pointer', alignSelf: 'end', paddingBottom: '0.5rem' }}>
@@ -137,7 +177,14 @@ function FormCompra({ compra, destinos, proveedores, destinoInicial, onClose, on
               <input type="file" accept="image/*,application/pdf" hidden onChange={e => setArchivo(e.target.files?.[0] || null)} /></label>
             {d.archivo_path && !archivo && <button type="button" className="btn btn-ghost btn-sm" onClick={async () => { const u = await comprasService.urlArchivo(d.archivo_path!); if (u) window.open(u, '_blank'); }}>
               <FileText size={13} /> Ver respaldo</button>}
+            <LeerDocumentoIA archivo={archivo} onLeido={aplicarIA} />
           </div>
+          {deIA.size > 0 && (
+            <div style={{ gridColumn: '1 / -1', fontSize: '0.78rem', color: 'var(--text)', background: 'var(--y-soft)', borderRadius: 8, padding: '0.45rem 0.7rem' }}>
+              La IA prellenó lo marcado en amarillo: revísalo antes de guardar.
+              {avisosIA.map(a => <span key={a} style={{ display: 'block', color: 'var(--danger)', marginTop: 2 }}>{a}</span>)}
+            </div>
+          )}
         </div>
         <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, padding: '0.9rem 1.25rem', borderTop: '1px solid var(--border2)' }}>
           <button className="btn btn-ghost" onClick={onClose}>Cancelar</button>
@@ -218,14 +265,22 @@ function ComprasContent() {
     try { await comprasService.eliminar(c); success('Compra eliminada'); cargar(); }
     catch (e) { toastError(mensajeCompra(e)); }
   };
-  const exportar = () => descargarExcel([{
-    nombre: mes ? `Compras ${mes}` : 'Compras',
-    filas: filtradas.map(c => ({
-      Fecha: c.fecha, Documento: tipoDoc(c.tipo_doc).nombre, 'N°': c.folio || '', 'RUT proveedor': c.proveedor_rut || '', Proveedor: c.proveedor_nombre,
-      Neto: signo(c) * Number(c.neto), Exento: signo(c) * Number(c.exento), IVA: signo(c) * Number(c.iva), Total: signo(c) * Number(c.total),
-      Categoría: c.categoria || '', Detalle: c.descripcion || '', 'Centro de costo': etiquetaDestino(c), Pagada: c.pagada ? 'Sí' : 'No', 'Fecha pago': c.fecha_pago || '',
-    })),
-  }], `Compras_${mes || 'todas'}.xlsx`);
+  const exportar = async () => {
+    // Las partidas de cada trabajo (fase 20), para la columna «Partida».
+    const cots = [...new Set(filtradas.map(c => c.cotizacion_id).filter((x): x is string => !!x && filtradas.some(k => k.cotizacion_id === x && k.partida_id)))];
+    const partidas = new Map((await Promise.all(cots.map(async id => [id, await controlProyectoService.partidasDe(id)] as const))));
+    const partidaDe = (c: Compra) => (c.partida_id ? etiquetaPartida(partidas.get(c.cotizacion_id || '')?.find(p => p.id === c.partida_id)) : '');
+    await descargarExcel([{
+      nombre: mes ? `Compras ${mes}` : 'Compras',
+      filas: filtradas.map(c => ({
+        Fecha: c.fecha, Documento: tipoDoc(c.tipo_doc).nombre, 'N°': c.folio || '', 'RUT proveedor': c.proveedor_rut || '', Proveedor: c.proveedor_nombre,
+        Neto: signo(c) * Number(c.neto), Exento: signo(c) * Number(c.exento), IVA: signo(c) * Number(c.iva), Total: signo(c) * Number(c.total),
+        Categoría: c.categoria || '', Detalle: c.descripcion || '', 'Centro de costo': etiquetaDestino(c),
+        ...('tipo_costo' in c ? { Partida: partidaDe(c), 'Tipo de costo': nombreTipo(c.tipo_costo || 'material') } : {}),
+        Pagada: c.pagada ? 'Sí' : 'No', 'Fecha pago': c.fecha_pago || '',
+      })),
+    }], `Compras_${mes || 'todas'}.xlsx`);
+  };
 
   if (falta) return <div className="anim-in"><PageHeader eyebrow="Finanzas" title="Compras a proveedores" /><FaltaSQL archivo="supabase_fase15_revision.sql" /></div>;
 

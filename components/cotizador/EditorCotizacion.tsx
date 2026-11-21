@@ -34,7 +34,7 @@ import { supabase } from '@/lib/supabase';
 import FaltaSQL from '@/components/FaltaSQL';
 import CotizarIAConversa, { type VistaPrevia } from '@/components/cotizador/CotizarIAConversa';
 import CotizacionPDF, { nombrePDF } from '@/components/pdf/CotizacionPDF';
-import type { EmpresaInfo } from '@/components/pdf/PresupuestoPDF';
+import type { EmpresaInfo } from '@/types';
 import TarjetaPartida, { type AccionesLinea } from './TarjetaPartida';
 import { CATALOGO_PENDIENTE } from './BuscadorCatalogo';
 import AsistenteReceta from './AsistenteReceta';
@@ -1432,7 +1432,7 @@ export default function EditorCotizacion({ id, clonarDe, clienteInicial, solicit
           mensajeCorreo={ajustes?.mensaje_correo || 'Hola {cliente}:\n\nTe envío la cotización {numero}: {titulo}, por {total}. Puedes verla y responder aquí: {enlace}\n\n{vendedor}'}
           onIrA={irA} onCerrar={() => setModal(null)} onEnviar={enviar} />
       )}
-      {modal === 'aprobar' && cot && <AprobarModal cot={d} vencida={vencida} onCerrar={() => setModal(null)} onListo={() => { success('Aprobada: nació su orden de trabajo'); recargar(); }} />}
+      {modal === 'aprobar' && cot && <AprobarModal cot={d} vencida={vencida} plan={planDe(d)} onCerrar={() => setModal(null)} onListo={() => { success('Aprobada: nació su orden de trabajo'); recargar(); }} />}
       {modal === 'rechazar' && cot && <RechazarModal cot={d} onCerrar={() => setModal(null)} onListo={() => { success('Marcada como rechazada'); recargar(); }} />}
       {modal === 'historial' && cot && <HistorialModal cot={d} onCerrar={() => setModal(null)} />}
       {modal === 'volver' && cot && (

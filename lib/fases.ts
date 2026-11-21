@@ -16,6 +16,8 @@ const MARCAS: Record<number, () => Promise<boolean>> = {
   17: async () => !(await supabase.from('descuentos_maximos').select('usuario_id', { head: true, count: 'exact' }).limit(1)).error,
   // Fase 19 (supabase_fase19_fondos.sql): fondos por persona (rendiciones 2.0).
   19: async () => !(await supabase.from('fondo_movimientos').select('id', { head: true, count: 'exact' }).limit(1)).error,
+  // Fase 20 (supabase_fase20_control_proyecto.sql): partida en gastos/compras/horas y flujo de caja del trabajo.
+  20: async () => !(await supabase.from('cotizaciones').select('flujo_plan', { head: true }).limit(1)).error,
 };
 
 const cache = new Map<number, Promise<boolean>>();

@@ -177,8 +177,11 @@ export const cotizadorService = {
     lanzar(e2);
     return path;
   },
-  async aprobar(id: string, como: string, documento?: string | null, motivo?: string | null) {
-    const { error } = await supabase.rpc('cot_aprobar', { p_id: id, p_como: como, p_documento: documento || null, p_motivo: motivo || null });
+  /** Con `anticipo` (fase 20) fija el primer pago en pesos: el plan de cobro se ajusta solo. */
+  async aprobar(id: string, como: string, documento?: string | null, motivo?: string | null, anticipo?: number | null) {
+    const { error } = anticipo === undefined || anticipo === null
+      ? await supabase.rpc('cot_aprobar', { p_id: id, p_como: como, p_documento: documento || null, p_motivo: motivo || null })
+      : await supabase.rpc('cot_aprobar_con_anticipo', { p_id: id, p_como: como, p_documento: documento || null, p_motivo: motivo || null, p_anticipo: anticipo });
     lanzar(error);
   },
   async rechazar(id: string, motivo: string, nota?: string | null) {

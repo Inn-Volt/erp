@@ -6,7 +6,7 @@
 
 import type { ArticuloCatalogo } from '@/lib/cotizador/tipos';
 
-export interface FilaPegada { texto: string; cantidad: number }
+interface FilaPegada { texto: string; cantidad: number }
 
 export const normalizar = (s: string) => (s || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/\s+/g, ' ').trim();
 

@@ -3,18 +3,22 @@
 /**
  * El trabajo de una cotización aprobada (fase 7): su estado (por iniciar → en ejecución →
  * terminado), los cobros del plan (cada hito cae solo en «Por facturar» cuando corresponde),
- * los gastos reales y el resultado: margen real vs. el cotizado.
+ * los gastos reales y el resultado: margen real vs. el cotizado. Con la fase 20: la mano de obra
+ * día a día (internos y externos) y el control de proyecto (presupuesto vs real por partida y flujo
+ * de caja semanal, solo para quien ve costos).
  */
 
 import { entregasService, folioActa, informeDesde, plantillasInformeServicio, type EntregaTrabajo } from '@/services/informes';
 import ActaEntrega from '@/components/trabajos/ActaEntrega';
 import { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
+import dynamic from 'next/dynamic';
 import { Check, ClipboardCheck, Loader2, Play, Plus, Receipt, RotateCcw } from 'lucide-react';
 import NuevoGasto from '@/components/gastos/NuevoGasto';
 import { costoReal, trabajosService, type ResultadoTrabajo } from '@/services/trabajos';
 import { useIniciarTrabajo } from '@/components/trabajos/IniciarTrabajo';
-import { HorasTrabajo, MaterialesTrabajo } from '@/components/trabajos/HorasMateriales';
+import MaterialesTrabajo from '@/components/trabajos/MaterialesTrabajo';
+import ManoObraTrabajo from '@/components/trabajos/ManoObraTrabajo';
 import { useFase } from '@/lib/fases';
 import { anticiposService, type Anticipo } from '@/services/fase5';
 import { CATEGORIAS_GASTO, ETAPAS_COBRO, type Gasto, type PorFacturar } from '@/services/operacion';
@@ -22,6 +26,11 @@ import { CUANDO_COBRO, estadoTrabajo, type EstadoTrabajo, type HitoCobro } from 
 import { usePermisos } from '@/hooks/usePermisos';
 import { useToast } from '@/hooks/useToast';
 import { formatCLP, formatDate } from '@/utils';
+
+// Fase 20: se carga solo cuando se muestra (no pesa en el cotizador).
+const ControlPresupuesto = dynamic(() => import('@/components/trabajos/ControlPresupuesto'), {
+  ssr: false, loading: () => <div className="skeleton" style={{ height: 140 }} />,
+});
 
 export function ChipTrabajo({ estado }: { estado?: string | null }) {
   const e = estadoTrabajo(estado);
@@ -63,7 +72,10 @@ export default function TrabajoPanel({ cot, plan, onCambio, cliente, responsable
       setActaAbierta(await entregasService.crear(cot.id, informeDesde(plantillas.length === 1 ? plantillas[0] : null)));
     } catch (e) { toastError(e instanceof Error ? e.message : 'No se pudo crear el acta'); }
   };
+  // Fase 20: cambia cada vez que se recargan gastos, horas o cobros (el control vuelve a leer).
+  const [version, setVersion] = useState(0);
   const cargar = useCallback(() => {
+    setVersion(v => v + 1);
     trabajosService.cobros(cot.id).then(setCobros);
     trabajosService.gastos({ cotizacionId: cot.id }).then(setGastos);
     trabajosService.resultado(cot.id).then(setRes);
@@ -72,7 +84,13 @@ export default function TrabajoPanel({ cot, plan, onCambio, cliente, responsable
   useEffect(() => { cargar(); }, [cargar]);
   // Fase 15: iniciar pide el motivo si el anticipo no está pagado; horas y materiales.
   const fase15 = useFase(15);
+  const fase20 = useFase(20);
   const { iniciar, modal: modalAnticipo, ocupado: iniciando } = useIniciarTrabajo(() => { onCambio(); cargar(); });
+
+  const rendirGasto = () => {
+    if (perfil) anticiposService.listar(perfil.id).then(setMisAnticipos).catch(() => setMisAnticipos([]));
+    setRindiendo(true);
+  };
 
   const mover = async (e: EstadoTrabajo) => {
     if (e === 'terminado' && !confirm('¿Marcar el trabajo como terminado? Los cobros «al terminar» pasan a Por facturar.')) return;
@@ -138,10 +156,7 @@ export default function TrabajoPanel({ cot, plan, onCambio, cliente, responsable
         <div>
           <div style={{ display: 'flex', alignItems: 'center', marginBottom: 6 }}>
             <p className="label-muted" style={{ margin: 0, flex: 1 }}>Gastos rendidos · {formatCLP(gastado)}</p>
-            {puede('gastos.crear') && <button className="btn btn-ghost btn-xs" onClick={() => {
-              if (perfil) anticiposService.listar(perfil.id).then(setMisAnticipos).catch(() => setMisAnticipos([]));
-              setRindiendo(true);
-            }}><Plus size={12} /> Rendir gasto</button>}
+            {puede('gastos.crear') && <button className="btn btn-ghost btn-xs" onClick={rendirGasto}><Plus size={12} /> Rendir gasto</button>}
           </div>
           {gastos.length === 0 ? <p style={{ margin: 0, fontSize: '0.84rem', color: 'var(--muted)' }}>Sin gastos todavía. Rinde aquí lo que se compra o se paga para este trabajo.</p>
             : gastos.map(g => (
@@ -160,7 +175,8 @@ export default function TrabajoPanel({ cot, plan, onCambio, cliente, responsable
 
       {fase15 && (
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 280px), 1fr))', gap: 14 }}>
-          <HorasTrabajo cotId={cot.id} verCostos={verCostos} onCambio={cargar} />
+          {fase20 && <ManoObraTrabajo cotId={cot.id} verCostos={verCostos} registraOtros={mueve || puede('gastos.aprobar')} onCambio={cargar}
+            onRendirGasto={puede('gastos.crear') ? rendirGasto : undefined} />}
           <MaterialesTrabajo cotId={cot.id} editable={mueve || puede('gastos.crear') || puede('agenda.gestionar')} />
         </div>
       )}
@@ -184,8 +200,8 @@ export default function TrabajoPanel({ cot, plan, onCambio, cliente, responsable
           ))}
       </div>
 
-      {/* Resultado */}
-      {verCostos && res && (
+      {/* Resultado (con la fase 20 lo muestra, más completo, el control de proyecto) */}
+      {verCostos && res && !fase20 && (
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 150px), 1fr))', gap: 8 }}>
           {([
             ['Venta neta', venta, 'var(--text)'],
@@ -201,6 +217,13 @@ export default function TrabajoPanel({ cot, plan, onCambio, cliente, responsable
             {real > 0 && (comprado || enHoras) ? ` Costo real = gastos ${formatCLP(gastado)} + compras ${formatCLP(comprado)} + horas ${formatCLP(enHoras)}.` : ''}
             {real === 0 && ' Rinde gastos, ingresa las compras y registra las horas para ver el margen de verdad.'}
           </p>
+        </div>
+      )}
+
+      {/* Fase 20: control de proyecto */}
+      {fase20 && verCostos && (
+        <div style={{ borderTop: '1px solid var(--border2)', paddingTop: 12 }}>
+          <ControlPresupuesto cotId={cot.id} folio={cot.folio} plan={plan} resultado={res} version={version} editaFlujo={mueve} />
         </div>
       )}
     </section>

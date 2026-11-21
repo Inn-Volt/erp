@@ -13,7 +13,7 @@ import type { CotizacionItem, Partida, Moneda } from '@/types';
 import { IVA, datoEncabezadoVisible, normalizarEstado, type DisenoEncabezado, type Seccion } from '@/lib/cotizador/tipos';
 import { qp } from '@/lib/cotizador/calculo';
 import type { CotizacionPublica, FotoPublica } from '@/types/publico';
-import type { EmpresaInfo } from '@/components/pdf/PresupuestoPDF';
+import type { EmpresaInfo } from '@/types';
 
 export const BUCKET_FOTOS = 'levantamientos-fotos';
 

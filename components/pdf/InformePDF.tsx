@@ -1,7 +1,7 @@
 /* eslint-disable jsx-a11y/alt-text -- <Image> de @react-pdf no admite alt */
 import React from 'react';
 import { Document, Page, Text, View, StyleSheet, Image } from '@react-pdf/renderer';
-import type { EmpresaInfo } from '@/components/pdf/PresupuestoPDF';
+import type { EmpresaInfo } from '@/types';
 import { formatDate } from '@/utils';
 import { logoDocumento } from '@/lib/logoMarca';
 

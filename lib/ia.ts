@@ -173,12 +173,13 @@ async function pedirModeloGemini<T>(model: string, body: string, key: string, de
   throw new IAError(`${model} no respondió`);
 }
 
-async function generarGemini<T>(system: string, user: string, schema: GeminiSchema, deadline: number): Promise<T> {
+/** Pide a Gemini (probando sus modelos) con estas partes en el mensaje: texto, imagen o PDF. */
+async function pedirGemini<T>(system: string, partes: unknown[], schema: GeminiSchema, deadline: number, temperature: number): Promise<T> {
   const key = process.env.GEMINI_API_KEY as string;
   const body = JSON.stringify({
     systemInstruction: { parts: [{ text: system }] },
-    contents: [{ role: 'user', parts: [{ text: user }] }],
-    generationConfig: { responseMimeType: 'application/json', responseSchema: schema, temperature: 0.4 },
+    contents: [{ role: 'user', parts: partes }],
+    generationConfig: { responseMimeType: 'application/json', responseSchema: schema, temperature },
   });
   const errores: string[] = [];
   for (const model of cadenaModelosGemini()) {
@@ -193,8 +194,14 @@ async function generarGemini<T>(system: string, user: string, schema: GeminiSche
   throw new IAError(errores.join('; ') || 'sin respuesta');
 }
 
+function generarGemini<T>(system: string, user: string, schema: GeminiSchema, deadline: number): Promise<T> {
+  return pedirGemini<T>(system, [{ text: user }], schema, deadline, 0.4);
+}
+
 // ── Anthropic (Claude) ────────────────────────────────────────────────────────
-async function generarAnthropic<T>(system: string, user: string, schema: GeminiSchema, deadline: number): Promise<T> {
+/** Pide a Claude con este contenido (texto, o bloques con imagen o PDF). `pensar`: razonamiento breve (no en Haiku). */
+async function pedirAnthropic<T>(system: string, content: string | Anthropic.ContentBlockParam[], schema: GeminiSchema, deadline: number,
+                                 o: { maxTokens: number; pensar: boolean }): Promise<T> {
   const restante = deadline - Date.now();
   if (restante < 2500) throw new IAError('sin tiempo suficiente');
   const { default: AnthropicSDK } = await import('@anthropic-ai/sdk');
@@ -205,13 +212,13 @@ async function generarAnthropic<T>(system: string, user: string, schema: GeminiS
   const esHaiku = /haiku/i.test(model);
   const params: Anthropic.MessageCreateParamsNonStreaming = {
     model,
-    max_tokens: 6000,
+    max_tokens: o.maxTokens,
     system,
-    messages: [{ role: 'user', content: user }],
+    messages: [{ role: 'user', content }],
     output_config: esHaiku
       ? { format: { type: 'json_schema', schema: aJsonSchema(schema) } }
       : { effort: 'low', format: { type: 'json_schema', schema: aJsonSchema(schema) } },
-    ...(esHaiku ? {} : { thinking: { type: 'adaptive' as const } }),
+    ...(esHaiku || !o.pensar ? {} : { thinking: { type: 'adaptive' as const } }),
   };
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), restante - 350);
@@ -229,6 +236,10 @@ async function generarAnthropic<T>(system: string, user: string, schema: GeminiS
   } finally {
     clearTimeout(timer);
   }
+}
+
+function generarAnthropic<T>(system: string, user: string, schema: GeminiSchema, deadline: number): Promise<T> {
+  return pedirAnthropic<T>(system, user, schema, deadline, { maxTokens: 6000, pensar: true });
 }
 
 const GENERADORES: Record<ProveedorIA, <T>(s: string, u: string, sc: GeminiSchema, d: number, rescatar?: boolean) => Promise<T>> = {
@@ -273,4 +284,59 @@ export async function probarProveedor(p: ProveedorIA): Promise<{ ok: boolean; ms
   } catch (e) {
     return { ok: false, ms: Date.now() - t0, detalle: e instanceof Error ? e.message : 'error' };
   }
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// Leer documentos (fase 20): una foto o PDF de una boleta o factura → JSON.
+// Groq (gpt-oss) no lee imágenes: aquí van SOLO los proveedores que sí (Gemini y Claude), en ese
+// orden (IA_PROVIDER=anthropic adelanta a Claude), con el mismo presupuesto de tiempo. Es aparte:
+// generarJSON y su cadena no cambian.
+// ══════════════════════════════════════════════════════════════════════════════
+
+export type ProveedorImagen = 'gemini' | 'anthropic';
+export interface ArchivoIA { base64: string; mime: string }
+type MedioImagen = 'image/jpeg' | 'image/png' | 'image/gif' | 'image/webp';
+
+/** Proveedores configurados que leen imágenes y PDF (vacío = no hay cómo leer documentos). */
+export function proveedoresConImagen(): ProveedorImagen[] {
+  const l: ProveedorImagen[] = [];
+  if (process.env.GEMINI_API_KEY) l.push('gemini');
+  if (process.env.ANTHROPIC_API_KEY) l.push('anthropic');
+  if (l.length === 2 && (process.env.IA_PROVIDER || '').toLowerCase() === 'anthropic') l.reverse();
+  return l;
+}
+
+function leerGemini<T>(system: string, user: string, schema: GeminiSchema, archivo: ArchivoIA, deadline: number): Promise<T> {
+  return pedirGemini<T>(system, [{ inlineData: { mimeType: archivo.mime, data: archivo.base64 } }, { text: user }], schema, deadline, 0.1);
+}
+
+function leerAnthropic<T>(system: string, user: string, schema: GeminiSchema, archivo: ArchivoIA, deadline: number): Promise<T> {
+  const adjunto: Anthropic.ContentBlockParam = archivo.mime === 'application/pdf'
+    ? { type: 'document', source: { type: 'base64', media_type: 'application/pdf', data: archivo.base64 } }
+    : { type: 'image', source: { type: 'base64', media_type: archivo.mime as MedioImagen, data: archivo.base64 } };
+  return pedirAnthropic<T>(system, [adjunto, { type: 'text', text: user }], schema, deadline, { maxTokens: 2000, pensar: false });
+}
+
+const LECTORES: Record<ProveedorImagen, <T>(s: string, u: string, sc: GeminiSchema, a: ArchivoIA, d: number) => Promise<T>> = {
+  gemini: leerGemini,
+  anthropic: leerAnthropic,
+};
+
+/** Lee una imagen o un PDF y devuelve el JSON del esquema, probando Gemini y Claude en cadena. */
+export async function leerArchivoJSON<T>(opts: { system: string; user: string; schema: GeminiSchema; archivo: ArchivoIA }): Promise<T> {
+  const proveedores = proveedoresConImagen();
+  if (!proveedores.length) {
+    throw new Error('No hay IA que lea documentos: agrega GEMINI_API_KEY (gratis) o ANTHROPIC_API_KEY en el entorno del servidor.');
+  }
+  const deadline = Date.now() + BUDGET_MS;
+  const errores: string[] = [];
+  for (const p of proveedores) {
+    if (deadline - Date.now() < 1500) { errores.push(`${p}: sin tiempo`); break; }
+    try {
+      return await LECTORES[p]<T>(opts.system, opts.user, opts.schema, opts.archivo, deadline);
+    } catch (e) {
+      errores.push(`${p}: ${e instanceof Error ? e.message : 'error'}`);
+    }
+  }
+  throw new Error(`La IA no pudo leer el documento; intenta de nuevo en unos minutos. (${errores.join(' · ')})`);
 }

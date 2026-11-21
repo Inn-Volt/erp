@@ -66,7 +66,7 @@ function escapeICS(s: string): string {
 }
 
 /** Construye el contenido de un archivo .ics para el evento. */
-export function construirICS(ev: EventoCalendario): string {
+function construirICS(ev: EventoCalendario): string {
   const { start, end, allDay } = rango(ev);
   const stamp = new Date().toISOString().replace(/[-:]/g, '').replace(/\.\d+/, '');
   const uid = `innvolt-${ev.folio ?? Date.now()}@innvolt.cl`;

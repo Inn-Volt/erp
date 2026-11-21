@@ -171,6 +171,7 @@ export const PERMISO_DE_RUTA: { prefijo: string; permisos: string[] }[] = [
   { prefijo: '/mis-ot', permisos: ['ot.ejecutar', 'ot.ver', 'ot.crear'] },
   { prefijo: '/facturacion', permisos: ['facturacion.ver', 'facturacion.gestionar'] },
   { prefijo: '/compras', permisos: ['compras.ver', 'compras.gestionar'] },
+  { prefijo: '/equipo', permisos: ['gastos.aprobar', 'configuracion.gestionar'] },
   { prefijo: '/contabilidad', permisos: ['compras.ver', 'compras.gestionar', 'facturacion.gestionar'] },
   { prefijo: '/bodega', permisos: ['bodega.ver', 'bodega.mover'] },
   { prefijo: '/gastos', permisos: ['gastos.crear', 'gastos.ver_todos', 'gastos.aprobar'] },

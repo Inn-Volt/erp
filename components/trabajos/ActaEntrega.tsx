@@ -12,7 +12,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { ArrowLeft, Camera, Check, FileDown, Loader2, PenLine, RotateCcw, Trash2 } from 'lucide-react';
 import FirmaPad from '@/components/FirmaPad';
 import FormularioInforme from '@/components/informes/FormularioInforme';
-import type { EmpresaInfo } from '@/components/pdf/PresupuestoPDF';
+import type { EmpresaInfo } from '@/types';
 import { supabase } from '@/lib/supabase';
 import { BUCKET_FOTOS, fotosService } from '@/services/fotos';
 import { dataUriABlob } from '@/services/operacion';

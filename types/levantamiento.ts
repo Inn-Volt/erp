@@ -1,6 +1,6 @@
 // ─── Levantamiento Técnico Eléctrico — Types ─────────────────────────────────
 
-export interface TableroRow {
+interface TableroRow {
   _id: string;
   nombre: string;
   tipo: string;
@@ -13,7 +13,7 @@ export interface TableroRow {
   obs: string;
 }
 
-export interface CircuitoRow {
+interface CircuitoRow {
   _id: string;
   circuito: string;
   proteccion: string;
@@ -24,7 +24,7 @@ export interface CircuitoRow {
   obs: string;
 }
 
-export interface LevantamientoData {
+interface LevantamientoData {
   // S1
   cliente_nombre: string;
   empresa: string;
@@ -107,58 +107,3 @@ export interface Levantamiento {
   created_at: string;
   updated_at?: string;
 }
-
-export const ESTADO_LEV_COLORS: Record<EstadoLevantamiento, { color: string; bg: string }> = {
-  Borrador:   { color: 'var(--y)', bg: 'var(--y-soft)'  },
-  Completado: { color: 'var(--success)', bg: 'var(--success-soft)'  },
-  Enviado:    { color: 'var(--info)', bg: 'var(--info-soft)'  },
-  Archivado:  { color: 'var(--muted)', bg: 'var(--hover-bg)' },
-};
-
-export const CHECKLIST_CRITICO = [
-  { id: 'sobrecarga',    label: 'Sobrecarga detectada'           },
-  { id: 'recalentam',   label: 'Cables recalentados'            },
-  { id: 'falta_tierra', label: 'Falta de tierra física'         },
-  { id: 'diferencial',  label: 'Diferenciales defectuosos'      },
-  { id: 'humedad',      label: 'Presencia de humedad'           },
-  { id: 'corrosion',    label: 'Corrosión en bornes/tableros'   },
-  { id: 'neutros',      label: 'Neutros compartidos indebidamente' },
-  { id: 'sin_rotulo',   label: 'Tableros sin rotulación'        },
-  { id: 'canal_danada', label: 'Canalizaciones dañadas/abiertas'},
-  { id: 'riesgo_elec',  label: 'Riesgo eléctrico inmediato'     },
-];
-
-export const TIPOS_PROYECTO = [
-  'Visita técnica', 'Anteproyecto', 'Cotización', 'Mantención preventiva',
-  'Mantención correctiva', 'Levantamiento comercial', 'Levantamiento industrial',
-  'Instalación nueva', 'Ampliación', 'Certificación SEC',
-];
-export const TIPOS_EMPALME = ['Aéreo', 'Subterráneo', 'No aplica'];
-export const ESTADOS_GEN   = ['Bueno', 'Regular', 'Deficiente', 'Sin revisar'];
-export const TIPOS_TABLERO = ['TG', 'TDA', 'TGAux', 'TSAS', 'TSub', 'Otro'];
-export const TIPOS_CABLE   = ['Thhn', 'Imsa', 'Lsh', 'Vulcanizado', 'No identificado'];
-export const TIPOS_CANAL   = ['EMT', 'PVC', 'Bandeja perforada', 'Escalerilla', 'Conduit flexible', 'Sin canalización'];
-export const TIPOS_LUM     = ['LED', 'Fluorescente', 'HID', 'Halógena', 'Mixta'];
-export const SISTEMAS_ELEC = ['Monofásico', 'Trifásico', 'Bifásico'];
-
-export const emptyLevantamiento = (): LevantamientoData => ({
-  cliente_nombre:'', empresa:'', direccion:'',
-  // Fecha LOCAL (toISOString es UTC: de noche en Chile daba el día siguiente).
-  fecha: (d => `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`)(new Date()),
-  hora: new Date().toTimeString().slice(0,5),
-  contacto:'', telefono:'', correo:'', tecnico:'',
-  tipo_proyecto:'', obs_generales:'',
-  sistema:'', voltaje:'', tipo_empalme:'', capacidad_empalme:'',
-  estado_empalme:'', tierra:false, grupo_electrogeno:false, ups:false, obs_electrica:'',
-  tableros:[], circuitos:[],
-  ilum_tipo:'', ilum_cantidad:'', ilum_estado:'', ilum_emergencia:false, ilum_obs:'',
-  enchufes_cantidad:'', enchufes_tipo:'', enchufes_estado:'', enchufes_fuerza:false,
-  enchufes_equipos:'', enchufes_obs:'',
-  canal_emt:false, canal_pvc:false, canal_bandeja:false, canal_escalerilla:false,
-  canal_estado:'', canal_saturacion:'', canal_obs:'',
-  checklist:{},
-  med_v_r:'', med_v_s:'', med_v_t:'', med_i_r:'', med_i_s:'', med_i_t:'',
-  med_balance:'', med_tierra:'', med_temp:'', med_obs:'',
-  recomendaciones:'',
-  alcance_trabajos:'', alcance_mejoras:'', alcance_mantenciones:'', alcance_obs_comerciales:'',
-});

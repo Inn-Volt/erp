@@ -21,7 +21,7 @@ import React from 'react';
 import { aDoc, esLista, esTituloDeAntes, tituloRepiteIntro, type Lista, type NodoTexto } from '@/lib/textoFormato';
 import { Document, Page, Text, View, StyleSheet, Image } from '@react-pdf/renderer';
 import type { Cliente, Vendedor } from '@/types';
-import type { EmpresaInfo } from '@/components/pdf/PresupuestoPDF';
+import type { EmpresaInfo } from '@/types';
 import type { CotizacionDoc, Linea, PartidaCot, Seccion } from '@/lib/cotizador/tipos';
 import { datoEncabezadoVisible, planEnPalabras, TITULO_VALORIZACION, type DatoEncabezado, type HitoCobro } from '@/lib/cotizador/tipos';
 export { DATOS_ENCABEZADO, type DatoEncabezado } from '@/lib/cotizador/tipos';

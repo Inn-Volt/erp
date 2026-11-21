@@ -8,6 +8,8 @@
  *   · Con la fase 19 (fondos): «¿Con qué pagaste?» sale del fondo lo que alcance y el resto se le
  *     debe; la boleta es obligatoria salvo «no me la dieron»; quien paga puede usar la tarjeta de
  *     la empresa. Con `gasto`, corrige uno ya rendido (lo observado vuelve a «rendido»).
+ *   · Con la fase 20: «Partida (opcional)» del trabajo, para el control de presupuesto por partida, y
+ *     «Leer con IA» la foto de la boleta (prellena monto, fecha y detalle; lo leído queda en amarillo).
  */
 
 import { useEffect, useState } from 'react';
@@ -18,6 +20,10 @@ import type { Anticipo } from '@/services/fase5';
 import { fondosService } from '@/services/fondos';
 import { opcionesDePago, repartoPrevisto } from '@/lib/fondos';
 import { useFase } from '@/lib/fases';
+import { partidaValida } from '@/lib/controlProyecto';
+import SelectorPartida, { usePartidasDe } from '@/components/trabajos/SelectorPartida';
+import LeerDocumentoIA from '@/components/LeerDocumentoIA';
+import type { LecturaDocumento } from '@/lib/leerDocumento';
 import { usePermisos } from '@/hooks/usePermisos';
 import { useToast } from '@/hooks/useToast';
 import { fechaLocal, formatCLP } from '@/utils';
@@ -41,7 +47,22 @@ export default function NuevoGasto({ destinos, destinoInicial, anticipos, gasto,
     fecha: gasto?.fecha || fechaLocal(), monto: gasto ? Number(gasto.monto) : 0, categoria: (gasto?.categoria || 'combustible') as CategoriaGasto,
     descripcion: gasto?.descripcion || '', destino: gasto ? destinoDe(gasto) : destinoInicial, anticipo_id: vigentes[0]?.id || '',
     pagado_con: (gasto?.pagado_con === 'empresa' ? 'empresa' : 'fondo') as 'fondo' | 'empresa', sin_boleta: !!gasto?.sin_boleta,
+    partida_id: gasto?.partida_id || '',
   });
+  // Fase 20: la partida del trabajo elegido (opcional).
+  const fase20 = useFase(20);
+  const partidas = usePartidasDe(f.destino.startsWith('cot:') ? f.destino.slice(4) : null, fase20);
+  // «Leer con IA» la boleta: lo que leyó queda en amarillo para revisar.
+  const [deIA, setDeIA] = useState<Set<string>>(new Set());
+  const [avisosIA, setAvisosIA] = useState<string[]>([]);
+  const ia = (k: string): React.CSSProperties | undefined => (deIA.has(k) ? { background: 'var(--y-soft)' } : undefined);
+  const aplicarIA = ({ doc, avisos }: LecturaDocumento) => {
+    const detalle = [doc.proveedor_nombre, doc.descripcion].filter(Boolean).join(' · ').slice(0, 120);
+    setF(x => ({ ...x, ...(doc.total ? { monto: doc.total } : {}), ...(doc.fecha ? { fecha: doc.fecha } : {}), ...(detalle ? { descripcion: detalle } : {}) }));
+    setDeIA(new Set([doc.total ? 'monto' : '', doc.fecha ? 'fecha' : '', detalle ? 'descripcion' : ''].filter(Boolean)));
+    setAvisosIA(avisos.filter(a => !/RUT/.test(a)));
+    if (!doc.total && !doc.fecha && !detalle) toastError('La IA no encontró datos en la boleta: complétala a mano.');
+  };
   const [boleta, setBoleta] = useState<File | null>(null);
   const [guardando, setGuardando] = useState(false);
   // Lo disponible en el fondo (al corregir, cuenta también lo que este gasto ya tomaba).
@@ -61,6 +82,7 @@ export default function NuevoGasto({ destinos, destinoInicial, anticipos, gasto,
     if (!(f.monto > 0)) { toastError('Ingresa el monto'); return; }
     if (!f.destino) { toastError('Elige el trabajo o el proyecto del gasto'); return; }
     if (fondos && !tieneBoleta && !f.sin_boleta) { toastError('Agrega la foto de la boleta (o marca que no te la dieron)'); return; }
+    if (fase20 && partidas.length && !partidaValida(f.partida_id, partidas)) { toastError('Esa partida ya no está en el trabajo: elige otra.'); return; }
     const [tipo, id] = f.destino.split(':');
     setGuardando(true);
     try {
@@ -69,6 +91,7 @@ export default function NuevoGasto({ destinos, destinoInicial, anticipos, gasto,
         fecha: f.fecha, monto: f.monto, categoria: f.categoria, descripcion: f.descripcion.trim() || null, boleta_path,
         cotizacion_id: tipo === 'cot' ? id : null, proyecto_id: tipo === 'proy' ? id : null, ot_id: tipo === 'ot' ? id : null,
         ...(fondos ? { pagado_con: f.pagado_con, sin_boleta: f.sin_boleta && !boleta_path } : f.anticipo_id && !gasto ? { anticipo_id: f.anticipo_id } : {}),
+        ...(fase20 ? { partida_id: tipo === 'cot' && f.partida_id ? f.partida_id : null } : {}),
       } as Partial<Gasto>;
       if (gasto) {
         await gastosService.actualizar(gasto.id, datos);
@@ -96,7 +119,7 @@ export default function NuevoGasto({ destinos, destinoInicial, anticipos, gasto,
               Observado: {gasto.motivo_rechazo}</p>
           )}
           <div><label className="label-muted" style={lbl}>¿De qué trabajo o proyecto? *</label>
-            <select className="input" value={f.destino} disabled={fijo} onChange={e => setF({ ...f, destino: e.target.value })}>
+            <select className="input" value={f.destino} disabled={fijo} onChange={e => setF({ ...f, destino: e.target.value, partida_id: '' })}>
               <option value="">Elegir…</option>
               {(['Trabajos', 'Proyectos', 'OT'] as const).map(g => destinos.some(d => d.grupo === g) && (
                 <optgroup key={g} label={g}>
@@ -105,14 +128,15 @@ export default function NuevoGasto({ destinos, destinoInicial, anticipos, gasto,
               ))}
             </select>
             {destinos.length === 0 && <p style={{ margin: '4px 0 0', fontSize: '0.76rem', color: 'var(--muted)' }}>Aún no hay trabajos aprobados ni proyectos.</p>}</div>
+          {fase20 && <SelectorPartida partidas={partidas} value={f.partida_id} onChange={v => setF({ ...f, partida_id: v })} />}
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
-            <div><label className="label-muted" style={lbl}>Monto *</label><NumeroInput className="input" prefijo="$" value={f.monto} onChange={v => setF({ ...f, monto: v })} /></div>
-            <div><label className="label-muted" style={lbl}>Fecha</label><input className="input" type="date" value={f.fecha} onChange={e => setF({ ...f, fecha: e.target.value })} /></div>
+            <div><label className="label-muted" style={lbl}>Monto *</label><NumeroInput className="input" prefijo="$" style={ia('monto')} value={f.monto} onChange={v => setF({ ...f, monto: v })} /></div>
+            <div><label className="label-muted" style={lbl}>Fecha</label><input className="input" type="date" style={ia('fecha')} value={f.fecha} onChange={e => setF({ ...f, fecha: e.target.value })} /></div>
           </div>
           <div><label className="label-muted" style={lbl}>Tipo</label>
             <select className="input" value={f.categoria} onChange={e => setF({ ...f, categoria: e.target.value as CategoriaGasto })}>
               {CATEGORIAS_GASTO.map(c => <option key={c.clave} value={c.clave}>{c.nombre}</option>)}</select></div>
-          <div><label className="label-muted" style={lbl}>Detalle</label><input className="input" value={f.descripcion} onChange={e => setF({ ...f, descripcion: e.target.value })} placeholder="Bencina camioneta, peaje Ruta 68…" /></div>
+          <div><label className="label-muted" style={lbl}>Detalle</label><input className="input" style={ia('descripcion')} value={f.descripcion} onChange={e => setF({ ...f, descripcion: e.target.value })} placeholder="Bencina camioneta, peaje Ruta 68…" /></div>
 
           {fondos ? (
             <div>
@@ -151,7 +175,14 @@ export default function NuevoGasto({ destinos, destinoInicial, anticipos, gasto,
                 <input type="checkbox" checked={f.sin_boleta} onChange={e => setF({ ...f, sin_boleta: e.target.checked })} style={{ accentColor: 'var(--y-brand)' }} />
                 No me entregaron boleta ni voucher</label>
             )}
+            <LeerDocumentoIA archivo={boleta} onLeido={aplicarIA} />
           </div>
+          {deIA.size > 0 && (
+            <p style={{ margin: 0, fontSize: '0.78rem', color: 'var(--text)', background: 'var(--y-soft)', borderRadius: 8, padding: '0.45rem 0.7rem' }}>
+              La IA prellenó lo marcado en amarillo: revísalo antes de rendir.
+              {avisosIA.map(a => <span key={a} style={{ display: 'block', color: 'var(--danger)', marginTop: 2 }}>{a}</span>)}
+            </p>
+          )}
         </div>
         <div style={{ padding: '0.9rem 1.25rem', borderTop: '1px solid var(--border2)', display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
           <button className="btn btn-ghost" onClick={onClose}>Cancelar</button>

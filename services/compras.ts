@@ -27,6 +27,8 @@ export interface Compra {
   neto: number; exento: number; iva: number; total: number; categoria: string | null; descripcion: string | null;
   cotizacion_id: string | null; proyecto_id: string | null; pagada: boolean; fecha_pago: string | null; vencimiento: string | null;
   archivo_path: string | null; created_at: string;
+  /** Fase 20: de qué partida del trabajo es y qué tipo de costo (vacío = material). */
+  partida_id?: string | null; tipo_costo?: 'material' | 'mano_obra' | 'servicio' | 'operacion' | null;
 }
 export type NuevaCompra = Omit<Compra, 'id' | 'created_at'>;
 

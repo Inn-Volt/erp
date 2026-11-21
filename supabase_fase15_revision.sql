@@ -474,7 +474,10 @@ RETURNS NUMERIC LANGUAGE sql IMMUTABLE AS $$
          (CASE WHEN c.tipo_doc IN ('factura','factura_exenta','nota_credito') THEN c.neto + c.exento ELSE c.total END);
 $$;
 
-CREATE OR REPLACE VIEW public.cotizacion_resultado WITH (security_invoker = true) AS
+-- Si una fase posterior ya le agregó columnas (la 20: mano de obra), no se toca: así se puede volver a correr.
+DO $guarda$ BEGIN
+  IF (SELECT count(*) FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'cotizacion_resultado') <= 11 THEN
+    EXECUTE $v$CREATE OR REPLACE VIEW public.cotizacion_resultado WITH (security_invoker = true) AS
 SELECT c.id AS cotizacion_id,
   CASE WHEN c.moneda = 'UF' THEN round(COALESCE(c.subtotal, 0) * COALESCE(c.valor_uf, 0)) ELSE COALESCE(c.subtotal, 0) END AS venta_neta,
   CASE WHEN c.moneda = 'UF' THEN round(COALESCE(c.costo_directo, 0) * COALESCE(c.valor_uf, 0)) ELSE COALESCE(c.costo_directo, 0) END AS costo_cotizado,
@@ -486,10 +489,15 @@ SELECT c.id AS cotizacion_id,
   COALESCE((SELECT SUM(h.horas) FROM public.horas_trabajo h WHERE h.cotizacion_id = c.id), 0) AS horas,
   COALESCE((SELECT SUM(h.horas * h.costo_hora) FROM public.horas_trabajo h WHERE h.cotizacion_id = c.id), 0) AS costo_horas
 FROM public.cotizaciones c
-WHERE c.estado = 'Aprobada';
+WHERE c.estado = 'Aprobada'$v$;
+  END IF;
+END $guarda$;
 GRANT SELECT ON public.cotizacion_resultado TO authenticated;
 
-CREATE OR REPLACE VIEW public.proyecto_resumen WITH (security_invoker = true) AS
+-- Igual: si la fase 20 ya le agregó columnas, queda como está.
+DO $guarda$ BEGIN
+  IF (SELECT count(*) FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'proyecto_resumen') <= 14 THEN
+    EXECUTE $v$CREATE OR REPLACE VIEW public.proyecto_resumen WITH (security_invoker = true) AS
 SELECT p.id AS proyecto_id,
   COALESCE((SELECT SUM(COALESCE(c.total_clp, c.total)) FROM public.cotizaciones c WHERE c.proyecto_id = p.id AND c.estado = 'Aprobada'), 0) AS venta,
   COALESCE((SELECT SUM(COALESCE(c.total_clp, c.total)) FROM public.cotizaciones c WHERE c.proyecto_id = p.id AND c.estado = 'Enviada'), 0) AS por_aprobar,
@@ -511,7 +519,9 @@ SELECT p.id AS proyecto_id,
             WHERE k.proyecto_id = p.id OR k.cotizacion_id IN (SELECT id FROM public.cotizaciones WHERE proyecto_id = p.id)), 0) AS compras,
   COALESCE((SELECT SUM(h.horas * h.costo_hora) FROM public.horas_trabajo h
             WHERE h.proyecto_id = p.id OR h.cotizacion_id IN (SELECT id FROM public.cotizaciones WHERE proyecto_id = p.id)), 0) AS costo_horas
-FROM public.proyectos p;
+FROM public.proyectos p$v$;
+  END IF;
+END $guarda$;
 GRANT SELECT ON public.proyecto_resumen TO authenticated;
 
 -- ─── 9. Seguimiento automático de cotizaciones ───────────────────────────────

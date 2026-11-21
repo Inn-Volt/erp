@@ -8,7 +8,7 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import { ClipboardList, Download, Loader2, Plus, Trash2 } from 'lucide-react';
-import type { EmpresaInfo } from '@/components/pdf/PresupuestoPDF';
+import type { EmpresaInfo } from '@/types';
 import InformeVisitaModal from '@/components/informes/InformeVisitaModal';
 import { supabase } from '@/lib/supabase';
 import { fotosService } from '@/services/fotos';
