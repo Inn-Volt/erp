@@ -20,7 +20,7 @@ import { armar, respuestasIniciales, type RecetaCompleta, type Respuestas } from
 export interface MensajeIA { rol: 'usuario' | 'asistente'; texto: string }
 export interface PreguntaIA { pregunta: string; opciones: string[] }
 export interface PlanPartida { nombre: string; descripcion: string; cantidad: number; unidad: string; alcance: string }
-export interface PlanIA { resumen: string; supuestos: string[]; partidas: PlanPartida[] }
+interface PlanIA { resumen: string; supuestos: string[]; partidas: PlanPartida[] }
 export interface TurnoIA { tipo: 'preguntas' | 'plan'; mensaje: string; preguntas: PreguntaIA[]; plan: PlanIA | null }
 
 export interface CandidatoProducto { ref: string; descripcion: string; categoria: CategoriaItem; unidad: string; costo: number }
@@ -28,7 +28,7 @@ export interface CandidatoReceta {
   ref: string; nombre: string; unidad: string; contiene: string;
   preguntas: { clave: string; tipo: 'numero' | 'producto' | 'sino'; texto: string; unidad?: string; opciones?: string[] }[];
 }
-export interface RespuestaReceta { clave: string; valor: string }
+interface RespuestaReceta { clave: string; valor: string }
 export interface ComponenteIA {
   ref: string;               // B12 (producto), R3 (receta) o vacío (nuevo)
   descripcion: string;
@@ -88,7 +88,7 @@ function puntuador(texto: string) {
 }
 
 type Articulo = Pick<ArticuloCatalogo, 'id' | 'descripcion' | 'categoria' | 'unidad' | 'costo' | 'codigo' | 'familia' | 'activo'>;
-export type RefBiblioteca = { tipo: 'producto'; a: Articulo } | { tipo: 'receta'; r: RecetaCompleta };
+type RefBiblioteca = { tipo: 'producto'; a: Articulo } | { tipo: 'receta'; r: RecetaCompleta };
 
 /**
  * La lista corta que se le manda a la IA para UNA partida: hasta ~60 productos relacionados,
@@ -166,7 +166,7 @@ export function normalizarComponentes(raw: unknown): ComponenteIA[] {
 }
 
 // ─── Las respuestas que dio la IA, como respuestas de la receta ──────────────
-export function respuestasDeReceta(r: RecetaCompleta, pares: RespuestaReceta[], nombreDeItem: (id: string) => string): Respuestas {
+function respuestasDeReceta(r: RecetaCompleta, pares: RespuestaReceta[], nombreDeItem: (id: string) => string): Respuestas {
   const out = respuestasIniciales(r);
   for (const { clave, valor } of pares) {
     const p = r.preguntas.find(x => x.clave === clave) || r.preguntas.find(x => normalizar(x.texto) === normalizar(clave));

@@ -12,7 +12,7 @@ import Link from 'next/link';
 import { Copy, Landmark, Loader2, Mail, MessageCircle, Save, Search, Wallet, X } from 'lucide-react';
 import Conciliacion from '@/components/facturacion/Conciliacion';
 import { EmitirDTE } from '@/components/facturacion/FacturaElectronica';
-import type { EmpresaInfo } from '@/components/pdf/PresupuestoPDF';
+import type { EmpresaInfo } from '@/types';
 import { supabase } from '@/lib/supabase';
 import { useFase } from '@/lib/fases';
 import { correoAutomatico, enviarCorreo } from '@/lib/correo';

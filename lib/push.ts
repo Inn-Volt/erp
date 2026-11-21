@@ -51,16 +51,16 @@ function conPlazo<T>(p: Promise<T>, ms: number, error: string): Promise<T> {
   return Promise.race([p, new Promise<T>((_, rechazar) => setTimeout(() => rechazar(new Error(error)), ms))]);
 }
 
-export function esIOS(): boolean {
+function esIOS(): boolean {
   return /iphone|ipad|ipod/i.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
 }
-export function esAppInstalada(): boolean {
+function esAppInstalada(): boolean {
   return window.matchMedia('(display-mode: standalone)').matches || (navigator as Navigator & { standalone?: boolean }).standalone === true;
 }
 
 let claveCache: string | null = null;
 /** La clave pública de los avisos (la da el servidor; en Netlify puede venir fija). */
-export async function clavePublica(): Promise<string | null> {
+async function clavePublica(): Promise<string | null> {
   if (claveCache) return claveCache;
   const fija = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY || '';
   if (fija) return (claveCache = fija);

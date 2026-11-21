@@ -1,7 +1,7 @@
 'use client';
 
 import { filaClicable } from '@/lib/a11y';
-import type { EmpresaInfo } from '@/components/pdf/PresupuestoPDF';
+import type { EmpresaInfo } from '@/types';
 import { supabase } from '@/lib/supabase';
 import InformesDeVisita from '@/components/informes/InformesDeVisita';
 import { fotosService } from '@/services/fotos';

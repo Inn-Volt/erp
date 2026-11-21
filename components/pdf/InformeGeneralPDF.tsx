@@ -14,7 +14,7 @@
 
 import React from 'react';
 import { Document, Image, Page, StyleSheet, Text, View } from '@react-pdf/renderer';
-import type { EmpresaInfo } from '@/components/pdf/PresupuestoPDF';
+import type { EmpresaInfo } from '@/types';
 import {
   alertasDe, seccionesDe, tipoDe, valorLegible, vacio,
   type CampoInforme, type FilaLista, type FotoInforme, type InformeLleno,

@@ -74,6 +74,7 @@ const MENU: { grupo: string; icono: React.ElementType; items: Item[] }[] = [
     { href: '/facturacion', label: 'Facturación y cobranza', permisos: ['facturacion.ver', 'facturacion.gestionar'] },
     { href: '/gastos', label: 'Gastos y anticipos', permisos: ['gastos.crear', 'gastos.ver_todos', 'gastos.aprobar'] },
     { href: '/compras', label: 'Compras a proveedores', permisos: ['compras.ver', 'compras.gestionar'] },
+    { href: '/equipo', label: 'Equipo y costos', permisos: ['gastos.aprobar', 'configuracion.gestionar'] },
     { href: '/contabilidad', label: 'Contabilidad e IVA', permisos: ['compras.ver', 'compras.gestionar', 'facturacion.gestionar'] },
   ] },
   { grupo: 'Mi empresa', icono: Building2, items: [

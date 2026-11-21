@@ -38,11 +38,16 @@ export const viewport: Viewport = {
 /**
  * Aplica el tema guardado ANTES del primer pintado (sin destello). Si la
  * persona nunca eligió, se respeta la preferencia de su equipo.
+ * Además quita el comentario que Netlify agrega en <head> («This site is hosted
+ * on Netlify…»): React no lo espera al hidratar y lanza el error #418.
  */
 const APLICAR_TEMA = `(function(){try{
   var t = localStorage.getItem('innvolt-tema');
   if (!t) t = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
   if (t === 'dark') document.documentElement.classList.add('dark');
+}catch(e){}
+try{
+  for (var n = document.head.firstChild; n;) { var s = n.nextSibling; if (n.nodeType === 8 && /Netlify/.test(n.nodeValue)) n.remove(); n = s; }
 }catch(e){}})();`;
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

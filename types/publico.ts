@@ -4,7 +4,7 @@
 import type { HitoCobro } from '@/lib/cotizador/tipos';
 import type { Cliente, CotizacionItem, Moneda, Partida } from '@/types';
 import type { EstadoCot, QueVe, Seccion } from '@/lib/cotizador/tipos';
-import type { EmpresaInfo } from '@/components/pdf/PresupuestoPDF';
+import type { EmpresaInfo } from '@/types';
 
 export interface FotoPublica { url: string; caption: string; }
 

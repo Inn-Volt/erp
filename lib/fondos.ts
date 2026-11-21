@@ -7,7 +7,7 @@
  *   Lo que se le debe   = lo que puso de su bolsillo − pagos − compensaciones
  */
 
-export type TipoMovimiento = 'entrega' | 'devolucion' | 'pago' | 'compensacion' | 'reversa';
+type TipoMovimiento = 'entrega' | 'devolucion' | 'pago' | 'compensacion' | 'reversa';
 export interface MovimientoFondo {
   id: string; folio: number; usuario_id: string; tipo: TipoMovimiento; monto: number; fecha: string;
   estado: 'confirmado' | 'por_confirmar' | 'descartado'; nota: string | null; motivo: string | null;
@@ -105,13 +105,4 @@ export function opcionesDePago(monto: number, disponible: number, puedeTarjeta: 
   const r = repartoPrevisto(monto, disponible);
   const propia = r.como === 'fondo' ? 'Con mi fondo' : r.como === 'mixto' ? 'Con mi fondo y mi dinero' : 'Con mi dinero';
   return [{ valor: 'fondo', texto: propia }, ...(puedeTarjeta ? [{ valor: 'empresa' as const, texto: 'Con la tarjeta de la empresa' }] : [])];
-}
-
-/** «Tienes $35.000 para el día a día · te debemos $5.000» */
-export function resumenCuentas(c: Cuentas, fmt: (v: number) => string): string {
-  const partes = [`${fmt(c.disponible)} disponible en el fondo`];
-  if (c.por_confirmar > 0) partes.push(`${fmt(c.por_confirmar)} en devoluciones por confirmar`);
-  if (c.debemos > 0) partes.push(`se le deben ${fmt(c.debemos)}`);
-  if (c.en_revision > 0) partes.push(`${fmt(c.en_revision)} en gastos observados`);
-  return partes.join(' · ');
 }

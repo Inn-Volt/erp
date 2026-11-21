@@ -36,13 +36,13 @@ export interface RecetaCompleta {
 
 export type Respuestas = Record<string, number | boolean | string>;
 
-export interface LineaArmada { componente: ComponenteReceta; articulo: ArticuloCatalogo | null; cantidad: number }
-export interface NoVa { componente: ComponenteReceta; nombre: string; porque: string }
+interface LineaArmada { componente: ComponenteReceta; articulo: ArticuloCatalogo | null; cantidad: number }
+interface NoVa { componente: ComponenteReceta; nombre: string; porque: string }
 export interface Armado { lineas: LineaArmada[]; noVan: NoVa[] }
 
-export const TOPE_CANTIDAD = 1_000_000;
+const TOPE_CANTIDAD = 1_000_000;
 
-export function porOmision(p: PreguntaReceta): number | boolean | string {
+function porOmision(p: PreguntaReceta): number | boolean | string {
   if (p.tipo === 'numero') return typeof p.defecto === 'number' ? p.defecto : (p.minimo ?? 1);
   if (p.tipo === 'sino') return p.defecto === undefined || p.defecto === null ? true : !!p.defecto;
   const op = (p.opciones || []).find(o => o.defecto) || (p.opciones || [])[0];
@@ -64,7 +64,7 @@ export function respuestasIniciales(r: RecetaCompleta, antes?: Respuestas): Resp
 
 export const grupos = (respuesta: number, cada: number) => (cada > 0 ? Math.ceil(respuesta / cada - 1e-9) : respuesta);
 
-export function textoDelRango(desde?: number | null, hasta?: number | null): string {
+function textoDelRango(desde?: number | null, hasta?: number | null): string {
   const n = (v: number) => v.toLocaleString('es-CL');
   if (desde !== null && desde !== undefined && hasta !== null && hasta !== undefined) {
     return desde === hasta ? `es ${n(desde)}` : `está entre ${n(desde)} y ${n(hasta)}`;

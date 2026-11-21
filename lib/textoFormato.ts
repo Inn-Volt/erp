@@ -13,12 +13,12 @@
 
 export type Marca = 'bold' | 'italic' | 'underline' | 'strike';
 export interface NodoTexto { type: 'text'; text: string; marks?: { type: Marca }[] }
-export interface Parrafo { type: 'paragraph'; content?: NodoTexto[] }
-export interface Titulo { type: 'heading'; attrs: { level: 1 | 2 }; content?: NodoTexto[] }
-export interface ItemLista { type: 'listItem'; content: (Parrafo | Lista)[] }
+interface Parrafo { type: 'paragraph'; content?: NodoTexto[] }
+interface Titulo { type: 'heading'; attrs: { level: 1 | 2 }; content?: NodoTexto[] }
+interface ItemLista { type: 'listItem'; content: (Parrafo | Lista)[] }
 export interface Lista { type: 'bulletList' | 'orderedList'; attrs?: { start?: number }; content: ItemLista[] }
 export type Bloque = Parrafo | Titulo | Lista;
-export interface DocFormato { type: 'doc'; content: Bloque[] }
+interface DocFormato { type: 'doc'; content: Bloque[] }
 
 export const esLista = (b: { type: string }): b is Lista => b.type === 'bulletList' || b.type === 'orderedList';
 

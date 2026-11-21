@@ -2,12 +2,17 @@
 
 /** Ventanas del cotizador: revisar y enviar, aprobar, rechazar e historial. */
 
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { AlertTriangle, CheckCircle2, Download, Loader2, Mail, MessageCircle, Paperclip, Send, XCircle } from 'lucide-react';
 import { Modal } from './ui';
+import NumeroInput from '@/components/NumeroInput';
 import type { Aviso } from '@/lib/cotizador/revision';
-import { MOTIVOS_RECHAZO, type CotizacionDoc, type EventoCot } from '@/lib/cotizador/tipos';
+import { CUANDO_COBRO, MOTIVOS_RECHAZO, type CotizacionDoc, type EventoCot, type HitoCobro } from '@/lib/cotizador/tipos';
+import { anticipoDelPlan, desgloseAnticipo, planConAnticipo } from '@/lib/anticipo';
+import { montosHitos, presupuesto } from '@/lib/controlProyecto';
+import { useFase } from '@/lib/fases';
 import { cotizadorService } from '@/services/cotizador';
+import { formatCLP } from '@/utils';
 
 export type Canal = 'whatsapp' | 'correo' | 'ambos' | 'descarga';
 
@@ -102,23 +107,84 @@ function AvisoFila({ a, onIrA }: { a: Aviso; onIrA: (id: string) => void }) {
   );
 }
 
-export function AprobarModal({ cot, vencida, onCerrar, onListo }: { cot: CotizacionDoc; vencida: boolean; onCerrar: () => void; onListo: () => void }) {
+/**
+ * Con la fase 20 se fija el primer pago (en % o en $) y se ve qué es esa plata: cuánto es IVA (va al
+ * SII) y cómo se reparte el neto según lo cotizado (materiales, mano de obra, operación, utilidad).
+ */
+function PrimerPago({ cot, plan, monto, onMonto }: { cot: CotizacionDoc; plan: HitoCobro[]; monto: number; onMonto: (v: number) => void }) {
+  const [enPct, setEnPct] = useState(true);
+  const total = Number(cot.total_clp ?? cot.total ?? 0);
+  const pres = useMemo(() => presupuesto(cot), [cot]);
+  const d = desgloseAnticipo({ monto, total, ivaRatio: Number(cot.total) ? Number(cot.iva || 0) / Number(cot.total) : 0, presupuesto: pres });
+  const resto = montosHitos(total, planConAnticipo(plan, total, monto)).filter(h => h.cuando !== 'aprobar' && h.monto);
+  const pct = (v: number) => `${(Math.round(v * 10) / 10).toString().replace('.', ',')} %`;
+  const linea = (t: string, v: number) => v ? <span style={{ display: 'flex', justifyContent: 'space-between', gap: 8 }}><span>{t}</span><b style={{ fontVariantNumeric: 'tabular-nums' }}>{formatCLP(v)}</b></span> : null;
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 8, padding: '0.7rem', borderRadius: 8, background: 'var(--bg3)' }}>
+      <div style={{ display: 'flex', gap: 8, alignItems: 'flex-end', flexWrap: 'wrap' }}>
+        <label style={{ display: 'flex', flexDirection: 'column', gap: 4, flex: 1, minWidth: 160 }}>
+          <span className="label-muted">Primer pago (anticipo)</span>
+          {enPct
+            ? <NumeroInput className="input" sufijo="%" mostrarCero value={Math.round(d.pct * 100) / 100} min={0} max={100}
+                onChange={v => onMonto(Math.round((total * Math.min(Math.max(v, 0), 100)) / 100))} ariaLabel="Primer pago en %" />
+            : <NumeroInput className="input" prefijo="$" mostrarCero value={monto} onChange={v => onMonto(Math.min(Math.max(Math.round(v), 0), Math.round(total)))} ariaLabel="Primer pago en pesos" />}
+        </label>
+        <div style={{ display: 'flex', gap: 4 }}>
+          {([[true, '%'], [false, '$']] as const).map(([v, t]) => (
+            <button key={t} type="button" className="btn btn-sm" onClick={() => setEnPct(v)}
+              style={{ background: enPct === v ? 'var(--y-brand)' : 'var(--bg2)', color: enPct === v ? '#111' : 'var(--muted)' }}>{t}</button>
+          ))}
+        </div>
+      </div>
+      <span style={{ fontSize: '0.82rem', color: 'var(--text)' }}>
+        <b>{formatCLP(d.monto)}</b> ({pct(d.pct)} de {formatCLP(total)}){resto.length ? ' · después: ' + resto.map(h => `${h.nombre} ${formatCLP(h.monto)} ${CUANDO_COBRO[h.cuando]}`).join(', ') : ''}
+      </span>
+      {d.monto > 0 && (
+        <div style={{ fontSize: '0.8rem', color: 'var(--text)', display: 'flex', flexDirection: 'column', gap: 2 }}>
+          <span className="label-muted" style={{ marginBottom: 2 }}>De este pago</span>
+          {linea('IVA (se paga al SII)', d.iva)}
+          {linea('Materiales', d.costos.material)}
+          {linea('Mano de obra', d.costos.mano_obra)}
+          {linea('Servicios', d.costos.servicio)}
+          {linea('Operación', d.costos.operacion)}
+          {linea('Utilidad', d.utilidad)}
+          {d.cubreMateriales !== null && (
+            <span style={{ marginTop: 4, color: d.cubreMateriales >= 100 ? 'var(--success)' : 'var(--y)' }}>
+              {d.cubreMateriales >= 100 ? `Alcanza para todos los materiales cotizados (${formatCLP(d.materiales)}).`
+                : `Cubre el ${pct(d.cubreMateriales)} de los materiales cotizados (${formatCLP(d.materiales)}).`}</span>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+export function AprobarModal({ cot, vencida, plan, onCerrar, onListo }: {
+  cot: CotizacionDoc; vencida: boolean;
+  /** El plan de cobro de la cotización (o el de los ajustes): de ahí sale el primer pago por omisión. */
+  plan: HitoCobro[];
+  onCerrar: () => void; onListo: () => void;
+}) {
   const [como, setComo] = useState('');
   const [motivo, setMotivo] = useState('');
   const [archivo, setArchivo] = useState<File | null>(null);
   const [ocupado, setOcupado] = useState(false);
   const [error, setError] = useState('');
+  const fase20 = useFase(20);
+  const total = Number(cot.total_clp ?? cot.total ?? 0);
+  const anticipoPlan = anticipoDelPlan(plan, total);
+  const [anticipo, setAnticipo] = useState(anticipoPlan);
   const aprobar = async () => {
     setOcupado(true); setError('');
     try {
       const doc = archivo ? await cotizadorService.subirArchivo(cot.id, archivo) : null;
-      await cotizadorService.aprobar(cot.id, como.trim(), doc, motivo.trim() || null);
+      await cotizadorService.aprobar(cot.id, como.trim(), doc, motivo.trim() || null, fase20 && anticipo !== anticipoPlan ? anticipo : null);
       onListo();
     } catch (e) { setError(e instanceof Error ? e.message : 'No se pudo aprobar'); }
     finally { setOcupado(false); }
   };
   return (
-    <Modal titulo="Aprobada por el cliente" onCerrar={onCerrar} ancho={500} pie={<>
+    <Modal titulo="Aprobada por el cliente" onCerrar={onCerrar} ancho={540} pie={<>
       <button className="btn btn-ghost" onClick={onCerrar}>Cancelar</button>
       <button className="btn btn-primary" disabled={!como.trim() || (vencida && !motivo.trim()) || ocupado} onClick={aprobar}>
         {ocupado ? <Loader2 size={14} className="iv-spin" /> : <CheckCircle2 size={14} />} Aprobar</button>
@@ -132,6 +198,7 @@ export function AprobarModal({ cot, vencida, onCerrar, onListo }: { cot: Cotizac
       </label>
       {vencida && <div><label className="label-muted" style={{ display: 'block', marginBottom: 4 }}>Está vencida: motivo para aprobarla igual *</label>
         <input className="input" value={motivo} onChange={e => setMotivo(e.target.value)} /></div>}
+      {fase20 && total > 0 && <PrimerPago cot={cot} plan={plan} monto={anticipo} onMonto={setAnticipo} />}
       {error && <p style={{ margin: 0, color: 'var(--danger)', fontSize: '0.84rem' }}>{error}</p>}
     </Modal>
   );

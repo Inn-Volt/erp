@@ -27,7 +27,7 @@ export function linkPublico(token: string): string {
 }
 
 /** Estados que significan venta concretada. */
-export const ESTADOS_VENTA: EstadoCotizacion[] = ['Aprobada', 'Aceptado', 'Realizado', 'Entregado'];
+const ESTADOS_VENTA: EstadoCotizacion[] = ['Aprobada', 'Aceptado', 'Realizado', 'Entregado'];
 const ESTADOS_RECHAZO: EstadoCotizacion[] = ['Rechazada', 'Rechazado'];
 const ESTADOS_ESPERA: EstadoCotizacion[] = ['Enviada', 'Pendiente'];
 

@@ -10,9 +10,9 @@
  */
 
 /** Ruta del logo con tinta oscura — la que se ve sobre papel/fondo claro. */
-export const LOGO_CLARO  = '/logos/innvolt-claro.svg';
+const LOGO_CLARO  = '/logos/innvolt-claro.svg';
 /** Ruta del logo con tinta clara — la que se ve sobre fondo oscuro. */
-export const LOGO_OSCURO = '/logos/innvolt-oscuro.svg';
+const LOGO_OSCURO = '/logos/innvolt-oscuro.svg';
 
 export function Logo({ className = '' }: { className?: string }) {
   return (
@@ -40,27 +40,6 @@ export function LogoImg({ height = 30 }: { height?: number }) {
       <img src={LOGO_CLARO}  alt="InnVolt" style={estilo} className="logo-claro" />
       <img src={LOGO_OSCURO} alt="InnVolt" style={estilo} className="logo-oscuro" />
     </>
-  );
-}
-
-/**
- * Isotipo cuadrado (rayo sobre amarillo de marca).
- * Sirve para espacios reducidos: avatar, favicon, botón de menú.
- */
-export function LogoMark({ size = 28 }: { size?: number }) {
-  return (
-    <span
-      style={{
-        width: size, height: size,
-        background: 'var(--y-brand)',
-        display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-        flexShrink: 0, borderRadius: 'var(--r-sm)',
-      }}
-    >
-      <svg width={size * 0.6} height={size * 0.6} viewBox="0 0 24 24" fill="#000" aria-hidden="true">
-        <path d="M13 2 4.5 13.5H11l-1 8.5 8.5-11.5H12l1-8.5z" />
-      </svg>
-    </span>
   );
 }
 

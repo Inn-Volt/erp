@@ -47,14 +47,14 @@ const FERIADOS: Record<string, string> = {
 };
 
 /** Nombre del feriado para una fecha 'YYYY-MM-DD' (o Date local); null si no es feriado. */
-export function feriadoDe(fecha: string | Date): string | null {
+function feriadoDe(fecha: string | Date): string | null {
   const clave = typeof fecha === 'string'
     ? fecha.slice(0, 10)
     : `${fecha.getFullYear()}-${String(fecha.getMonth() + 1).padStart(2, '0')}-${String(fecha.getDate()).padStart(2, '0')}`;
   return FERIADOS[clave] ?? null;
 }
 
-export type TipoDia = 'feriado' | 'domingo' | 'sabado' | 'laboral';
+type TipoDia = 'feriado' | 'domingo' | 'sabado' | 'laboral';
 
 /** Clasifica un día 'YYYY-MM-DD': el feriado tiene prioridad sobre el fin de semana. */
 export function tipoDia(fecha: string): { tipo: TipoDia; nombre: string | null } {

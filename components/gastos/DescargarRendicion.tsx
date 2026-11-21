@@ -12,7 +12,7 @@ import { pdf } from '@react-pdf/renderer';
 import { saveAs } from 'file-saver';
 import { Modal } from '@/components/cotizador/ui';
 import RendicionPDF, { type GastoRendido } from '@/components/pdf/RendicionPDF';
-import type { EmpresaInfo } from '@/components/pdf/PresupuestoPDF';
+import type { EmpresaInfo } from '@/types';
 import { fondosService } from '@/services/fondos';
 import { archivosOT, CATEGORIAS_GASTO, gastosService } from '@/services/operacion';
 import { folioProyecto } from '@/services/fase5';

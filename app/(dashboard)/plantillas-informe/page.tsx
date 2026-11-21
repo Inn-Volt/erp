@@ -21,7 +21,7 @@ import PageHeader from '@/components/PageHeader';
 import FaltaSQL from '@/components/FaltaSQL';
 import EditorFormato from '@/components/EditorFormato';
 import FormularioInforme from '@/components/informes/FormularioInforme';
-import type { EmpresaInfo } from '@/components/pdf/PresupuestoPDF';
+import type { EmpresaInfo } from '@/types';
 import { supabase } from '@/lib/supabase';
 import {
   claveDe, ETIQUETAS_COT, informeDesde, NATURALEZAS, plantillasInformeServicio, PRECARGAS, SI_NO_NA, tipoDe, TIPOS_CAMPO, TIPOS_SUBCAMPO,

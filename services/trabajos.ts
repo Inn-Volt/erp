@@ -23,11 +23,13 @@ export interface ResultadoTrabajo {
   facturado: number; cobrado: number; por_cobrar_total: number;
   /** Fase 15: compras a proveedores (neto con factura), horas y su costo. */
   compras?: number; horas?: number; costo_horas?: number;
+  /** Fase 20: mano de obra registrada día a día (internos y externos). */
+  mano_obra?: number;
 }
 
-/** Costo real del trabajo: gastos rendidos + compras a proveedores + horas. */
+/** Costo real del trabajo: gastos rendidos + compras a proveedores + mano de obra + horas de antes. */
 export const costoReal = (r?: ResultadoTrabajo | null) =>
-  Number(r?.gastos || 0) + Number(r?.compras || 0) + Number(r?.costo_horas || 0);
+  Number(r?.gastos || 0) + Number(r?.compras || 0) + Number(r?.mano_obra || 0) + Number(r?.costo_horas || 0);
 
 /** El trabajo no parte con el anticipo impago (fase 15): el error trae cuánto falta. */
 export const anticipoPendienteDe = (e: unknown): string | null => {
@@ -35,9 +37,6 @@ export const anticipoPendienteDe = (e: unknown): string | null => {
   return m.startsWith('ANTICIPO_PENDIENTE') ? m.replace(/^ANTICIPO_PENDIENTE:\s*/, '') : null;
 };
 
-export interface HoraTrabajo {
-  id: string; cotizacion_id: string | null; usuario_id: string; fecha: string; horas: number; costo_hora: number; nota: string | null; created_at: string;
-}
 export type EstadoMaterial = 'pendiente' | 'comprado' | 'en_obra' | 'instalado';
 export const ESTADOS_MATERIAL: { clave: EstadoMaterial; nombre: string; color: string }[] = [
   { clave: 'pendiente', nombre: 'Por comprar', color: '#d97706' },
@@ -83,19 +82,6 @@ export const trabajosService = {
     const { data, error } = await supabase.from('por_facturar').select('*').eq('cotizacion_id', cotId).order('created_at');
     if (error) return [];
     return (data || []) as PorFacturar[];
-  },
-  async horas(cotId: string): Promise<HoraTrabajo[]> {
-    const { data, error } = await supabase.from('horas_trabajo').select('*').eq('cotizacion_id', cotId).order('fecha', { ascending: false });
-    if (error) return [];
-    return (data || []) as HoraTrabajo[];
-  },
-  async registrarHoras(h: { cotizacion_id: string; fecha: string; horas: number; nota?: string | null; usuario_id?: string }) {
-    const { error } = await supabase.from('horas_trabajo').insert([{ ...h, nota: h.nota?.trim() || null }]);
-    if (error) throw error;
-  },
-  async eliminarHoras(id: string) {
-    const { error } = await supabase.from('horas_trabajo').delete().eq('id', id);
-    if (error) throw error;
   },
   /** Materiales del trabajo; la primera vez se crean desde las líneas de material de la cotización. */
   async materiales(cotId: string): Promise<MaterialTrabajo[]> {

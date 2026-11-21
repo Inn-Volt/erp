@@ -111,6 +111,8 @@ export interface Gasto {
   anticipo_id?: string | null;
   /** Fase 7: el trabajo (cotización aprobada) o el proyecto al que va el gasto. */
   cotizacion_id?: string | null; proyecto_id?: string | null;
+  /** Fase 20: de qué partida de la cotización es (vacío = «Sin partida»). */
+  partida_id?: string | null;
   ordenes_trabajo?: { folio: number } | null;
   cotizaciones?: { folio: number; titulo: string | null } | null;
   proyectos?: { folio: number; nombre: string } | null;

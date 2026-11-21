@@ -69,7 +69,7 @@ export interface CotizacionItem {
 
 // ─── Supuestos globales (fila "SUPUESTOS GLOBALES" de cada hoja del Excel) ────
 
-export interface SupuestosCategoria {
+interface SupuestosCategoria {
   margen: number;       // % utilidad
   imprevistos: number;  // % contingencia
   iva: number;          // % IVA
@@ -146,7 +146,7 @@ export interface BorradorIA {
 }
 
 /** Componente ya resuelto en el cliente: costo real de catálogo o estimado. */
-export interface ComponenteIAResuelto {
+interface ComponenteIAResuelto {
   descripcion: string;
   categoria: CategoriaItem;
   unidad: string;
@@ -169,7 +169,7 @@ export interface PartidaIAResuelta {
 
 // ─── Receta asistida por IA ───────────────────────────────────────────────────
 /** Componente crudo de una receta generada por IA (costo estimado en CLP neto). */
-export interface ComponenteRecetaIA {
+interface ComponenteRecetaIA {
   descripcion: string;
   categoria: CategoriaItem;
   unidad: string;
@@ -199,22 +199,9 @@ export const MOTIVOS_PERDIDA = [
   'Sin respuesta del cliente',
   'Otro',
 ] as const;
-export type MotivoPerdida = typeof MOTIVOS_PERDIDA[number];
 
 /** Días sin respuesta tras los cuales una cotización pendiente pide seguimiento. */
 export const DIAS_SEGUIMIENTO = 3;
-
-/** Plantilla de textos por tipo de servicio (descripción, garantía, condiciones). */
-export interface PlantillaCotizacion {
-  id: string;
-  nombre: string;
-  tipo_servicio: string | null;
-  descripcion: string | null;
-  garantia: string | null;
-  condiciones: string | null;
-  created_at?: string;
-  updated_at?: string;
-}
 
 /** Moneda de la cotización. UF permite decimales; CLP se redondea a peso entero. */
 export type Moneda = 'CLP' | 'UF';
@@ -332,22 +319,22 @@ export interface RecetaConComponentes extends Receta {
   componentes: RecetaComponente[];
 }
 
-export interface ConfiguracionEmpresa {
-  id: number;
+/** Datos de la empresa que van en los documentos (PDF de cotización, informes, actas, rendiciones). */
+export interface EmpresaInfo {
+  id?: string;
   nombre: string;
+  slogan?: string;
   rut: string;
-  giro: string;
-  direccion: string;
-  telefono: string;
+  giro?: string;
   email: string;
-  web?: string;
-  iva_porcentaje: number;
-  moneda: string;
-  proximo_folio: number;
-  condiciones_default: string;
-  garantia_default: string;
-  updated_at?: string;
-  
+  telefono: string;
+  direccion?: string;
+  website?: string;
+  logo_url?: string;
+  banco?: string;
+  tipo_cuenta?: string;
+  cuenta_bancaria?: string;
+  texto_importante?: string;
 }
 
 // ─── KPIs Dashboard ───────────────────────────────────────────────────────────
@@ -375,10 +362,6 @@ export interface ToastMessage {
   type: 'success' | 'error' | 'warning' | 'info';
   message: string;
 }
-
-export const ESTADOS_ACTIVOS: EstadoCotizacion[] = ['Aprobada', 'Aceptado', 'Realizado', 'Entregado'];
-export const ESTADOS_PIPELINE: EstadoCotizacion[] = ['Enviada', 'Pendiente'];
-export const ESTADOS_TODOS: EstadoCotizacion[] = ['Borrador', 'Enviada', 'Aprobada', 'Rechazada', 'Anulada'];
 
 export const ESTADO_COLORS: Record<EstadoCotizacion, { color: string; bg: string }> = {
   Borrador:  { color: 'var(--muted)',   bg: 'var(--bg3)'          },

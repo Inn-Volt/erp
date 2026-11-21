@@ -1,8 +1,8 @@
 import type {
-  CotizacionItem, CategoriaItem, Supuestos, CatalogoItem, RecetaConComponentes, Moneda, Partida,
+  CotizacionItem, CategoriaItem, CatalogoItem, RecetaConComponentes, Moneda,
   BorradorIA, PartidaIAResuelta, PartidaIA, ComponenteIA,
 } from '@/types';
-import { SUPUESTOS_DEFAULT, CATEGORIAS_ORDEN } from '@/types';
+import { CATEGORIAS_ORDEN } from '@/types';
 import type { AnalisisIA } from '@/types/solicitud';
 
 // ─── Formatters ───────────────────────────────────────────────────────────────
@@ -11,16 +11,12 @@ export const formatCLP = (v: number) =>
   new Intl.NumberFormat('es-CL', { style: 'currency', currency: 'CLP', minimumFractionDigits: 0 }).format(Math.round(v) || 0);
 
 /** UF con 2 decimales (formato chileno): 12.5 → "UF 12,50". */
-export const formatUF = (v: number) =>
+const formatUF = (v: number) =>
   `UF ${new Intl.NumberFormat('es-CL', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(v || 0)}`;
 
 /** Formatea un monto según la moneda de la cotización (CLP por defecto). */
 export const formatMoneda = (v: number, moneda: Moneda = 'CLP') =>
   moneda === 'UF' ? formatUF(v) : formatCLP(v);
-
-/** Redondeo según moneda: CLP a peso entero; UF a 2 decimales. */
-export const redondearMoneda = (v: number, moneda: Moneda = 'CLP') =>
-  moneda === 'UF' ? Math.round((v || 0) * 100) / 100 : Math.round(v || 0);
 
 /** Número con separador de miles chileno (60000 → "60.000"). */
 export const formatMiles = (v: number) =>
@@ -77,9 +73,6 @@ export const diasValidez = (condiciones: string | null | undefined): number => {
   return n > 0 && n <= 365 ? n : 15;
 };
 
-export const formatPct = (v: number) =>
-  `${(Math.round((v || 0) * 10) / 10).toLocaleString('es-CL')}%`;
-
 export const cleanNumber = (val: unknown): number => {
   if (typeof val === 'number') return isNaN(val) ? 0 : val;
   if (val === null || val === undefined) return 0;
@@ -98,13 +91,6 @@ export const cleanNumber = (val: unknown): number => {
   return isNaN(n) ? 0 : n;
 };
 
-// ─── ID generation (browser-safe) ─────────────────────────────────────────────
-
-export const newId = (): string => {
-  if (typeof crypto !== 'undefined' && crypto.randomUUID) return crypto.randomUUID();
-  return Math.random().toString(36).slice(2) + Date.now().toString(36);
-};
-
 // ══════════════════════════════════════════════════════════════════════════════
 // MOTOR DE COSTEO — réplica exacta de "Gestion de proyecto.xlsx"
 // ══════════════════════════════════════════════════════════════════════════════
@@ -119,7 +105,7 @@ export const newId = (): string => {
 /** Tope de margen: el Excel divide por (1−margen); ≥100% sería división por cero. */
 const MARGEN_MAX = 99.9;
 
-export interface ItemCalculo {
+interface ItemCalculo {
   costoTotal: number;      // H — costo directo sin contingencia
   costoConImprev: number;  // J — costo + imprevistos
   precioBruto: number;     // precio × cantidad ANTES de descuento
@@ -170,31 +156,9 @@ export function calcularItem(item: CotizacionItem): ItemCalculo {
   };
 }
 
-/**
- * Precio de venta UNITARIO neto a partir del costo unitario.
- * Equivale a la fórmula del Excel dividida por la cantidad.
- */
-export function precioDesdeMargen(costo: number, margen: number, imprevistos = 0): number {
-  const m = Math.min(margen || 0, MARGEN_MAX) / 100;
-  const i = (imprevistos || 0) / 100;
-  return (costo || 0) * (1 + i) / (1 - m);
-}
-
-/** Operación inversa: dado un precio de venta unitario, deduce el margen %. */
-export function margenDesdePrecio(costo: number, precio: number, imprevistos = 0): number {
-  if (!precio || precio <= 0) return 0;
-  const costoConImprev = (costo || 0) * (1 + (imprevistos || 0) / 100);
-  return ((precio - costoConImprev) / precio) * 100;
-}
-
-/** Recalcula `precio` de un ítem según su costo/imprevistos/margen actuales. */
-export function recalcularPrecio(item: CotizacionItem): number {
-  return Math.round(precioDesdeMargen(item.costo, item.margen, item.imprevistos));
-}
-
 // ─── Totales por categoría (hoja "Presupuesto Resumen") ───────────────────────
 
-export interface SubtotalCategoria {
+interface SubtotalCategoria {
   costoTotal: number;
   costoConImprev: number;
   bruto: number;            // Precio Venta antes de descuento
@@ -214,7 +178,7 @@ const subtotalVacio = (): SubtotalCategoria => ({
   total: 0, utilidad: 0, margenEfectivo: 0, cantidadItems: 0,
 });
 
-export interface Totals {
+interface Totals {
   /** Subtotales por categoría — equivalente a "Presupuesto Resumen". */
   porCategoria: Record<CategoriaItem, SubtotalCategoria>;
 
@@ -326,125 +290,9 @@ export function calcularTotals(items: CotizacionItem[], descuentoPorcentajeMO = 
   };
 }
 
-// ══════════════════════════════════════════════════════════════════════════════
-// CALCULADORA HH — hoja "Presupuesto Mano de Obra" (bloque Q1:V4)
-// ══════════════════════════════════════════════════════════════════════════════
-//
-//   Horas Reales       = HH Base / (nº técnicos + nº ayudantes)     (T2)
-//   Sueldo día (8h)    = sueldo base × (1 + margen extra)           (V2 / V4)
-//   Valor Hora         = Sueldo día / 8                             (R4 / S4)
-//   Costo Total        = Horas Reales × (téc×VHtéc + ayu×VHayu)     (T4)
-//
-// ══════════════════════════════════════════════════════════════════════════════
-
-export interface HHInput {
-  hhBase: number;            // Q2 — horas hombre totales estimadas
-  tecnicos: number;          // R2
-  ayudantes: number;         // S2
-  sueldoTecnicoDia: number;  // base de V2 (jornada 8 h)
-  sueldoAyudanteDia: number; // base de V4 (jornada 8 h)
-  margenExtra: number;       // Q4 en % — recargo por trabajo específico
-}
-
-export interface HHResultado {
-  horasReales: number;
-  sueldoTecnicoDia: number;
-  sueldoAyudanteDia: number;
-  valorHoraTecnico: number;
-  valorHoraAyudante: number;
-  costoTotal: number;
-  costoPorHora: number;
-  totalPersonas: number;
-}
-
-export const HH_DEFAULT: HHInput = {
-  hhBase: 24,
-  tecnicos: 2,
-  ayudantes: 1,
-  sueldoTecnicoDia: 60000,
-  sueldoAyudanteDia: 40000,
-  margenExtra: 0,
-};
-
-const JORNADA_HORAS = 8;
-
-export function calcularHH(input: HHInput): HHResultado {
-  const tecnicos     = Math.max(input.tecnicos || 0, 0);
-  const ayudantes    = Math.max(input.ayudantes || 0, 0);
-  const totalPersonas = tecnicos + ayudantes;
-  const factorExtra  = 1 + (input.margenExtra || 0) / 100;
-
-  // T2 — el Excel devuelve 0 si no hay personal asignado
-  const horasReales = totalPersonas > 0 ? (input.hhBase || 0) / totalPersonas : 0;
-
-  const sueldoTecnicoDia  = (input.sueldoTecnicoDia  || 0) * factorExtra;
-  const sueldoAyudanteDia = (input.sueldoAyudanteDia || 0) * factorExtra;
-
-  const valorHoraTecnico  = sueldoTecnicoDia  / JORNADA_HORAS;
-  const valorHoraAyudante = sueldoAyudanteDia / JORNADA_HORAS;
-
-  const costoTotal =
-    horasReales * ((tecnicos * valorHoraTecnico) + (ayudantes * valorHoraAyudante));
-
-  return {
-    horasReales,
-    sueldoTecnicoDia,
-    sueldoAyudanteDia,
-    valorHoraTecnico,
-    valorHoraAyudante,
-    costoTotal,
-    costoPorHora: horasReales > 0 ? costoTotal / horasReales : 0,
-    totalPersonas,
-  };
-}
-
-// ─── Item factory & normalización ─────────────────────────────────────────────
-
-export function newItem(
-  overrides?: Partial<CotizacionItem>,
-  supuestos: Supuestos = SUPUESTOS_DEFAULT,
-): CotizacionItem {
-  const categoria = overrides?.categoria || 'material';
-  const s = supuestos[categoria] || SUPUESTOS_DEFAULT[categoria];
-
-  const base: CotizacionItem = {
-    id: newId(),
-    descripcion: '',
-    categoria,
-    cantidad: 1,
-    unidad: 'un',
-    costo: 0,
-    imprevistos: s.imprevistos,
-    margen: s.margen,
-    precio: 0,
-    iva: s.iva,
-    descuento: 0,
-    ...overrides,
-  };
-
-  // Si vino costo pero no precio explícito, derivarlo con la fórmula del Excel
-  if (base.costo > 0 && !overrides?.precio) {
-    base.precio = Math.round(precioDesdeMargen(base.costo, base.margen, base.imprevistos));
-  }
-  return base;
-}
-
 // ─── Matcheo de texto contra el catálogo (para IA) ───────────────────────────
 const _normMatch = (s: string) => (s || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
 const _tokensMatch = (s: string) => _normMatch(s).split(/[^a-z0-9]+/).filter(t => t.length >= 3);
-
-/**
- * Reescribe la negrita **...** que cruza saltos de línea como negrita POR LÍNEA.
- * El PDF (y la vista previa) parten el texto en líneas antes de renderizar, así que
- * una negrita que abarca varios renglones perdía su par de ** en cada línea. Con
- * esto, cada línea del bloque queda con su propio **...** y la negrita sí se aplica.
- * La negrita de una sola línea queda intacta.
- */
-export function boldPorLinea(texto: string): string {
-  return (texto || '').replace(/\*\*([\s\S]+?)\*\*/g, (_full, inner: string) =>
-    inner.split('\n').map(l => (l.trim() === '' ? l : `**${l}**`)).join('\n'),
-  );
-}
 
 /**
  * Devuelve el ítem del catálogo que mejor coincide con una descripción (misma
@@ -513,76 +361,6 @@ export function normalizarBorradorIA(crudo: unknown): BorradorIA {
   return { resumen: txt(o.resumen), partidas };
 }
 
-/** Línea que abre una lista de partidas a generar ("GENERA SOLO ESTAS PARTIDAS:"). */
-const MARCA_PARTIDAS = /^\s*GENERA\s+SOLO\s+ESTAS\s+PARTIDAS\b/i;
-/** Encabezado en mayúsculas terminado en ":" (ej. "PROYECTO:"): cierra una lista de partidas. */
-const ENCABEZADO_MAYUS = /^\s*[A-ZÁÉÍÓÚÑ][A-ZÁÉÍÓÚÑ ]{2,}:\s*$/;
-
-/** Partidas por pedido: con 2 la respuesta llega en pocos segundos (límite de Netlify ~10 s). */
-export const PARTIDAS_POR_PEDIDO = 2;
-
-export interface PedidoIA {
-  texto: string;
-  /** Partidas que pide este pedido (vacío = el texto va entero, sin dividir). */
-  partidas: string[];
-}
-
-/**
- * Divide un pedido grande a la IA en pedidos chicos. Si el texto trae listas
- * "GENERA SOLO ESTAS PARTIDAS:", cada pedido lleva el contexto (todo lo anterior
- * a la primera lista: instrucciones y descripción del proyecto) más `porPedido`
- * partidas. Sin listas, o con pocas partidas, va en un solo pedido.
- * Si el encabezado se pegó repetido entre bloques, se ignora la copia.
- */
-export function dividirPedidoIA(texto: string, porPedido = PARTIDAS_POR_PEDIDO): PedidoIA[] {
-  const lineas = texto.split(/\r?\n/);
-  const primera = lineas.findIndex(l => MARCA_PARTIDAS.test(l));
-  if (primera < 0) return [{ texto: texto.trim(), partidas: [] }];
-
-  const contexto = lineas.slice(0, primera).join('\n').trim();
-  const partidas: string[] = [];
-  let enLista = false;
-  for (const l of lineas.slice(primera)) {
-    if (MARCA_PARTIDAS.test(l)) { enLista = true; continue; }
-    if (!enLista) continue;
-    if (ENCABEZADO_MAYUS.test(l)) { enLista = false; continue; }
-    const limpia = l.replace(/^\s*(?:[-•*]|\d+[.)])\s+/, '').trim();
-    if (limpia) partidas.push(limpia);
-  }
-  if (partidas.length <= porPedido) return [{ texto: texto.trim(), partidas }];
-
-  const pedidos: PedidoIA[] = [];
-  for (let i = 0; i < partidas.length; i += porPedido) {
-    const grupo = partidas.slice(i, i + porPedido);
-    pedidos.push({
-      texto: `${contexto}\n\nGENERA SOLO ESTAS PARTIDAS (ninguna otra):\n${grupo.join('\n')}`.trim(),
-      partidas: grupo,
-    });
-  }
-  return pedidos;
-}
-
-/**
- * Convierte el borrador de la IA en partidas resueltas listas para insertar en
- * el cotizador: matchea cada componente con el catálogo (precio real) o deja el
- * costo estimado por la IA. Fuente única usada por el modal y por el flujo
- * Solicitud → Cotización.
- */
-export function resolverBorradorIA(borrador: BorradorIA, catalogo: CatalogoItem[]): PartidaIAResuelta[] {
-  return borrador.partidas.map(p => ({
-    nombre: p.nombre,
-    descripcion: p.descripcion,
-    cantidad: p.cantidad,
-    unidad: p.unidad,
-    componentes: p.componentes.map(c => {
-      const m = catalogo.length ? mejorMatchCatalogo(c.descripcion, c.categoria, catalogo) : null;
-      return m
-        ? { descripcion: m.descripcion, categoria: c.categoria, unidad: m.unidad || c.unidad, cantidad: c.cantidad, costo: m.costo, codigo: m.codigo, matched: true }
-        : { descripcion: c.descripcion, categoria: c.categoria, unidad: c.unidad, cantidad: c.cantidad, costo: c.costoUnitario, matched: false };
-    }),
-  }));
-}
-
 /**
  * Convierte el ANÁLISIS de una solicitud (necesidades + ítems sugeridos, ya
  * generado por la IA) en un borrador para el cotizador SIN volver a llamar a la
@@ -603,102 +381,6 @@ export function borradorDesdeAnalisis(
   return [{ nombre: nombrePartida, descripcion: analisis.resumen || '', cantidad: 1, unidad: 'global', componentes }];
 }
 
-/**
- * Normaliza ítems guardados con el formato antiguo (sin `imprevistos`/`iva`,
- * con `esMaterial`/`iva_incluido`) para que sigan calculando correctamente.
- */
-export function normalizarItem(
-  raw: Partial<CotizacionItem>,
-  supuestos: Supuestos = SUPUESTOS_DEFAULT,
-): CotizacionItem {
-  const categoria: CategoriaItem =
-    (raw.categoria as CategoriaItem) ||
-    (raw.esMaterial === false ? 'mano_obra' : 'material');
-
-  const s = supuestos[categoria] || SUPUESTOS_DEFAULT[categoria];
-
-  // Ítems antiguos no tenían contingencia: se respeta su precio original
-  // usando imprevistos 0, para no alterar cotizaciones ya emitidas.
-  const imprevistos = typeof raw.imprevistos === 'number' ? raw.imprevistos : 0;
-
-  const iva = typeof raw.iva === 'number'
-    ? raw.iva
-    : (raw.iva_incluido === false ? 0 : (s.iva || 19));
-
-  return {
-    id:          (raw.id as string) || newId(),
-    descripcion: (raw.descripcion as string) || '',
-    categoria,
-    cantidad:    typeof raw.cantidad === 'number' ? raw.cantidad : 1,
-    unidad:      (raw.unidad as string) || 'un',
-    costo:       typeof raw.costo === 'number' ? raw.costo : 0,
-    imprevistos,
-    margen:      typeof raw.margen === 'number' ? raw.margen : s.margen,
-    precio:      typeof raw.precio === 'number' ? raw.precio : 0,
-    iva,
-    descuento:   typeof raw.descuento === 'number' ? raw.descuento : 0,
-    // Preservar la pertenencia a una partida (si no, al recargar se iban a "sueltos").
-    partidaId:         raw.partidaId,
-    cantidadPorUnidad: raw.cantidadPorUnidad,
-  };
-}
-
-/**
- * Convierte costo y precio de los ítems entre CLP y UF usando el valor de la UF.
- * Preserva el valor económico (convierte montos, no recalcula márgenes): así un
- * ítem con solo precio (sin costo) no queda en cero. El costo interno en UF se
- * guarda con 4 decimales para no perder precisión al volver a pesos; el precio
- * de venta se redondea según la moneda destino (UF 2 decimales, CLP entero).
- */
-export function convertirItemsMoneda(
-  items: CotizacionItem[], de: Moneda, a: Moneda, valorUF: number,
-): CotizacionItem[] {
-  if (de === a || !(valorUF > 0)) return items;
-  const f = a === 'UF' ? 1 / valorUF : valorUF;
-  const costoRed = (v: number) => (a === 'UF' ? Math.round(v * 10000) / 10000 : Math.round(v));
-  return items.map(it => ({
-    ...it,
-    costo:  costoRed((it.costo || 0) * f),
-    precio: redondearMoneda((it.precio || 0) * f, a),
-  }));
-}
-
-/** Aplica los supuestos globales a todos los ítems y recalcula sus precios. */
-export function aplicarSupuestos(items: CotizacionItem[], supuestos: Supuestos): CotizacionItem[] {
-  return items.map(item => {
-    const s = supuestos[item.categoria] || SUPUESTOS_DEFAULT[item.categoria];
-    const actualizado = { ...item, imprevistos: s.imprevistos, margen: s.margen, iva: s.iva };
-    return { ...actualizado, precio: recalcularPrecio(actualizado) };
-  });
-}
-
-// ─── Excel helpers ────────────────────────────────────────────────────────────
-
-/** Columnas idénticas a la hoja "Exportar Cotizador" del Excel de InnVolt. */
-export function itemsToExcelRows(items: CotizacionItem[], partidas: { id: string; nombre: string }[] = []) {
-  const nombrePartida = new Map(partidas.map(p => [p.id, p.nombre || 'Partida']));
-  return items.map(i => {
-    const c = calcularItem(i);
-    return {
-      'Partida':          i.partidaId ? (nombrePartida.get(i.partidaId) || '') : '',
-      'Descripcion':      i.descripcion,
-      'Categoria':        i.categoria,
-      'Cantidad':         i.cantidad,
-      'Unidad':           i.unidad,
-      'Costo unitario':   Math.round(i.costo),
-      'Costo Total':      Math.round(c.costoTotal),
-      '% Imprevistos':    i.imprevistos,
-      'Costo c/Imprev':   Math.round(c.costoConImprev),
-      'Margen (%)':       i.margen,
-      'Precio venta':     Math.round(i.precio),
-      'Descuento (%)':    i.descuento || 0,
-      'Subtotal':         Math.round(c.precioVenta),
-      'IVA (%)':          i.iva,
-      'P.V. + IVA':       Math.round(c.precioConIva),
-    };
-  });
-}
-
 const CATEGORIA_ALIASES: Record<string, CategoriaItem> = {
   material: 'material', materiales: 'material', insumo: 'material', insumos: 'material',
   mano_obra: 'mano_obra', 'mano de obra': 'mano_obra', mo: 'mano_obra', manoobra: 'mano_obra',
@@ -713,160 +395,7 @@ export function parseCategoria(raw: unknown): CategoriaItem {
   return CATEGORIA_ALIASES[k] || 'material';
 }
 
-// ══════════════════════════════════════════════════════════════════════════════
-// BIBLIOTECA — catálogo e ítem desde receta (Fase 3)
-// ══════════════════════════════════════════════════════════════════════════════
-
-/** Convierte un ítem del catálogo en una línea de cotización lista. */
-export function itemDesdeCatalogo(
-  cat: CatalogoItem,
-  cantidad = 1,
-  supuestos: Supuestos = SUPUESTOS_DEFAULT,
-): CotizacionItem {
-  return newItem({
-    descripcion: cat.descripcion,
-    categoria:   cat.categoria,
-    unidad:      cat.unidad,
-    costo:       cat.costo,
-    cantidad,
-  }, supuestos);
-}
-
-/**
- * Expande una receta en varias líneas de cotización.
- * Cada componente se multiplica por `veces` (cantidad de recetas) y hereda los
- * supuestos (margen/imprevistos/IVA) de su categoría. El resultado son líneas
- * totalmente editables — el usuario puede ajustar cualquiera después.
- */
-export function expandirReceta(
-  receta: RecetaConComponentes,
-  veces = 1,
-  supuestos: Supuestos = SUPUESTOS_DEFAULT,
-): CotizacionItem[] {
-  const n = veces > 0 ? veces : 1;
-  return (receta.componentes || [])
-    .slice()
-    .sort((a, b) => (a.orden ?? 0) - (b.orden ?? 0))
-    .map(c => newItem({
-      descripcion: c.descripcion,
-      categoria:   c.categoria,
-      unidad:      c.unidad,
-      costo:       c.costo,
-      cantidad:    (c.cantidad || 0) * n,
-    }, supuestos));
-}
-
 /** Costo interno total de una receta (para mostrarlo en la biblioteca). */
 export function costoReceta(receta: RecetaConComponentes): number {
   return (receta.componentes || []).reduce((s, c) => s + (c.costo || 0) * (c.cantidad || 0), 0);
-}
-
-// ─── Partidas de proyecto ─────────────────────────────────────────────────────
-
-export interface PartidaCalculo {
-  costoMateriales: number;
-  costoManoObra: number;
-  costoOtros: number;       // servicio + operación
-  costoTotal: number;       // costos directos (sin imprevistos)
-  costoConImprev: number;
-  neto: number;             // precio de venta neto (suma de líneas, tras descuento)
-  iva: number;
-  total: number;            // neto + IVA
-  utilidad: number;
-  margenEfectivo: number;   // %
-  cantidadItems: number;
-}
-
-/**
- * Desglose interno y precio de una partida a partir de sus ítems.
- * Reutiliza `calcularItem`, así que el precio de la partida siempre coincide con
- * la suma de sus líneas (y con lo que reporta `calcularTotals`).
- */
-export function calcularPartida(items: CotizacionItem[]): PartidaCalculo {
-  let costoMateriales = 0, costoManoObra = 0, costoOtros = 0;
-  let costoTotal = 0, costoConImprev = 0, neto = 0, iva = 0;
-  for (const it of items) {
-    const c = calcularItem(it);
-    costoTotal += c.costoTotal;
-    costoConImprev += c.costoConImprev;
-    neto += c.precioVenta;
-    iva += c.montoIva;
-    if (it.categoria === 'material') costoMateriales += c.costoTotal;
-    else if (it.categoria === 'mano_obra') costoManoObra += c.costoTotal;
-    else costoOtros += c.costoTotal;
-  }
-  const utilidad = neto - costoConImprev;
-  return {
-    costoMateriales, costoManoObra, costoOtros, costoTotal, costoConImprev,
-    neto, iva, total: neto + iva, utilidad,
-    margenEfectivo: neto > 0 ? (utilidad / neto) * 100 : 0,
-    cantidadItems: items.length,
-  };
-}
-
-/**
- * Aplica un margen/imprevistos/IVA ÚNICO a todos los ítems de una partida
- * (modo 'margen'): reescribe su precio unitario. Así la suma de ítems coincide
- * con el precio de la partida y `calcularTotals` sigue siendo correcto.
- */
-export function aplicarMargenPartida(
-  items: CotizacionItem[],
-  cfg: { margen: number; imprevistos: number; iva: number },
-  moneda: Moneda = 'CLP',
-): CotizacionItem[] {
-  return items.map(it => ({
-    ...it,
-    imprevistos: cfg.imprevistos,
-    margen: cfg.margen,
-    iva: cfg.iva,
-    precio: redondearMoneda(precioDesdeMargen(it.costo || 0, cfg.margen, cfg.imprevistos), moneda),
-  }));
-}
-
-/**
- * Recalcula la cantidad de los ítems de una partida al cambiar su cantidad.
- * Solo afecta ítems con `cantidadPorUnidad` (los que vinieron de una receta o a
- * los que se les definió una razón por unidad). El precio unitario no cambia.
- */
-export function recalcCantidadesPartida(items: CotizacionItem[], nuevaCantidad: number): CotizacionItem[] {
-  const n = nuevaCantidad > 0 ? nuevaCantidad : 0;
-  return items.map(it =>
-    it.cantidadPorUnidad != null
-      ? { ...it, cantidad: (it.cantidadPorUnidad || 0) * n }
-      : it,
-  );
-}
-
-/**
- * Crea una partida a partir de una receta + sus ítems asociados (con `partidaId`
- * y `cantidadPorUnidad` para permitir recálculos al cambiar la cantidad).
- */
-export function partidaDesdeReceta(
-  receta: RecetaConComponentes,
-  cantidad = 1,
-  supuestos: Supuestos = SUPUESTOS_DEFAULT,
-): { partida: Partida; items: CotizacionItem[] } {
-  const n = cantidad > 0 ? cantidad : 1;
-  const partidaId = newId();
-  const partida: Partida = {
-    id: partidaId,
-    nombre: receta.nombre,
-    descripcion: receta.descripcion || '',
-    cantidad: n,
-    unidad: receta.unidad || 'un',
-    modoPrecio: 'items',
-  };
-  const items = (receta.componentes || [])
-    .slice()
-    .sort((a, b) => (a.orden ?? 0) - (b.orden ?? 0))
-    .map(c => newItem({
-      descripcion: c.descripcion,
-      categoria:   c.categoria,
-      unidad:      c.unidad,
-      costo:       c.costo,
-      cantidad:    (c.cantidad || 0) * n,
-      partidaId,
-      cantidadPorUnidad: c.cantidad || 0,
-    }, supuestos));
-  return { partida, items };
 }

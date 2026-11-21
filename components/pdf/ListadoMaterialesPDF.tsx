@@ -7,7 +7,7 @@
  */
 
 import { Document, Page, Text, View, StyleSheet, Image } from '@react-pdf/renderer';
-import type { EmpresaInfo } from '@/components/pdf/PresupuestoPDF';
+import type { EmpresaInfo } from '@/types';
 import type { MaterialPedido } from '@/lib/cotizador/herramientas';
 import { cantidadLegible } from '@/lib/cotizador/calculo';
 import { logoDocumento } from '@/lib/logoMarca';

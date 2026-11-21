@@ -21,14 +21,13 @@
     "@zxing/library": "^0.21.3",
     "file-saver": "^2.0.5",
     "lucide-react": "^0.475.0",
-    "next": "^16.4.3",
+    "next": "^16.4.6",
     "postcss": "^8.5.15",
     "react": "^19.2.6",
     "react-dom": "^19.2.6",
     "recharts": "^2.15.0",
     "web-push": "3.6.7",
-    "xlsx": "https://cdn.sheetjs.com/xlsx-0.20.3/xlsx-0.20.3.tgz",
-    "zustand": "^5.0.3"
+    "xlsx": "https://cdn.sheetjs.com/xlsx-0.20.3/xlsx-0.20.3.tgz"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4.0.14",

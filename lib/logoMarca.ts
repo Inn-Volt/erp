@@ -5,10 +5,10 @@
  * Los archivos tienen nombre propio para que ningún navegador muestre una copia vieja guardada.
  */
 
-export const LOGO_DOC_CLARO = '/logos/innvolt-documento-claro.png';   // para papel / fondo claro
-export const LOGO_DOC_OSCURO = '/logos/innvolt-documento-oscuro.png'; // para fondo oscuro
+const LOGO_DOC_CLARO = '/logos/innvolt-documento-claro.png';   // para papel / fondo claro
+const LOGO_DOC_OSCURO = '/logos/innvolt-documento-oscuro.png'; // para fondo oscuro
 
-export const esInnVolt = (nombre?: string | null) => (nombre || '').toLowerCase().replace(/[^a-z]/g, '').includes('innvolt');
+const esInnVolt = (nombre?: string | null) => (nombre || '').toLowerCase().replace(/[^a-z]/g, '').includes('innvolt');
 
 export function logoDocumento(empresa: { nombre?: string | null; logo_url?: string | null }, opciones: { fondo?: 'claro' | 'oscuro'; absoluto?: boolean } = {}): string {
   if (esInnVolt(empresa.nombre)) {

@@ -15,7 +15,7 @@ import { ArrowLeft, Copy, Eye, Loader2, Plus, Save, Star } from 'lucide-react';
 import PageHeader from '@/components/PageHeader';
 import FaltaSQL from '@/components/FaltaSQL';
 import CotizacionPDF from '@/components/pdf/CotizacionPDF';
-import type { EmpresaInfo } from '@/components/pdf/PresupuestoPDF';
+import type { EmpresaInfo } from '@/types';
 import { supabase } from '@/lib/supabase';
 import { ajustesService, faltaFase4, plantillasCotService } from '@/services/cotizador';
 import { useToast } from '@/hooks/useToast';
