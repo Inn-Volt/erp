@@ -12,7 +12,9 @@ import { supabase } from '@/lib/supabase';
 export type TipoTrabajador = 'interno' | 'externo';
 export interface Trabajador {
   id: string; tipo: TipoTrabajador; nombre: string; rut: string | null; oficio: string | null; usuario_id: string | null; activo: boolean;
-  sueldo_bruto: number; aportes_pct: number; dias_mes: number; horas_dia: number; colacion_dia: number; movilizacion_dia: number; otros_dia: number;
+  /** Interno: líquido mensual (sin colación ni movilización) y sus descuentos; el bruto se calcula. */
+  sueldo_liquido: number; afp_pct: number; salud_pct: number; cesantia_pct: number; otros_descuentos: number;
+  aportes_pct: number; dias_mes: number; horas_dia: number; colacion_dia: number; movilizacion_dia: number; otros_dia: number;
   valor_jornada: number; honorarios: boolean; nota: string | null;
 }
 export type NuevoTrabajador = Omit<Trabajador, 'id'>;
@@ -33,7 +35,8 @@ export type NuevoRegistro = Pick<RegistroManoObra, 'cotizacion_id' | 'fecha' | '
 
 export const fichaVacia = (tipo: TipoTrabajador): NuevoTrabajador => ({
   tipo, nombre: '', rut: null, oficio: null, usuario_id: null, activo: true,
-  sueldo_bruto: 0, aportes_pct: 0, dias_mes: 22, horas_dia: 9, colacion_dia: 0, movilizacion_dia: 0, otros_dia: 0,
+  sueldo_liquido: 0, afp_pct: 11.5, salud_pct: 7, cesantia_pct: 0.6, otros_descuentos: 0,
+  aportes_pct: 0, dias_mes: 22, horas_dia: 9, colacion_dia: 0, movilizacion_dia: 0, otros_dia: 0,
   valor_jornada: 0, honorarios: true, nota: null,
 });
 
