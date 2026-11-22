@@ -17,7 +17,12 @@ export interface Trabajo {
   inicio_sin_anticipo?: string | null;
   clientes?: { nombre_cliente: string } | null;
   resultado?: ResultadoTrabajo | null;
+  /** Fase 21: el total del anteproyecto (null = sin anteproyecto: se usa lo cotizado). */
+  presupuesto?: number | null;
 }
+
+/** Lo presupuestado de un trabajo: el anteproyecto si hay; si no, el costo cotizado. */
+export const presupuestoDe = (t: Pick<Trabajo, 'presupuesto' | 'resultado'>) => t.presupuesto ?? Number(t.resultado?.costo_cotizado || 0);
 export interface ResultadoTrabajo {
   cotizacion_id: string; venta_neta: number; costo_cotizado: number; gastos: number;
   facturado: number; cobrado: number; por_cobrar_total: number;
@@ -59,13 +64,20 @@ const SEL = 'id, folio, titulo, cliente_id, proyecto_id, total, total_clp, moned
 
 export const trabajosService = {
   async listar(): Promise<Trabajo[]> {
-    const [t, r] = await Promise.all([
+    const [t, r, p] = await Promise.all([
       supabase.from('cotizaciones').select(SEL).eq('estado', 'Aprobada').order('aceptada_at', { ascending: false, nullsFirst: false }),
       supabase.from('cotizacion_resultado').select('*'),
+      supabase.from('presupuesto_lineas').select('cotizacion_id, cantidad, costo_unitario'),   // fase 21 (sin ella o sin permiso: nada)
     ]);
     if (t.error) throw t.error;
     const res = new Map(((r.data || []) as ResultadoTrabajo[]).map(x => [x.cotizacion_id, x]));
-    return ((t.data || []) as unknown as Trabajo[]).map(x => ({ ...x, resultado: res.get(x.id) || null }));
+    const plan = new Map<string, number>();
+    for (const l of (p.error ? [] : p.data || []) as { cotizacion_id: string; cantidad: number; costo_unitario: number }[]) {
+      plan.set(l.cotizacion_id, (plan.get(l.cotizacion_id) || 0) + Number(l.cantidad) * Number(l.costo_unitario));
+    }
+    return ((t.data || []) as unknown as Trabajo[]).map(x => ({
+      ...x, resultado: res.get(x.id) || null, presupuesto: plan.has(x.id) ? Math.round(plan.get(x.id)!) : null,
+    }));
   },
   /** `sinAnticipo`: por qué se parte sin el anticipo pagado (fase 15). */
   async cambiarEstado(id: string, estado: EstadoTrabajo, sinAnticipo?: string) {

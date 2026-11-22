@@ -68,9 +68,16 @@ export const comprasService = {
     if (error) throw error;
     return (data || []) as Compra[];
   },
-  async guardar(id: string | null, c: NuevaCompra) {
-    const { error } = id ? await supabase.from('compras').update(c).eq('id', id) : await supabase.from('compras').insert([c]);
+  /** Devuelve el id de la compra (para guardar su detalle, fase 21). */
+  async guardar(id: string | null, c: NuevaCompra): Promise<string> {
+    if (id) {
+      const { error } = await supabase.from('compras').update(c).eq('id', id);
+      if (error) throw error;
+      return id;
+    }
+    const { data, error } = await supabase.from('compras').insert([c]).select('id').single();
     if (error) throw error;
+    return (data as { id: string }).id;
   },
   async marcarPagada(id: string, pagada: boolean, fecha: string | null) {
     const { error } = await supabase.from('compras').update({ pagada, fecha_pago: pagada ? fecha : null }).eq('id', id);

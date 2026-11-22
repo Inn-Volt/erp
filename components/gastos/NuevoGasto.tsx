@@ -23,6 +23,8 @@ import { useFase } from '@/lib/fases';
 import { partidaValida } from '@/lib/controlProyecto';
 import SelectorPartida, { usePartidasDe } from '@/components/trabajos/SelectorPartida';
 import LeerDocumentoIA from '@/components/LeerDocumentoIA';
+import LineasDocumento, { nuevaLineaDocumento } from '@/components/LineasDocumento';
+import { anteproyectoService, type LineaDocumentoEdit } from '@/services/anteproyecto';
 import type { LecturaDocumento } from '@/lib/leerDocumento';
 import { usePermisos } from '@/hooks/usePermisos';
 import { useToast } from '@/hooks/useToast';
@@ -52,6 +54,15 @@ export default function NuevoGasto({ destinos, destinoInicial, anticipos, gasto,
   // Fase 20: la partida del trabajo elegido (opcional).
   const fase20 = useFase(20);
   const partidas = usePartidasDe(f.destino.startsWith('cot:') ? f.destino.slice(4) : null, fase20);
+  // Fase 21: el detalle de lo comprado (por partida y material del presupuesto).
+  const fase21 = useFase(21);
+  const [lineas, setLineas] = useState<LineaDocumentoEdit[]>([]);
+  useEffect(() => {
+    if (!fase21 || !gasto?.id) return;
+    anteproyectoService.lineasDe({ gastoId: gasto.id }).then(ls => setLineas(ls.map(l => nuevaLineaDocumento({
+      descripcion: l.descripcion, cantidad: l.cantidad, unidad: l.unidad || '', monto: Number(l.monto), partida_id: l.partida_id, presupuesto_linea_id: l.presupuesto_linea_id, tipo: l.tipo,
+    }))));
+  }, [fase21, gasto?.id]);
   // «Leer con IA» la boleta: lo que leyó queda en amarillo para revisar.
   const [deIA, setDeIA] = useState<Set<string>>(new Set());
   const [avisosIA, setAvisosIA] = useState<string[]>([]);
@@ -61,6 +72,9 @@ export default function NuevoGasto({ destinos, destinoInicial, anticipos, gasto,
     setF(x => ({ ...x, ...(doc.total ? { monto: doc.total } : {}), ...(doc.fecha ? { fecha: doc.fecha } : {}), ...(detalle ? { descripcion: detalle } : {}) }));
     setDeIA(new Set([doc.total ? 'monto' : '', doc.fecha ? 'fecha' : '', detalle ? 'descripcion' : ''].filter(Boolean)));
     setAvisosIA(avisos.filter(a => !/RUT/.test(a)));
+    if (fase21 && doc.lineas.length) {
+      setLineas(doc.lineas.map(l => nuevaLineaDocumento({ descripcion: l.descripcion, cantidad: l.cantidad, unidad: l.unidad, monto: l.monto, tipo: f.categoria === 'materiales' ? 'material' : 'operacion' })));
+    }
     if (!doc.total && !doc.fecha && !detalle) toastError('La IA no encontró datos en la boleta: complétala a mano.');
   };
   const [boleta, setBoleta] = useState<File | null>(null);
@@ -93,14 +107,16 @@ export default function NuevoGasto({ destinos, destinoInicial, anticipos, gasto,
         ...(fondos ? { pagado_con: f.pagado_con, sin_boleta: f.sin_boleta && !boleta_path } : f.anticipo_id && !gasto ? { anticipo_id: f.anticipo_id } : {}),
         ...(fase20 ? { partida_id: tipo === 'cot' && f.partida_id ? f.partida_id : null } : {}),
       } as Partial<Gasto>;
+      let gastoId = gasto?.id || '';
       if (gasto) {
         await gastosService.actualizar(gasto.id, datos);
         if (boleta && gasto.boleta_path) archivosOT.eliminar(gasto.boleta_path);
         success(gasto.estado === 'observado' ? 'Gasto corregido: vuelve a «rendido»' : 'Gasto actualizado');
       } else {
-        await gastosService.crear(datos);
+        gastoId = await gastosService.crear(datos);
         success(fondos && f.pagado_con !== 'empresa' && reparto.propio > 0 ? `Gasto rendido: te debemos ${formatCLP(reparto.propio)}` : 'Gasto rendido');
       }
+      if (fase21 && gastoId) await anteproyectoService.guardarLineas({ gasto_id: gastoId }, tipo === 'cot' ? lineas : []);
       onListo();
     } catch (e) { toastError(e instanceof Error ? e.message : 'No se pudo rendir'); }
     finally { setGuardando(false); }
@@ -119,7 +135,10 @@ export default function NuevoGasto({ destinos, destinoInicial, anticipos, gasto,
               Observado: {gasto.motivo_rechazo}</p>
           )}
           <div><label className="label-muted" style={lbl}>¿De qué trabajo o proyecto? *</label>
-            <select className="input" value={f.destino} disabled={fijo} onChange={e => setF({ ...f, destino: e.target.value, partida_id: '' })}>
+            <select className="input" value={f.destino} disabled={fijo} onChange={e => {
+              setF({ ...f, destino: e.target.value, partida_id: '' });
+              setLineas(ls => ls.map(l => ({ ...l, partida_id: undefined, presupuesto_linea_id: undefined })));
+            }}>
               <option value="">Elegir…</option>
               {(['Trabajos', 'Proyectos', 'OT'] as const).map(g => destinos.some(d => d.grupo === g) && (
                 <optgroup key={g} label={g}>
@@ -129,6 +148,10 @@ export default function NuevoGasto({ destinos, destinoInicial, anticipos, gasto,
             </select>
             {destinos.length === 0 && <p style={{ margin: '4px 0 0', fontSize: '0.76rem', color: 'var(--muted)' }}>Aún no hay trabajos aprobados ni proyectos.</p>}</div>
           {fase20 && <SelectorPartida partidas={partidas} value={f.partida_id} onChange={v => setF({ ...f, partida_id: v })} />}
+          {fase21 && f.destino.startsWith('cot:') && f.monto > 0 && (
+            <LineasDocumento cotId={f.destino.slice(4)} partidas={partidas} partidaPorOmision={f.partida_id || null} lineas={lineas} onChange={setLineas}
+              costo={f.monto} total={f.monto} />
+          )}
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
             <div><label className="label-muted" style={lbl}>Monto *</label><NumeroInput className="input" prefijo="$" style={ia('monto')} value={f.monto} onChange={v => setF({ ...f, monto: v })} /></div>
             <div><label className="label-muted" style={lbl}>Fecha</label><input className="input" type="date" style={ia('fecha')} value={f.fecha} onChange={e => setF({ ...f, fecha: e.target.value })} /></div>

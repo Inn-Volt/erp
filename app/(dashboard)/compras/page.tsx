@@ -28,6 +28,8 @@ import { etiquetaPartida, nombreTipo, partidaValida, TIPOS_COSTO, type TipoCosto
 import { controlProyectoService } from '@/services/controlProyecto';
 import SelectorPartida, { usePartidasDe } from '@/components/trabajos/SelectorPartida';
 import LeerDocumentoIA from '@/components/LeerDocumentoIA';
+import LineasDocumento, { nuevaLineaDocumento } from '@/components/LineasDocumento';
+import { anteproyectoService, type LineaDocumentoEdit } from '@/services/anteproyecto';
 import type { LecturaDocumento } from '@/lib/leerDocumento';
 import { usePermisos } from '@/hooks/usePermisos';
 import { useToast } from '@/hooks/useToast';
@@ -53,6 +55,15 @@ function FormCompra({ compra, destinos, proveedores, destinoInicial, onClose, on
   // Fase 20: partida del trabajo (opcional) y tipo de costo.
   const fase20 = useFase(20);
   const partidas = usePartidasDe(destino.startsWith('cot:') ? destino.slice(4) : null, fase20);
+  // Fase 21: el detalle de lo comprado (por partida y material del presupuesto).
+  const fase21 = useFase(21);
+  const [lineas, setLineas] = useState<LineaDocumentoEdit[]>([]);
+  useEffect(() => {
+    if (!fase21 || !compra?.id) return;
+    anteproyectoService.lineasDe({ compraId: compra.id }).then(ls => setLineas(ls.map(l => nuevaLineaDocumento({
+      descripcion: l.descripcion, cantidad: l.cantidad, unidad: l.unidad || '', monto: Number(l.monto), partida_id: l.partida_id, presupuesto_linea_id: l.presupuesto_linea_id, tipo: l.tipo,
+    }))));
+  }, [fase21, compra?.id]);
   // «Leer con IA»: lo que leyó queda en amarillo hasta guardar.
   const [deIA, setDeIA] = useState<Set<string>>(new Set());
   const [avisosIA, setAvisosIA] = useState<string[]>([]);
@@ -69,6 +80,9 @@ function FormCompra({ compra, destinos, proveedores, destinoInicial, onClose, on
     });
     setDeIA(new Set(leidos));
     setAvisosIA(avisos);
+    if (fase21 && doc.lineas.length) {
+      setLineas(doc.lineas.map(l => nuevaLineaDocumento({ descripcion: l.descripcion, cantidad: l.cantidad, unidad: l.unidad, monto: l.monto, tipo: d.tipo_costo || 'material' })));
+    }
     if (!leidos.length) toastError('La IA no encontró datos en el documento: complétalo a mano.');
   };
 
@@ -90,13 +104,14 @@ function FormCompra({ compra, destinos, proveedores, destinoInicial, onClose, on
     setGuardando(true);
     try {
       const archivo_path = archivo ? await comprasService.subirArchivo(archivo) : d.archivo_path;
-      await comprasService.guardar(compra?.id || null, {
+      const id = await comprasService.guardar(compra?.id || null, {
         ...d, archivo_path, folio: d.folio?.trim() || null, proveedor_nombre: d.proveedor_nombre.trim(),
         proveedor_rut: d.proveedor_rut ? formatearRut(d.proveedor_rut) : null, descripcion: d.descripcion?.trim() || null,
         cotizacion_id: destino.startsWith('cot:') ? destino.slice(4) : null, proyecto_id: destino.startsWith('proy:') ? destino.slice(5) : null,
         fecha_pago: d.pagada ? d.fecha_pago || d.fecha : null, vencimiento: d.vencimiento || null,
         ...(fase20 ? { partida_id: destino.startsWith('cot:') && d.partida_id ? d.partida_id : null, tipo_costo: d.tipo_costo || 'material' } : {}),
       });
+      if (fase21) await anteproyectoService.guardarLineas({ compra_id: id }, destino.startsWith('cot:') ? lineas : []);
       success(compra ? 'Compra actualizada' : 'Compra ingresada');
       onListo();
     } catch (e) { toastError(mensajeCompra(e)); }
@@ -145,7 +160,7 @@ function FormCompra({ compra, destinos, proveedores, destinoInicial, onClose, on
               : 'Sin IVA recuperable: el costo del trabajo es el total.'}</p>
 
           <div style={{ gridColumn: '1 / -1' }}><label className="label-muted" style={lbl}>¿Para qué es? (centro de costo)</label>
-            <select aria-label="¿Para qué es? (centro de costo)" className="input" value={destino} onChange={e => { setDestino(e.target.value); set({ partida_id: null }); }}>
+            <select aria-label="¿Para qué es? (centro de costo)" className="input" value={destino} onChange={e => { setDestino(e.target.value); set({ partida_id: null }); setLineas(ls => ls.map(l => ({ ...l, partida_id: undefined, presupuesto_linea_id: undefined }))); }}>
               <option value="">Gasto general de la empresa</option>
               {(['Trabajos', 'Proyectos'] as const).map(g => destinos.some(x => x.grupo === g) && (
                 <optgroup key={g} label={g}>{destinos.filter(x => x.grupo === g).map(x => <option key={x.valor} value={x.valor}>{x.etiqueta}</option>)}</optgroup>
@@ -159,6 +174,12 @@ function FormCompra({ compra, destinos, proveedores, destinoInicial, onClose, on
               <select aria-label="Tipo de costo" className="input" value={d.tipo_costo || 'material'} onChange={e => set({ tipo_costo: e.target.value as TipoCosto })}>
                 {TIPOS_COSTO.map(t => <option key={t.clave} value={t.clave}>{t.nombre}</option>)}
               </select></div>
+          )}
+          {fase21 && destino.startsWith('cot:') && (
+            <div style={{ gridColumn: '1 / -1', display: 'flex', flexDirection: 'column' }}>
+              <LineasDocumento cotId={destino.slice(4)} partidas={partidas} partidaPorOmision={d.partida_id || null} lineas={lineas} onChange={setLineas}
+                costo={conIva || d.tipo_doc === 'factura_exenta' ? d.neto + d.exento : d.total} total={d.total} />
+            </div>
           )}
           <div><label className="label-muted" style={lbl}>Categoría</label>
             <input aria-label="Categoría" className="input" list="categorias-compra" value={d.categoria || ''} onChange={e => set({ categoria: e.target.value })} />

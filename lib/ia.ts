@@ -314,7 +314,8 @@ function leerAnthropic<T>(system: string, user: string, schema: GeminiSchema, ar
   const adjunto: Anthropic.ContentBlockParam = archivo.mime === 'application/pdf'
     ? { type: 'document', source: { type: 'base64', media_type: 'application/pdf', data: archivo.base64 } }
     : { type: 'image', source: { type: 'base64', media_type: archivo.mime as MedioImagen, data: archivo.base64 } };
-  return pedirAnthropic<T>(system, [adjunto, { type: 'text', text: user }], schema, deadline, { maxTokens: 2000, pensar: false });
+  // Una factura larga trae muchas líneas: espacio de sobra para el detalle.
+  return pedirAnthropic<T>(system, [adjunto, { type: 'text', text: user }], schema, deadline, { maxTokens: 6000, pensar: false });
 }
 
 const LECTORES: Record<ProveedorImagen, <T>(s: string, u: string, sc: GeminiSchema, a: ArchivoIA, d: number) => Promise<T>> = {

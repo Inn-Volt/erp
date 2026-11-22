@@ -293,7 +293,11 @@ export const gastosService = {
     const { data, error } = await supabase.from('gastos').select('*').eq('ot_id', otId).order('fecha');
     lanzar(error); return (data || []) as Gasto[];
   },
-  async crear(g: Partial<Gasto>) { const { error } = await supabase.from('gastos').insert(g); lanzar(error); },
+  /** Devuelve el id del gasto (para guardar su detalle, fase 21). */
+  async crear(g: Partial<Gasto>): Promise<string> {
+    const { data, error } = await supabase.from('gastos').insert(g).select('id').single();
+    lanzar(error); return (data as { id: string }).id;
+  },
   async actualizar(id: string, patch: Partial<Gasto>) { const { error } = await supabase.from('gastos').update(patch).eq('id', id); lanzar(error); },
   async eliminar(id: string) { const { error } = await supabase.from('gastos').delete().eq('id', id); lanzar(error); },
 };
