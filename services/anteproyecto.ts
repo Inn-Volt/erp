@@ -39,8 +39,11 @@ export const anteproyectoService = {
     if (!cot) return [];
     const filas = lineasDesdeCotizacion(cot).map(l => ({ ...l, cotizacion_id: cotId }));
     if (filas.length) {
-      const { error } = await supabase.from('presupuesto_lineas').upsert(filas, { onConflict: 'cotizacion_id,linea_id', ignoreDuplicates: true });
-      lanzar(error);
+      // Insert simple: el índice único (cotizacion_id, linea_id) es parcial y un upsert con onConflict no lo
+      // encuentra. Si otra pestaña (o la aprobación) lo copió al mismo tiempo, el índice rechaza esta copia
+      // completa (23505) y queda la que llegó primero.
+      const { error } = await supabase.from('presupuesto_lineas').insert(filas);
+      if (error && error.code !== '23505') throw error;
     }
     return this.lineas(cotId);
   },
