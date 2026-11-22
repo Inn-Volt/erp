@@ -2,14 +2,16 @@
 
 /**
  * Control de proyecto (fase 20): lee lo que necesitan el control de presupuesto y el flujo de caja
- * de un trabajo (la cotización, sus gastos, compras, mano de obra, horas de antes y cobros), las
- * partidas para elegir al registrar, y guarda el plan del flujo. Las cuentas: lib/controlProyecto.ts.
+ * de un trabajo (la cotización, sus gastos, compras, mano de obra, horas de antes y cobros; con la
+ * fase 21, el anteproyecto y el detalle de cada compra y gasto), las partidas para elegir al
+ * registrar, y guarda el plan del flujo. Las cuentas: lib/controlProyecto.ts y lib/anteproyecto.ts.
  */
 
 import { supabase } from '@/lib/supabase';
 import {
-  opcionesDePartida, type CobroCP, type CompraCP, type FlujoPlan, type GastoCP, type HoraCP, type ManoObraCP, type PartidaOpcion,
+  opcionesDePartida, type CobroCP, type CompraCP, type DocumentoLineaCP, type FlujoPlan, type GastoCP, type HoraCP, type ManoObraCP, type PartidaOpcion,
 } from '@/lib/controlProyecto';
+import { anteproyectoService, type LineaPresupuestoBD } from '@/services/anteproyecto';
 import type { HitoCobro, Linea, Moneda, PartidaCot } from '@/lib/cotizador/tipos';
 
 export interface CotizacionControl {
@@ -19,6 +21,8 @@ export interface CotizacionControl {
 }
 export interface DatosControl {
   cot: CotizacionControl; gastos: GastoCP[]; compras: CompraCP[]; manoObra: ManoObraCP[]; horas: HoraCP[]; cobros: CobroCP[];
+  /** Fase 21: el anteproyecto y el detalle de compras y gastos (vacíos sin la fase). */
+  presupuesto: LineaPresupuestoBD[]; lineas: DocumentoLineaCP[];
 }
 
 // Las partidas de cada trabajo, una vez por sesión (cambian solo si la cotización vuelve a borrador).
@@ -38,7 +42,7 @@ export const controlProyectoService = {
   },
 
   async datos(cotId: string): Promise<DatosControl> {
-    const [c, g, k, m, h, f] = await Promise.all([
+    const [c, g, k, m, h, f, presupuesto] = await Promise.all([
       supabase.from('cotizaciones')
         .select('id, folio, items, partidas, moneda, valor_uf, total, total_clp, plan_cobro, flujo_plan, trabajo_inicio, aceptada_at')
         .eq('id', cotId).single(),
@@ -51,13 +55,16 @@ export const controlProyectoService = {
         .eq('cotizacion_id', cotId),
       supabase.from('horas_trabajo').select('id, fecha, horas, costo_hora, usuario_id, nota').eq('cotizacion_id', cotId),
       supabase.from('por_facturar').select('monto, monto_pagado, fecha_pago, fecha_factura, created_at, hito').eq('cotizacion_id', cotId),
+      anteproyectoService.lineas(cotId),
     ]);
     if (c.error) throw c.error;
+    const gastos = (g.data || []) as GastoCP[], compras = (k.data || []) as CompraCP[];
+    const lineas = await anteproyectoService.lineasDeDocumentos(compras.map(x => x.id), gastos.map(x => x.id));
     // Sin permiso para ver compras o mano de obra, la base no devuelve filas: igual que cotizacion_resultado.
     return {
       cot: c.data as unknown as CotizacionControl,
-      gastos: (g.data || []) as GastoCP[], compras: (k.data || []) as CompraCP[], manoObra: (m.data || []) as ManoObraCP[],
-      horas: (h.data || []) as HoraCP[], cobros: (f.data || []) as CobroCP[],
+      gastos, compras, manoObra: (m.data || []) as ManoObraCP[],
+      horas: (h.data || []) as HoraCP[], cobros: (f.data || []) as CobroCP[], presupuesto, lineas,
     };
   },
 

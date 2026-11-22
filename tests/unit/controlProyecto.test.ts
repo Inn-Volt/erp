@@ -4,7 +4,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
   ajustarSemanas, control, costoCompra, cuadre, distribucionInvalida, estadoControl, flujoSemanal, hojasControl, inicioPorDefecto,
-  kpis, montosHitos, movimientos, nombreArchivoControl, normalizarPlan, opcionesDePartida, partidaValida, planPorDefecto, presupuesto,
+  kpis, montosHitos, movimientos, nombreArchivoControl, normalizarPlan, opcionesDePartida, partidaValida, planPorDefecto, presupuesto, presupuestoPorPartida,
   repartirEntero, repartoParejo, semanaDe, SIN_PARTIDA, UMBRAL_ALERTA, type CompraCP, type GastoCP, type HoraCP, type ManoObraCP,
 } from '../../lib/controlProyecto.ts';
 import { calcular } from '../../lib/cotizador/calculo.ts';
@@ -241,8 +241,11 @@ test('Una partida que no suma 100 % se marca; el plan guardado se completa con e
   const p = presupuesto(IV0080);
   const base = planPorDefecto({ inicio, presupuesto: p, planCobro: PLAN_COBRO_IV0080 });
   const malo = { ...base, distribucion: { ...base.distribucion, p3: [50, 40, 0, 0] } };
-  assert.deepEqual(distribucionInvalida(malo, p), [{ id: 'p3', suma: 90 }]);
-  assert.deepEqual(distribucionInvalida(base, p), []);
+  const costos = presupuestoPorPartida(p);
+  assert.deepEqual(distribucionInvalida(malo, costos), [{ id: 'p3', suma: 90 }]);
+  assert.deepEqual(distribucionInvalida(base, costos), []);
+  // Una partida sin % guardados se reparte pareja: no se marca.
+  assert.deepEqual(distribucionInvalida({ ...base, distribucion: {} }, costos), []);
   const n = normalizarPlan({ inicio: '2026-12-01', semanas: 3, distribucion: { p1: [10, 20, 70] }, hitos: { Saldo: 9 } }, base);
   assert.equal(n.inicio, '2026-12-01');
   assert.equal(n.semanas, 3);
@@ -287,8 +290,8 @@ test('Excel: hojas Control, PorTipo, Flujo y Movimientos; nombre IV-0080_control
   const mov = hojas[3].filas;
   assert.equal(mov.length, 3);
   assert.deepEqual(mov.find(f => f.Origen === 'Gasto'), {
-    Fecha: '2026-11-24', Origen: 'Gasto', Documento: 'Combustible', 'Proveedor o persona': 'Joaquín', Detalle: 'Bencina', Partida: 'Sin partida',
-    'Tipo de costo': 'Operación', 'Monto considerado': 20000, Pagada: '', 'Fecha de caja': '2026-11-24',
+    Fecha: '2026-11-24', Origen: 'Gasto', Documento: 'Combustible', 'Proveedor o persona': 'Joaquín', Detalle: 'Bencina', Cantidad: '', Partida: 'Sin partida',
+    'Tipo de costo': 'Operación', 'En el presupuesto': '', 'Monto considerado': 20000, Pagada: '', 'Fecha de caja': '2026-11-24',
   });
   assert.equal(mov.find(f => f.Origen === 'Compra')!.Partida, '4. Tablero e instalación de negocio');
   assert.equal(nombreArchivoControl(80, '2026-11-23'), 'IV-0080_control_2026-11-23.xlsx');

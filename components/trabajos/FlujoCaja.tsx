@@ -3,7 +3,7 @@
 /**
  * Flujo de caja semanal del trabajo (fase 20): plan vs real.
  *   · Plan: los cobros del plan de cobro en su semana (redondeo por acumulado, como en Por facturar)
- *     y el costo cotizado de cada partida repartido por semana según sus %.
+ *     y lo presupuestado de cada partida (el anteproyecto; sin él, lo cotizado) repartido por semana.
  *   · Real: lo cobrado en su fecha de pago; gastos y horas en su fecha; compras en su fecha de pago
  *     si están pagadas (si no, en la del documento).
  *   · La semana 1 recibe todo lo anterior al inicio; «Posterior», lo que cae después de la última.
@@ -16,8 +16,8 @@ import { useEffect, useMemo, useState } from 'react';
 import { CartesianGrid, Legend, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import { Loader2, RotateCcw, Save } from 'lucide-react';
 import {
-  ajustarSemanas, distribucionInvalida, etiquetaPartida, flujoSemanal, montosHitos, sumaPct, SEMANAS_MAX, SIN_PARTIDA,
-  type CobroCP, type FlujoPlan, type Movimiento, type Presupuesto,
+  ajustarSemanas, distribucionInvalida, etiquetaPartida, flujoSemanal, montosHitos, presupuestoPorPartida, sumaPct, SEMANAS_MAX, SIN_PARTIDA,
+  type CobroCP, type FlujoPlan, type Movimiento, type Presupuesto, type PresupuestoEjecucion,
 } from '@/lib/controlProyecto';
 import type { HitoCobro } from '@/lib/cotizador/tipos';
 import { useToast } from '@/hooks/useToast';
@@ -40,8 +40,10 @@ const millones = (v: number) => (Math.abs(v) >= 1e6 ? `$${(v / 1e6).toFixed(1).r
 const num: React.CSSProperties = { textAlign: 'right', fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' };
 const pctTxt = (v: number) => String(v).replace('.', ',');
 
-export default function FlujoCaja({ plan, planPorOmision, guardado, presupuesto, planCobro, totalCotizacion, cobros, movimientos, puedeEditar, onGuardar }: {
-  plan: FlujoPlan; planPorOmision: FlujoPlan; guardado: boolean; presupuesto: Presupuesto; planCobro: HitoCobro[];
+export default function FlujoCaja({ plan, planPorOmision, guardado, presupuesto, ejecucion, planCobro, totalCotizacion, cobros, movimientos, puedeEditar, onGuardar }: {
+  plan: FlujoPlan; planPorOmision: FlujoPlan; guardado: boolean; presupuesto: Presupuesto;
+  /** El anteproyecto (fase 21): de él sale el egreso plan; sin él, de lo cotizado. */
+  ejecucion: PresupuestoEjecucion | null; planCobro: HitoCobro[];
   totalCotizacion: number; cobros: CobroCP[]; movimientos: Movimiento[]; puedeEditar: boolean; onGuardar: (p: FlujoPlan) => Promise<void>;
 }) {
   const { success, error: toastError } = useToast();
@@ -51,10 +53,12 @@ export default function FlujoCaja({ plan, planPorOmision, guardado, presupuesto,
   const [guardando, setGuardando] = useState(false);
   const cambiado = JSON.stringify(borrador) !== JSON.stringify(plan);
 
-  const filas = useMemo(() => flujoSemanal({ plan: borrador, presupuesto, planCobro, totalCotizacion, cobros, movimientos }),
-    [borrador, presupuesto, planCobro, totalCotizacion, cobros, movimientos]);
-  const invalidas = useMemo(() => new Set(distribucionInvalida(borrador, presupuesto).map(x => x.id)), [borrador, presupuesto]);
-  const conCosto = [...presupuesto.partidas, ...(presupuesto.sinPartida.costo ? [presupuesto.sinPartida] : [])].filter(p => p.costo > 0);
+  const filas = useMemo(() => flujoSemanal({ plan: borrador, presupuesto, planCobro, totalCotizacion, cobros, movimientos, ejecucion }),
+    [borrador, presupuesto, planCobro, totalCotizacion, cobros, movimientos, ejecucion]);
+  // Las partidas con algo presupuestado: cada una debe repartir el 100 % en las semanas.
+  const costos = useMemo(() => presupuestoPorPartida(presupuesto, ejecucion), [presupuesto, ejecucion]);
+  const conCosto = [...presupuesto.partidas, presupuesto.sinPartida].map(p => ({ ...p, costo: costos.get(p.id) || 0 })).filter(p => p.costo > 0);
+  const invalidas = new Set(distribucionInvalida(borrador, costos).map(x => x.id));
   const hitos = montosHitos(totalCotizacion, planCobro).filter(h => h.monto);
   const semanas = Array.from({ length: borrador.semanas }, (_, i) => i + 1);
 

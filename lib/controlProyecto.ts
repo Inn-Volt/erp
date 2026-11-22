@@ -13,8 +13,12 @@
  *    cotizacion_resultado y costoReal().
  *  · Tipo de costo: la compra trae el suyo (vacío = material); un gasto de «materiales» es material
  *    y los demás gastos son operación; la mano de obra y las horas son mano de obra.
- *  · Estado de una partida: SOBRE PRESUPUESTO si lo real pasa lo cotizado; ALERTA desde el 90 %
- *    (UMBRAL_ALERTA); SIN PRESUPUESTO si hay gasto donde no se cotizó nada; si no, OK.
+ *  · Tres capas por partida: lo que se COBRÓ (venta), lo PRESUPUESTADO (el anteproyecto de la fase
+ *    21; sin él, el costo que traía la cotización) y lo REAL. Una compra o un gasto con detalle
+ *    (documento_lineas) se reparte entre sus líneas: cada una a su partida, su tipo y su línea del
+ *    presupuesto (o «no cotizada»), en proporción a sus montos.
+ *  · Estado de una partida: SOBRE PRESUPUESTO si lo real pasa lo presupuestado; ALERTA desde el 90 %
+ *    (UMBRAL_ALERTA); SIN PRESUPUESTO si hay gasto donde no se presupuestó nada; si no, OK.
  *  · Flujo: semanas desde el inicio; la semana 1 recibe todo lo anterior y «Posterior» lo que cae
  *    después de la última. Los cobros del plan se reparten como _cot_generar_cobros (redondeo por
  *    acumulado: la suma da exacta el total).
@@ -44,10 +48,10 @@ export const NOMBRE_ESTADO: Record<EstadoControl, string> = {
   ok: 'OK', alerta: 'ALERTA', sobre: 'SOBRE PRESUPUESTO', sin_presupuesto: 'SIN PRESUPUESTO',
 };
 
-export function estadoControl(cotizado: number, real: number): EstadoControl {
-  if (cotizado <= 0) return real > 0 ? 'sin_presupuesto' : 'ok';
-  if (real > cotizado) return 'sobre';
-  if (real >= cotizado * UMBRAL_ALERTA) return 'alerta';
+export function estadoControl(presupuesto: number, real: number): EstadoControl {
+  if (presupuesto <= 0) return real > 0 ? 'sin_presupuesto' : 'ok';
+  if (real > presupuesto) return 'sobre';
+  if (real >= presupuesto * UMBRAL_ALERTA) return 'alerta';
   return 'ok';
 }
 
@@ -86,6 +90,11 @@ export interface ManoObraCP {
   honorarios: boolean; costo: number; pagado: boolean; fecha_pago: string | null; documento?: string | null; nota?: string | null;
   partida_id?: string | null; trabajador_id?: string | null;
 }
+/** Una línea del detalle de una compra o de un gasto (fase 21). */
+export interface DocumentoLineaCP {
+  id: string; compra_id: string | null; gasto_id: string | null; partida_id: string | null; presupuesto_linea_id: string | null;
+  tipo: string; descripcion: string; cantidad: number | null; unidad?: string | null; monto: number;
+}
 export interface CobroCP {
   monto: number; monto_pagado: number; fecha_pago: string | null; fecha_factura?: string | null; created_at?: string | null; hito?: string | null;
 }
@@ -112,6 +121,13 @@ export interface Movimiento {
   /** Se puede deber (compras y pagos a externos); los demás ya salieron. */
   pagable: boolean;
   pagada: boolean;
+  /** Fase 21: viene del detalle de un documento (una línea de la boleta o la factura). */
+  detallado: boolean;
+  /** La línea del presupuesto que compra (null = no cotizada o sin detalle). */
+  presupuestoLineaId: string | null;
+  cantidad: number | null;
+  /** Mano de obra: la persona del equipo. */
+  trabajadorId: string | null;
 }
 
 const n = (v: unknown) => Number(v) || 0;
@@ -127,22 +143,49 @@ const tipoDeGasto = (categoria: string): TipoCosto => (categoria === 'materiales
 
 const DOC_COMPRA: Record<string, string> = { factura: 'Factura', factura_exenta: 'Factura exenta', boleta: 'Boleta', nota_credito: 'Nota de crédito', otro: 'Documento' };
 const num = (v: number) => String(Math.round(v * 100) / 100).replace('.', ',');
+const sinDetalle = { detallado: false, presupuestoLineaId: null, cantidad: null, trabajadorId: null };
 
-export function movimientos(d: { gastos?: GastoCP[]; compras?: CompraCP[]; manoObra?: ManoObraCP[]; horas?: HoraCP[] }): Movimiento[] {
+/** Reparte el costo de un documento entre sus líneas en proporción a sus montos: enteros, suma exacta. */
+export function repartoDocumento(costo: number, montos: number[]): number[] {
+  const total = Math.round(n(costo));
+  const pesos = montos.map(m => Math.max(n(m), 0));
+  const base = pesos.some(p => p > 0) ? pesos : pesos.map(() => 1);
+  return repartirEntero(Math.abs(total), base).map(v => (total < 0 ? -v : v));
+}
+
+/** El movimiento de un documento, partido en sus líneas (si tiene detalle). */
+function conDetalle(m: Movimiento, lineas: DocumentoLineaCP[] | undefined): Movimiento[] {
+  if (!lineas?.length) return [m];
+  const orden = [...lineas];
+  const montos = repartoDocumento(m.monto, orden.map(l => l.monto));
+  return orden.map((l, i) => ({
+    ...m, id: `${m.id}#${l.id}`, detalle: l.descripcion, partidaId: l.partida_id || SIN_PARTIDA, tipo: tipoValido(l.tipo), monto: montos[i],
+    detallado: true, presupuestoLineaId: l.presupuesto_linea_id || null, cantidad: l.cantidad === null || l.cantidad === undefined ? null : n(l.cantidad),
+  }));
+}
+
+export function movimientos(d: { gastos?: GastoCP[]; compras?: CompraCP[]; manoObra?: ManoObraCP[]; horas?: HoraCP[]; lineas?: DocumentoLineaCP[] }): Movimiento[] {
   const out: Movimiento[] = [];
+  const deCompra = new Map<string, DocumentoLineaCP[]>(), deGasto = new Map<string, DocumentoLineaCP[]>();
+  for (const l of d.lineas || []) {
+    const [mapa, id] = l.compra_id ? [deCompra, l.compra_id] : [deGasto, l.gasto_id || ''];
+    mapa.set(id, [...(mapa.get(id) || []), l]);
+  }
   for (const g of d.gastos || []) {
     if (g.estado === 'rechazado') continue;   // igual que cotizacion_resultado
-    out.push({
+    out.push(...conDetalle({
       origen: 'gasto', id: g.id, fecha: g.fecha, fechaCaja: g.fecha, documento: g.categoria, quien: g.usuario_id || '',
       detalle: g.descripcion || '', partidaId: g.partida_id || SIN_PARTIDA, tipo: tipoDeGasto(g.categoria), monto: n(g.monto), pagable: false, pagada: true,
-    });
+      ...sinDetalle,
+    }, deGasto.get(g.id)));
   }
   for (const c of d.compras || []) {
-    out.push({
+    out.push(...conDetalle({
       origen: 'compra', id: c.id, fecha: c.fecha, fechaCaja: c.pagada && c.fecha_pago ? c.fecha_pago : c.fecha,
       documento: `${DOC_COMPRA[c.tipo_doc] || 'Documento'}${c.folio ? ` ${c.folio}` : ''}`, quien: c.proveedor_nombre,
       detalle: c.descripcion || '', partidaId: c.partida_id || SIN_PARTIDA, tipo: tipoValido(c.tipo_costo), monto: costoCompra(c), pagable: true, pagada: !!c.pagada,
-    });
+      ...sinDetalle,
+    }, deCompra.get(c.id)));
   }
   for (const m of d.manoObra || []) {
     const externo = m.tipo === 'externo';
@@ -152,12 +195,14 @@ export function movimientos(d: { gastos?: GastoCP[]; compras?: CompraCP[]; manoO
       quien: m.nombre, detalle: m.nota || '', partidaId: m.partida_id || SIN_PARTIDA, tipo: 'mano_obra', monto: n(m.costo),
       // Las horas internas se pagan con el sueldo: cuentan como salidas; un externo, cuando se le paga.
       pagable: externo, pagada: externo ? !!m.pagado : true,
+      ...sinDetalle, cantidad: externo ? null : n(m.horas), trabajadorId: m.trabajador_id || null,
     });
   }
   for (const h of d.horas || []) {
     out.push({
       origen: 'hora', id: h.id, fecha: h.fecha, fechaCaja: h.fecha, documento: `${num(n(h.horas))} h`, quien: h.usuario_id,
       detalle: h.nota || '', partidaId: SIN_PARTIDA, tipo: 'mano_obra', monto: Math.round(n(h.horas) * n(h.costo_hora) * 100) / 100, pagable: false, pagada: true,
+      ...sinDetalle,
     });
   }
   return out.sort((a, b) => a.fecha.localeCompare(b.fecha));
@@ -186,7 +231,7 @@ export interface Presupuesto {
   costoPorTipo: PorTipo;
 }
 
-interface CotizacionCP {
+export interface CotizacionCP {
   items: Linea[]; partidas: PartidaCot[]; moneda?: Moneda | null; valor_uf?: number | null;
 }
 
@@ -265,13 +310,23 @@ export function presupuesto(cot: CotizacionCP): Presupuesto {
 const pct = (a: number, b: number) => (b > 0 ? (a / b) * 100 : null);
 const margen = (venta: number, costo: number) => (venta > 0 ? ((venta - costo) / venta) * 100 : null);
 
+/** El anteproyecto por partida (clave «» = sin partida) y por tipo. Sin él, lo presupuestado es lo cotizado. */
+export interface PresupuestoEjecucion { porPartida: Map<string, number>; porTipo: Record<TipoCosto, number> }
+
 export interface FilaControl {
   id: string; numero: number | null; nombre: string;
-  venta: number; cotizado: number; margenCotizado: number | null;
-  real: number; desviacion: number; ejecutado: number | null;
+  /** Lo que se cobró (venta neta). */
+  venta: number;
+  /** El costo que traía la cotización. */
+  cotizado: number; margenCotizado: number | null;
+  /** El presupuesto de ejecución (anteproyecto); sin él, lo cotizado. */
+  presupuesto: number; margenPlan: number | null;
+  real: number;
+  /** Real − presupuesto. */
+  desviacion: number; ejecutado: number | null;
   proyectado: number; margenProyectado: number | null; estado: EstadoControl;
 }
-interface FilaTipo { tipo: TipoCosto; nombre: string; cotizado: number; real: number; desviacion: number; estado: EstadoControl }
+interface FilaTipo { tipo: TipoCosto; nombre: string; cotizado: number; presupuesto: number; real: number; desviacion: number; estado: EstadoControl }
 export interface Control {
   filas: FilaControl[];
   total: FilaControl;
@@ -279,42 +334,61 @@ export interface Control {
   realPorOrigen: Record<OrigenMov, number>;
 }
 
-function fila(id: string, numero: number | null, nombre: string, venta: number, cotizado: number, real: number): FilaControl {
-  const proyectado = Math.max(cotizado, real);
+function fila(id: string, numero: number | null, nombre: string, venta: number, cotizado: number, presupuesto: number, real: number): FilaControl {
+  const proyectado = Math.max(presupuesto, real);
   return {
-    id, numero, nombre, venta, cotizado, margenCotizado: margen(venta, cotizado), real, desviacion: real - cotizado,
-    ejecutado: pct(real, cotizado), proyectado, margenProyectado: margen(venta, proyectado), estado: estadoControl(cotizado, real),
+    id, numero, nombre, venta, cotizado, margenCotizado: margen(venta, cotizado), presupuesto, margenPlan: margen(venta, presupuesto),
+    real, desviacion: real - presupuesto, ejecutado: pct(real, presupuesto), proyectado, margenProyectado: margen(venta, proyectado),
+    estado: estadoControl(presupuesto, real),
   };
 }
 
-export function control(p: Presupuesto, movs: Movimiento[]): Control {
+/** Lo presupuestado de cada partida: el anteproyecto si hay; si no, lo cotizado. */
+export function presupuestoPorPartida(p: Presupuesto, ejec?: PresupuestoEjecucion | null): Map<string, number> {
+  const ids = new Set(p.partidas.map(x => x.id));
+  if (!ejec) return new Map([...p.partidas.map(x => [x.id, x.costo] as const), [SIN_PARTIDA, p.sinPartida.costo]]);
+  const m = new Map<string, number>([...p.partidas.map(x => [x.id, 0] as const), [SIN_PARTIDA, 0]]);
+  for (const [k, v] of ejec.porPartida) {
+    const clave = ids.has(k) ? k : SIN_PARTIDA;   // una partida que ya no está cae en «Sin partida»
+    m.set(clave, (m.get(clave) || 0) + v);
+  }
+  return m;
+}
+
+export function control(p: Presupuesto, movs: Movimiento[], ejec?: PresupuestoEjecucion | null): Control {
   const ids = new Set(p.partidas.map(x => x.id));
   const realDe = new Map<string, number>();
   for (const m of movs) {
-    const k = ids.has(m.partidaId) ? m.partidaId : SIN_PARTIDA;   // una partida que ya no está cae en «Sin partida»
+    const k = ids.has(m.partidaId) ? m.partidaId : SIN_PARTIDA;
     realDe.set(k, (realDe.get(k) || 0) + m.monto);
   }
-  const filas = p.partidas.map(x => fila(x.id, x.numero, x.nombre, x.venta, x.costo, realDe.get(x.id) || 0));
-  const s = p.sinPartida, realSin = realDe.get(SIN_PARTIDA) || 0;
-  if (s.venta || s.costo || realSin) filas.push(fila(SIN_PARTIDA, null, 'Sin partida', s.venta, s.costo, realSin));
-  const suma = (k: 'venta' | 'cotizado' | 'real' | 'proyectado') => filas.reduce((t, f) => t + f[k], 0);
-  const total = fila('total', null, 'Total', suma('venta'), suma('cotizado'), suma('real'));
+  const plan = presupuestoPorPartida(p, ejec);
+  const filas = p.partidas.map(x => fila(x.id, x.numero, x.nombre, x.venta, x.costo, plan.get(x.id) || 0, realDe.get(x.id) || 0));
+  const s = p.sinPartida, realSin = realDe.get(SIN_PARTIDA) || 0, planSin = plan.get(SIN_PARTIDA) || 0;
+  if (s.venta || s.costo || planSin || realSin) filas.push(fila(SIN_PARTIDA, null, 'Sin partida', s.venta, s.costo, planSin, realSin));
+  const suma = (k: 'venta' | 'cotizado' | 'presupuesto' | 'real' | 'proyectado') => filas.reduce((t, f) => t + f[k], 0);
+  const total = fila('total', null, 'Total', suma('venta'), suma('cotizado'), suma('presupuesto'), suma('real'));
   total.proyectado = suma('proyectado');
   total.margenProyectado = margen(total.venta, total.proyectado);
   const realTipo = porTipoVacio();
   const realPorOrigen: Record<OrigenMov, number> = { gasto: 0, compra: 0, mano_obra: 0, hora: 0 };
   for (const m of movs) { realTipo[m.tipo] += m.monto; realPorOrigen[m.origen] += m.monto; }
+  const planTipo = ejec ? ejec.porTipo : p.costoPorTipo;
   return {
     filas, total, realPorOrigen,
     porTipo: TIPOS_COSTO.map(t => ({
-      tipo: t.clave, nombre: t.nombre, cotizado: p.costoPorTipo[t.clave], real: realTipo[t.clave],
-      desviacion: realTipo[t.clave] - p.costoPorTipo[t.clave], estado: estadoControl(p.costoPorTipo[t.clave], realTipo[t.clave]),
+      tipo: t.clave, nombre: t.nombre, cotizado: p.costoPorTipo[t.clave], presupuesto: planTipo[t.clave], real: realTipo[t.clave],
+      desviacion: realTipo[t.clave] - planTipo[t.clave], estado: estadoControl(planTipo[t.clave], realTipo[t.clave]),
     })),
   };
 }
 
 interface KpisControl {
-  venta: number; cotizado: number; real: number; pctGastado: number | null;
+  venta: number; cotizado: number; presupuesto: number; real: number;
+  /** Lo gastado sobre lo presupuestado. */
+  pctGastado: number | null;
+  /** Venta − presupuesto (lo que se planea ganar). */
+  margenPlan: number; margenPlanPct: number | null;
   margenProyectado: number; margenProyectadoPct: number | null;
   cobrado: number; porCobrar: number;
   /** Lo que entró menos lo que salió: cobrado − compras y externos pagados − gastos − mano de obra interna. */
@@ -326,7 +400,9 @@ export function kpis(c: Control, movs: Movimiento[], cobros: CobroCP[], totalCot
   const cobrado = cobros.reduce((s, x) => s + n(x.monto_pagado), 0);
   const salio = movs.filter(m => m.pagada).reduce((s, m) => s + m.monto, 0);
   return {
-    venta: c.total.venta, cotizado: c.total.cotizado, real: c.total.real, pctGastado: pct(c.total.real, c.total.cotizado),
+    venta: c.total.venta, cotizado: c.total.cotizado, presupuesto: c.total.presupuesto, real: c.total.real,
+    pctGastado: pct(c.total.real, c.total.presupuesto),
+    margenPlan: c.total.venta - c.total.presupuesto, margenPlanPct: c.total.margenPlan,
     margenProyectado: c.total.venta - c.total.proyectado, margenProyectadoPct: c.total.margenProyectado,
     cobrado, porCobrar: Math.max(n(totalCotizacion) - cobrado, 0), caja: cobrado - salio,
   };
@@ -404,10 +480,12 @@ export function ajustarSemanas(plan: FlujoPlan, semanas: number): FlujoPlan {
 
 export const sumaPct = (arr: number[] | undefined) => r2((arr || []).reduce((s, v) => s + n(v), 0));
 
-/** Las partidas (con presupuesto) cuyo % no suma 100. */
-export function distribucionInvalida(plan: FlujoPlan, p: Presupuesto): { id: string; suma: number }[] {
-  const conCosto = [...p.partidas.map(x => x.id), ...(p.sinPartida.costo ? [SIN_PARTIDA] : [])];
-  return conCosto.map(id => ({ id, suma: sumaPct(plan.distribucion[id]) })).filter(x => Math.abs(x.suma - 100) > 0.005);
+/** Las partidas con algo presupuestado (`costos`, de presupuestoPorPartida) cuyo % no suma 100. Una
+ *  partida sin % guardados se reparte pareja (como el flujo), así que suma 100. */
+export function distribucionInvalida(plan: FlujoPlan, costos: Map<string, number>): { id: string; suma: number }[] {
+  return [...costos].filter(([, costo]) => costo > 0)
+    .map(([id]) => ({ id, suma: plan.distribucion[id] ? sumaPct(plan.distribucion[id]) : 100 }))
+    .filter(x => Math.abs(x.suma - 100) > 0.005);
 }
 
 const esFecha = (v: unknown): v is string => typeof v === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(v);
@@ -443,7 +521,7 @@ export function inicioPorDefecto(trabajoInicio: string | null | undefined, aprob
 
 const DIA = 86_400_000;
 const aUtc = (f: string) => Date.UTC(Number(f.slice(0, 4)), Number(f.slice(5, 7)) - 1, Number(f.slice(8, 10)));
-export const sumarDias = (f: string, dias: number) => new Date(aUtc(f) + dias * DIA).toISOString().slice(0, 10);
+const sumarDias = (f: string, dias: number) => new Date(aUtc(f) + dias * DIA).toISOString().slice(0, 10);
 
 /** Semana (1…n) de una fecha; antes del inicio es la 1; después de la última, «posterior» (0). */
 export function semanaDe(fecha: string, inicio: string, semanas: number): number {
@@ -492,6 +570,8 @@ interface SemanaFlujo {
 export function flujoSemanal(o: {
   plan: FlujoPlan; presupuesto: Presupuesto; planCobro: HitoCobro[]; totalCotizacion: number;
   cobros: CobroCP[]; movimientos: Movimiento[];
+  /** El anteproyecto: el egreso plan sale de él (sin él, de lo cotizado). */
+  ejecucion?: PresupuestoEjecucion | null;
 }): SemanaFlujo[] {
   const { plan } = o;
   const k = plan.semanas;
@@ -508,10 +588,9 @@ export function flujoSemanal(o: {
     const s = acotar(Math.round(n(plan.hitos[h.nombre])) || semanaHito(h, k), 1, k);
     filas[idx(s)].ingresoPlan += h.monto;
   }
-  const costos = [...o.presupuesto.partidas, o.presupuesto.sinPartida];
-  for (const p of costos) {
-    if (!p.costo) continue;
-    repartoSemanal(p.costo, plan.distribucion[p.id] || repartoParejo(k)).forEach((m, i) => { if (i < k) filas[i].egresoPlan += m; });
+  for (const [id, costo] of presupuestoPorPartida(o.presupuesto, o.ejecucion)) {
+    if (!costo) continue;
+    repartoSemanal(costo, plan.distribucion[id] || repartoParejo(k)).forEach((m, i) => { if (i < k) filas[i].egresoPlan += m; });
   }
   for (const c of o.cobros) {
     const m = n(c.monto_pagado);
@@ -540,23 +619,25 @@ export function nombreArchivoControl(folio: number, hoy: string) {
 /** Las hojas del Excel: Control (partidas + KPIs), PorTipo, Flujo y Movimientos. */
 export function hojasControl(o: {
   control: Control; kpis: KpisControl; flujo: SemanaFlujo[]; movimientos: Movimiento[]; presupuesto: Presupuesto;
-  /** id de persona → nombre; categoría de gasto → nombre. */
-  nombres?: Record<string, string>; categorias?: Record<string, string>;
+  /** id de persona → nombre; categoría de gasto → nombre; id de línea del presupuesto → su descripción. */
+  nombres?: Record<string, string>; categorias?: Record<string, string>; lineasPresupuesto?: Record<string, string>;
 }): { nombre: string; filas: Record<string, unknown>[] }[] {
   const { control: c, kpis: k } = o;
   const filaControl = (f: FilaControl) => ({
-    'N°': f.numero ?? '', Partida: f.nombre, 'Venta neta': f.venta, 'Costo cotizado': f.cotizado, 'Margen cotizado %': pctX(f.margenCotizado),
-    'Gasto real': f.real, 'Desviación': f.desviacion, '% ejecutado': pctX(f.ejecutado), 'Costo proyectado': f.proyectado,
+    'N°': f.numero ?? '', Partida: f.nombre, 'Cobrado (venta neta)': f.venta, 'Costo cotizado': f.cotizado, 'Presupuesto': f.presupuesto,
+    'Margen plan %': pctX(f.margenPlan), 'Gasto real': f.real, 'Desviación (real − presupuesto)': f.desviacion, '% ejecutado': pctX(f.ejecutado),
+    'Costo proyectado': f.proyectado,
     'Margen proyectado %': pctX(f.margenProyectado), Estado: f.id === 'total' ? '' : NOMBRE_ESTADO[f.estado],
   });
-  const vacia = (txt: string, valor: unknown) => ({ 'N°': '', Partida: txt, 'Venta neta': valor });
+  const vacia = (txt: string, valor: unknown) => ({ 'N°': '', Partida: txt, 'Cobrado (venta neta)': valor });
   const etiqueta = new Map<string, string>([...o.presupuesto.partidas.map(p => [p.id, etiquetaPartida(p)] as const)]);
   return [
     {
       nombre: 'Control',
       filas: [
         ...c.filas.map(filaControl), filaControl(c.total), vacia('', ''),
-        vacia('Venta neta', k.venta), vacia('Costo cotizado', k.cotizado), vacia('Gasto real', k.real),
+        vacia('Cobrado (venta neta)', k.venta), vacia('Costo cotizado', k.cotizado), vacia('Presupuesto', k.presupuesto),
+        vacia('Margen plan', k.margenPlan), vacia('Margen plan %', pctX(k.margenPlanPct)), vacia('Gasto real', k.real),
         vacia('% gastado', pctX(k.pctGastado)), vacia('Margen proyectado', k.margenProyectado), vacia('Margen proyectado %', pctX(k.margenProyectadoPct)),
         vacia('Cobrado', k.cobrado), vacia('Por cobrar', k.porCobrar), vacia('Caja del trabajo', k.caja),
       ],
@@ -564,8 +645,8 @@ export function hojasControl(o: {
     {
       nombre: 'PorTipo',
       filas: [
-        ...c.porTipo.map(t => ({ 'Tipo de costo': t.nombre, Cotizado: t.cotizado, Real: t.real, 'Desviación': t.desviacion, Estado: NOMBRE_ESTADO[t.estado] })),
-        { 'Tipo de costo': 'Total', Cotizado: c.total.cotizado, Real: c.total.real, 'Desviación': c.total.desviacion, Estado: '' },
+        ...c.porTipo.map(t => ({ 'Tipo de costo': t.nombre, Cotizado: t.cotizado, Presupuesto: t.presupuesto, Real: t.real, 'Desviación': t.desviacion, Estado: NOMBRE_ESTADO[t.estado] })),
+        { 'Tipo de costo': 'Total', Cotizado: c.total.cotizado, Presupuesto: c.total.presupuesto, Real: c.total.real, 'Desviación': c.total.desviacion, Estado: '' },
       ],
     },
     {
@@ -583,7 +664,8 @@ export function hojasControl(o: {
         Fecha: m.fecha, Origen: NOMBRE_ORIGEN[m.origen],
         Documento: m.origen === 'gasto' ? o.categorias?.[m.documento] || m.documento : m.documento,
         'Proveedor o persona': m.origen === 'compra' || m.origen === 'mano_obra' ? m.quien : o.nombres?.[m.quien] || '',
-        Detalle: m.detalle, Partida: etiqueta.get(m.partidaId) || 'Sin partida', 'Tipo de costo': nombreTipo(m.tipo),
+        Detalle: m.detalle, Cantidad: m.cantidad ?? '', Partida: etiqueta.get(m.partidaId) || 'Sin partida', 'Tipo de costo': nombreTipo(m.tipo),
+        'En el presupuesto': m.detallado ? (m.presupuestoLineaId ? o.lineasPresupuesto?.[m.presupuestoLineaId] || 'Sí' : 'No cotizado') : '',
         'Monto considerado': m.monto, Pagada: m.pagable ? (m.pagada ? 'Sí' : 'No') : '', 'Fecha de caja': m.fechaCaja,
       })),
     },

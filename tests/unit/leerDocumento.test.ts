@@ -10,7 +10,7 @@ test('Una factura bien leída: RUT formateado, montos enteros y sin avisos', () 
   });
   assert.deepEqual(r.doc, {
     tipo_doc: 'factura', folio: '555', fecha: '2026-11-23', proveedor_nombre: 'Distribuidora Eléctrica SpA', proveedor_rut: '76.123.456-0',
-    neto: 100000, iva: 19000, exento: 0, total: 119000, descripcion: 'Cable 6 mm²',
+    neto: 100000, iva: 19000, exento: 0, total: 119000, descripcion: 'Cable 6 mm²', lineas: [],
   });
   assert.deepEqual(r.avisos, []);
   assert.deepEqual(r.leidos, ['tipo_doc', 'folio', 'fecha', 'proveedor_nombre', 'proveedor_rut', 'neto', 'iva', 'total', 'descripcion']);
@@ -47,6 +47,24 @@ test('Tipo de documento, montos y fechas en las formas que suele devolver la IA'
   assert.equal(fechaLeida('3/1/2026'), '2026-01-03');
   assert.equal(fechaLeida('2026-02-30'), '');
   assert.equal(fechaLeida('ayer'), '');
+});
+
+test('El detalle: cada línea con su cantidad, unidad y monto; sin descripción no sirve', () => {
+  const r = normalizarDocumento({
+    tipo_doc: 'factura', total: 119000,
+    lineas: [
+      { descripcion: ' CABLE THHN 6MM ', cantidad: '30', unidad: 'mt', monto: '$71.400' },
+      { descripcion: 'Enchufe', cantidad: 2.5, unidad: '', monto: 47600 },
+      { descripcion: '', cantidad: 1, monto: 10 },
+      'basura',
+    ],
+  });
+  assert.deepEqual(r.doc.lineas, [
+    { descripcion: 'CABLE THHN 6MM', cantidad: 30, unidad: 'mt', monto: 71400 },
+    { descripcion: 'Enchufe', cantidad: 2.5, unidad: '', monto: 47600 },
+  ]);
+  assert.ok(r.leidos.includes('lineas'));
+  assert.deepEqual(normalizarDocumento({ tipo_doc: 'boleta', total: 1 }).doc.lineas, []);
 });
 
 test('Una respuesta vacía o rara no rompe nada', () => {

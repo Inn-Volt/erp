@@ -12,6 +12,7 @@ import { anticipoDelPlan, desgloseAnticipo, planConAnticipo } from '@/lib/antici
 import { montosHitos, presupuesto } from '@/lib/controlProyecto';
 import { useFase } from '@/lib/fases';
 import { cotizadorService } from '@/services/cotizador';
+import { anteproyectoService } from '@/services/anteproyecto';
 import { formatCLP } from '@/utils';
 
 export type Canal = 'whatsapp' | 'correo' | 'ambos' | 'descarga';
@@ -171,6 +172,7 @@ export function AprobarModal({ cot, vencida, plan, onCerrar, onListo }: {
   const [ocupado, setOcupado] = useState(false);
   const [error, setError] = useState('');
   const fase20 = useFase(20);
+  const fase21 = useFase(21);
   const total = Number(cot.total_clp ?? cot.total ?? 0);
   const anticipoPlan = anticipoDelPlan(plan, total);
   const [anticipo, setAnticipo] = useState(anticipoPlan);
@@ -179,6 +181,8 @@ export function AprobarModal({ cot, vencida, plan, onCerrar, onListo }: {
     try {
       const doc = archivo ? await cotizadorService.subirArchivo(cot.id, archivo) : null;
       await cotizadorService.aprobar(cot.id, como.trim(), doc, motivo.trim() || null, fase20 && anticipo !== anticipoPlan ? anticipo : null);
+      // Fase 21: nace su presupuesto de ejecución, copiando la cotización (si falla, se arma al abrirlo).
+      if (fase21) await anteproyectoService.asegurar(cot.id).catch(() => {});
       onListo();
     } catch (e) { setError(e instanceof Error ? e.message : 'No se pudo aprobar'); }
     finally { setOcupado(false); }
