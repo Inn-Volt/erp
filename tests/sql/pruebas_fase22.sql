@@ -1,6 +1,7 @@
 -- Pruebas de la fase 22 (análisis de proyecto): mano de obra por día, servicios por hora, pagos
 -- líquidos, línea del presupuesto en cada registro y lo que puede hacer el técnico. Corre después de
--- todas las fases.
+-- todas las fases. Cada prueba que lee una fila usa un agregado (count, bool_and, max): si la fila no
+-- está (porque el INSERT falló), la prueba igual queda registrada como FALLA.
 \set ON_ERROR_STOP 0
 \set QUIET 1
 CREATE TEMP TABLE r (n SERIAL, ok BOOLEAN, txt TEXT);
@@ -23,8 +24,9 @@ SELECT set_config('request.jwt.claim.sub', '', false);
 \i /tmp/supabase_fase22_analisis_proyecto.sql
 SELECT set_config('request.jwt.claim.sub', '', false);
 INSERT INTO r (ok, txt)
-SELECT count(*) FILTER (WHERE d LIKE '%tipo%') = 2 AND count(*) FILTER (WHERE d LIKE '%tipo%' AND d NOT LIKE '%liquido%') = 0,
-       'Al volver a correrla, mano_obra queda con sus dos CHECK del tipo (los dos conocen «liquido»)'
+SELECT count(*) FILTER (WHERE d LIKE '%tipo%') = 2 AND count(*) FILTER (WHERE d LIKE '%tipo%' AND d NOT LIKE '%''liquido''%') = 0,
+       'Al volver a correrla, mano_obra queda con sus dos CHECK del tipo (los dos conocen «liquido»; el de la fase 20 que nombra monto_liquido se borró) ('
+       || count(*) FILTER (WHERE d LIKE '%tipo%') || ')'
 FROM (SELECT pg_get_constraintdef(oid) AS d FROM pg_constraint WHERE conrelid = 'public.mano_obra'::regclass AND contype = 'c') x;
 INSERT INTO r (ok, txt) SELECT prosrc LIKE '%liquido%', 'El trigger de la mano de obra es el de la fase 22'
   FROM pg_proc WHERE proname = 'mano_obra_reglas';
@@ -51,7 +53,7 @@ INSERT INTO public.presupuesto_lineas (id, cotizacion_id, partida_id, tipo, desc
   (:'LSV', :'COT', 'p2', 'servicio', 'Ingeniería y planos', 'h', 10, 1, 23599, :'EXT', 'externo'),
   (:'LOT', :'OTRA', NULL, 'mano_obra', 'De otra obra', 'día', 1, 1, 1000, NULL, 'liquido');
 UPDATE public.presupuesto_lineas SET honorarios = TRUE, valor_liquido = 20000 WHERE id = :'LSV';
-INSERT INTO r (ok, txt) SELECT cantidad * costo_unitario = 287730 AND personas = 2,
+INSERT INTO r (ok, txt) SELECT count(*) = 1 AND bool_and(cantidad * costo_unitario = 287730 AND personas = 2),
   'Mano de obra: 2 personas × 3 días = 6 jornadas; el total sigue siendo cantidad × costo ($287.730)'
   FROM public.presupuesto_lineas WHERE id = :'LMO';
 DO $$ BEGIN
@@ -70,8 +72,8 @@ SELECT pg_temp.como(:'CESAR');
 SET ROLE authenticated;
 INSERT INTO public.mano_obra (cotizacion_id, trabajador_id, tipo, jornadas, presupuesto_linea_id) VALUES (:'COT', :'INT', 'interno', 2, :'LMO');
 RESET ROLE;
-INSERT INTO r (ok, txt) SELECT costo = 95910 AND partida_id = 'p1' AND clase = 'mano_obra' AND nombre = 'Joaquín Soto',
-  'Interno por días: 2 jornadas = $95.910, toma la partida de la línea (' || costo || ', ' || COALESCE(partida_id, '-') || ')'
+INSERT INTO r (ok, txt) SELECT count(*) = 1 AND bool_and(costo = 95910 AND partida_id = 'p1' AND clase = 'mano_obra' AND nombre = 'Joaquín Soto'),
+  'Interno por días: 2 jornadas = $95.910, toma la partida de la línea (' || COALESCE(max(costo)::TEXT, 'no se registró') || ')'
   FROM public.mano_obra WHERE presupuesto_linea_id = :'LMO' AND jornadas = 2;
 
 -- ═══ 3. Pagos líquidos (con y sin ficha) ═══
@@ -81,12 +83,13 @@ INSERT INTO public.mano_obra (cotizacion_id, partida_id, tipo, nombre, monto_liq
 INSERT INTO public.mano_obra (cotizacion_id, partida_id, tipo, trabajador_id, monto_liquido, jornadas) VALUES (:'COT', 'p1', 'liquido', :'EXT', 100000, 2);
 INSERT INTO public.mano_obra (cotizacion_id, partida_id, tipo, trabajador_id, monto_liquido, jornadas, pagado) VALUES (:'COT', 'p1', 'liquido', :'INT', 60000, 1, TRUE);
 RESET ROLE;
-INSERT INTO r (ok, txt) SELECT costo = 150000 AND NOT honorarios AND retencion_pct = 0,
-  'Líquido sin ficha: cuesta exactamente lo ingresado, sin retención (' || costo || ')' FROM public.mano_obra WHERE nombre = 'Socio César';
-INSERT INTO r (ok, txt) SELECT tipo = 'liquido' AND nombre = 'Ingeniera Ríos' AND costo = 100000,
+INSERT INTO r (ok, txt) SELECT count(*) = 1 AND bool_and(costo = 150000 AND NOT honorarios AND retencion_pct = 0),
+  'Líquido sin ficha: cuesta exactamente lo ingresado, sin retención (' || COALESCE(max(costo)::TEXT, 'no se registró') || ')'
+  FROM public.mano_obra WHERE nombre = 'Socio César';
+INSERT INTO r (ok, txt) SELECT count(*) = 1 AND bool_and(tipo = 'liquido' AND nombre = 'Ingeniera Ríos' AND costo = 100000),
   'Líquido con ficha de externo: no toma el tipo de la ficha (sí el nombre) y cuesta lo ingresado'
   FROM public.mano_obra WHERE trabajador_id = :'EXT' AND monto_liquido = 100000;
-INSERT INTO r (ok, txt) SELECT tipo = 'liquido' AND costo = 60000 AND fecha_pago IS NOT NULL,
+INSERT INTO r (ok, txt) SELECT count(*) = 1 AND bool_and(tipo = 'liquido' AND costo = 60000 AND fecha_pago IS NOT NULL),
   'Líquido con ficha de interno: tampoco toma el tipo; pagado queda con su fecha'
   FROM public.mano_obra WHERE trabajador_id = :'INT' AND monto_liquido = 60000;
 
@@ -96,8 +99,8 @@ SET ROLE authenticated;
 INSERT INTO public.mano_obra (cotizacion_id, trabajador_id, tipo, horas, monto_liquido, honorarios, presupuesto_linea_id)
 VALUES (:'COT', :'EXT', 'externo', 4, 80000, TRUE, :'LSV');
 RESET ROLE;
-INSERT INTO r (ok, txt) SELECT clase = 'servicio' AND partida_id = 'p2' AND horas = 4 AND costo = 94395 AND retencion_pct = 15.25,
-  'Servicio externo por horas: 4 h × $20.000 líquidos con boleta = $94.395, va a «servicio» (' || costo || ', ' || clase || ')'
+INSERT INTO r (ok, txt) SELECT count(*) = 1 AND bool_and(clase = 'servicio' AND partida_id = 'p2' AND horas = 4 AND costo = 94395 AND retencion_pct = 15.25),
+  'Servicio externo por horas: 4 h × $20.000 líquidos con boleta = $94.395, va a «servicio» (' || COALESCE(max(costo)::TEXT, 'no se registró') || ')'
   FROM public.mano_obra WHERE presupuesto_linea_id = :'LSV';
 
 -- ═══ 5. La línea tiene que ser del mismo trabajo ═══
@@ -135,20 +138,29 @@ DO $$ BEGIN
 EXCEPTION WHEN OTHERS THEN NULL;
 END $$;
 RESET ROLE;
-INSERT INTO r (ok, txt) SELECT tipo = 'interno' AND costo = 23978 AND monto_liquido IS NULL AND partida_id = 'p1',
-  'Sus 4,5 h cuestan $23.978 y no se pueden convertir en un pago líquido (' || tipo || ', ' || costo || ')'
+INSERT INTO r (ok, txt) SELECT count(*) = 1 AND bool_and(tipo = 'interno' AND costo = 23978 AND monto_liquido IS NULL AND partida_id = 'p1'),
+  'Sus 4,5 h cuestan $23.978 y no se pueden convertir en un pago líquido (' || COALESCE(max(tipo) || ', ' || max(costo), 'no se registró') || ')'
   FROM public.mano_obra WHERE trabajador_id = :'INT' AND horas = 4.5;
 
 -- ═══ 7. Borrar la línea deja el registro en su partida ═══
+-- Con la sesión del técnico todavía puesta: vaciar la referencia no es «cambiar el pago», así que el
+-- trigger no lo frena (antes bloqueaba borrar la línea o la ficha).
 DELETE FROM public.presupuesto_lineas WHERE id = :'LSV';
-INSERT INTO r (ok, txt) SELECT presupuesto_linea_id IS NULL AND partida_id = 'p2' AND costo = 94395 AND clase = 'servicio',
+INSERT INTO r (ok, txt) SELECT count(*) = 1 AND bool_and(presupuesto_linea_id IS NULL AND partida_id = 'p2' AND costo = 94395 AND clase = 'servicio'),
   'Si se borra la línea del presupuesto, el registro queda en su partida y con su costo'
   FROM public.mano_obra WHERE trabajador_id = :'EXT' AND horas = 4;
 
 -- ═══ 8. El resultado del trabajo sigue sumando mano_obra.costo ═══
-INSERT INTO r (ok, txt) SELECT mano_obra = 95910 + 150000 + 100000 + 60000 + 94395 + 23978,
-  'cotizacion_resultado suma la mano de obra, los líquidos y los servicios (' || mano_obra || ')'
+INSERT INTO r (ok, txt) SELECT count(*) = 1 AND bool_and(mano_obra = 95910 + 150000 + 100000 + 60000 + 94395 + 23978),
+  'cotizacion_resultado suma la mano de obra, los líquidos y los servicios (' || COALESCE(max(mano_obra)::TEXT, '-') || ')'
   FROM public.cotizacion_resultado WHERE cotizacion_id = :'COT';
+
+-- ═══ 9. Borrar una ficha del equipo no se bloquea por lo registrado ═══
+-- Lo registrado de esa persona queda con su nombre y su costo (no se recalcula).
+DELETE FROM public.trabajadores WHERE id = :'EXT';
+INSERT INTO r (ok, txt) SELECT count(*) = 2 AND bool_and(trabajador_id IS NULL AND nombre = 'Ingeniera Ríos') AND sum(costo) = 100000 + 94395,
+  'Al borrar la ficha de un externo, sus registros quedan con su nombre y su costo (' || count(*) || ')'
+  FROM public.mano_obra WHERE cotizacion_id = :'COT' AND nombre = 'Ingeniera Ríos';
 
 SELECT CASE WHEN ok THEN 'OK   ' ELSE 'FALLA' END || ' ' || n || '. ' || txt FROM r ORDER BY n;
 SELECT count(*) FILTER (WHERE ok) || ' OK / ' || count(*) FILTER (WHERE ok IS NOT TRUE) || ' fallas' FROM r;

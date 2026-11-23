@@ -34,13 +34,14 @@ ALTER TABLE public.mano_obra ADD COLUMN IF NOT EXISTS presupuesto_linea_id UUID 
 CREATE INDEX IF NOT EXISTS idx_mano_obra_linea ON public.mano_obra(presupuesto_linea_id) WHERE presupuesto_linea_id IS NOT NULL;
 
 -- Los CHECK de la fase 20 sobre el tipo no tienen nombre: se buscan por su definición (los que
--- hablan del tipo y todavía no conocen «liquido») y se reemplazan por dos con nombre.
+-- hablan del tipo y todavía no conocen el valor 'liquido'; ojo: uno de ellos nombra la columna
+-- monto_liquido) y se reemplazan por dos con nombre.
 DO $$
 DECLARE c RECORD;
 BEGIN
   FOR c IN SELECT conname FROM pg_constraint
            WHERE conrelid = 'public.mano_obra'::regclass AND contype = 'c'
-             AND pg_get_constraintdef(oid) LIKE '%tipo%' AND pg_get_constraintdef(oid) NOT LIKE '%liquido%'
+             AND pg_get_constraintdef(oid) LIKE '%tipo%' AND pg_get_constraintdef(oid) NOT LIKE '%''liquido''%'
   LOOP
     EXECUTE format('ALTER TABLE public.mano_obra DROP CONSTRAINT %I', c.conname);
   END LOOP;
@@ -92,16 +93,19 @@ BEGIN
     END IF;
   END IF;
 
-  -- Quien no paga ni edita cotizaciones solo registra horas internas (las suyas: lo exige la RLS).
-  -- Sin sesión (el servidor, las migraciones) no se revisa.
-  IF auth.uid() IS NOT NULL AND NEW.tipo <> 'interno'
+  -- Se recalcula al registrar o al cambiar lo que define el costo. Si se borra la ficha de la persona
+  -- (trabajador_id pasa a vacío solo), lo registrado queda como estaba.
+  v_recalcular := TG_OP = 'INSERT' OR NEW.horas IS DISTINCT FROM OLD.horas OR NEW.jornadas IS DISTINCT FROM OLD.jornadas
+    OR NEW.monto_liquido IS DISTINCT FROM OLD.monto_liquido OR NEW.honorarios IS DISTINCT FROM OLD.honorarios
+    OR (NEW.trabajador_id IS DISTINCT FROM OLD.trabajador_id AND NEW.trabajador_id IS NOT NULL) OR NEW.tipo IS DISTINCT FROM OLD.tipo;
+
+  -- Quien no paga ni edita cotizaciones solo registra horas internas (las suyas: lo exige la RLS) y no
+  -- puede convertirlas en un pago. Se revisa solo cuando cambia algo del pago (no cuando se borra una
+  -- línea del presupuesto o una ficha y la base vacía la referencia). Sin sesión no se revisa.
+  IF v_recalcular AND auth.uid() IS NOT NULL AND NEW.tipo <> 'interno'
      AND NOT public.tiene_alguno(ARRAY['gastos.aprobar','cotizaciones.crear']) THEN
     RAISE EXCEPTION 'Solo quien paga registra pagos a externos o pagos líquidos.' USING ERRCODE = '42501';
   END IF;
-
-  v_recalcular := TG_OP = 'INSERT' OR NEW.horas IS DISTINCT FROM OLD.horas OR NEW.jornadas IS DISTINCT FROM OLD.jornadas
-    OR NEW.monto_liquido IS DISTINCT FROM OLD.monto_liquido OR NEW.honorarios IS DISTINCT FROM OLD.honorarios
-    OR NEW.trabajador_id IS DISTINCT FROM OLD.trabajador_id OR NEW.tipo IS DISTINCT FROM OLD.tipo;
   IF v_recalcular AND NEW.tipo = 'interno' AND t.id IS NULL THEN
     RAISE EXCEPTION 'Elige a la persona del equipo (las horas internas salen de su ficha).' USING ERRCODE = '23514';
   END IF;
