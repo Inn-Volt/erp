@@ -47,6 +47,10 @@ const TODO: AreaDef[] = [
       { clave: 'traslados.ver', nombre: 'Ver la lista y cotizar traslados' },
       { clave: 'traslados.gestionar', nombre: 'Editar comunas, bases y tarifa' },
     ] },
+    { modulo: 'hh', nombre: 'Calculadora HH', permisos: [
+      { clave: 'hh.ver', nombre: 'Usar la calculadora', ayuda: 'Calcular, guardar cálculos y elegir sus propios cargos HH (sin cambiar su tarifa)' },
+      { clave: 'hh.configurar', nombre: 'Configurar cargos y tarifas', ayuda: 'Cargos, tarifas, parámetros, trabajos tipo, multiplicadores y los cargos HH de cada persona' },
+    ] },
   ] },
   { area: 'Operación', modulos: [
     { modulo: 'agenda', nombre: 'Agenda', permisos: [
@@ -183,6 +187,7 @@ export const PERMISO_DE_RUTA: { prefijo: string; permisos: string[] }[] = [
   { prefijo: '/plantillas-informe', permisos: ['cotizaciones.aprobar', 'configuracion.gestionar'] },
   { prefijo: '/personas', permisos: ['personas.ver', 'personas.gestionar'] },
   { prefijo: '/traslados', permisos: ['traslados.ver', 'traslados.gestionar'] },
+  { prefijo: '/calculo-hh', permisos: ['hh.ver', 'hh.configurar'] },
 ];
 
 export function permisosDeRuta(pathname: string): string[] | null {

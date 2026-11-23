@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Pruebas de la base: levanta un Postgres de Supabase desechable (Docker), corre todas las
-# migraciones en orden (como en producción: esquema → datos de antes → fases 1 a 22, cada una desde la 15
+# migraciones en orden (como en producción: esquema → datos de antes → fases 1 a 23, cada una desde la 15
 # dos veces para probar que es idempotente) y después las pruebas. Sale con error si algo falla.
 # Uso: bash tests/sql/correr.sh            (desde la raíz del repo; necesita Docker)
 set -uo pipefail
@@ -46,7 +46,7 @@ insert into public.cotizaciones (id, cliente_id, estado, total) values
 
 for n in 1_usuarios_permisos 2_operacion 3_cotizador 4_cotizador_tecapp 5_tecapp_operacion 6_ot_terreno 7_flujo 8_informes \
          9_planillas 10_visita_tecnico 11_levantamientos 12_avisos_agenda 13_utilidad 14_push 15_revision 15_revision 16_aperturas 16_aperturas 17_descuentos 17_descuentos 18_imprevistos 18_imprevistos 19_fondos 19_fondos 20_control_proyecto 20_control_proyecto 21_anteproyecto 21_anteproyecto \
-         22_analisis_proyecto 22_analisis_proyecto; do
+         22_analisis_proyecto 22_analisis_proyecto 23_calculo_hh 23_calculo_hh; do
   echo "== supabase_fase$n.sql"; correr "supabase_fase$n.sql"
 done
 
