@@ -3,6 +3,8 @@
 //
 //   · Groq (gpt-oss-120b)      — GRATIS, sin tarjeta, ~1.000 consultas/día y muy
 //                                 rápido. GROQ_API_KEY. (Recomendado como principal)
+//                                 Las fotos de boletas y facturas, con su modelo de
+//                                 visión (GROQ_MODEL_VISION); los PDF, por su texto.
 //   · Gemini (flash-lite)      — GRATIS, ~500 consultas/día por modelo. GEMINI_API_KEY.
 //   · Anthropic (Claude Haiku) — de pago por uso (centavos por consulta).
 //                                 ANTHROPIC_API_KEY. Es APARTE del plan Claude Pro.
@@ -287,23 +289,124 @@ export async function probarProveedor(p: ProveedorIA): Promise<{ ok: boolean; ms
 }
 
 // ══════════════════════════════════════════════════════════════════════════════
-// Leer documentos (fase 20): una foto o PDF de una boleta o factura → JSON.
-// Groq (gpt-oss) no lee imágenes: aquí van SOLO los proveedores que sí (Gemini y Claude), en ese
-// orden (IA_PROVIDER=anthropic adelanta a Claude), con el mismo presupuesto de tiempo. Es aparte:
-// generarJSON y su cadena no cambian.
+// Leer documentos (fases 20 y 22): una foto o PDF de una boleta o factura → JSON.
+// Misma cadena que generarJSON (Groq → Gemini → Claude; IA_PROVIDER adelanta a uno), con el mismo
+// presupuesto de tiempo:
+//   · Groq: las fotos con su modelo de visión (GROQ_MODEL_VISION, modo JSON: el esquema va escrito
+//     en el mensaje). Un PDF no lo recibe: se le saca el texto (unpdf; las facturas electrónicas lo
+//     traen adentro) y va al modelo de texto de siempre. Un PDF escaneado (casi sin texto) no se
+//     puede leer así: si Groq es el único proveedor, la ruta responde 422 «pdf_escaneado» y el
+//     navegador lo reintenta como foto.
+//   · Gemini y Claude leen la imagen o el PDF directo.
 // ══════════════════════════════════════════════════════════════════════════════
 
-export type ProveedorImagen = 'gemini' | 'anthropic';
+export type ProveedorImagen = ProveedorIA;
 export interface ArchivoIA { base64: string; mime: string }
 type MedioImagen = 'image/jpeg' | 'image/png' | 'image/gif' | 'image/webp';
 
-/** Proveedores configurados que leen imágenes y PDF (vacío = no hay cómo leer documentos). */
+/** Modelo de visión de Groq (console.groq.com/docs/vision; hasta 3 imágenes por consulta). */
+export const modeloVisionGroq = () => process.env.GROQ_MODEL_VISION || 'qwen/qwen3.8-27b';
+/** Menos letras que esto en un PDF = es una imagen escaneada. */
+const MIN_TEXTO_PDF = 40;
+
+/** El PDF es una imagen escaneada: sin texto que leer (el navegador lo reintenta como foto). */
+export class PdfEscaneadoError extends Error {
+  readonly codigo = 'pdf_escaneado';
+  constructor() {
+    super('El PDF es una imagen escaneada y Groq solo lee el texto de los PDF: se reintenta como foto.');
+    this.name = 'PdfEscaneadoError';
+  }
+}
+
+/** Proveedores configurados que leen documentos (vacío = no hay cómo): todos, en el orden de la cadena. */
 export function proveedoresConImagen(): ProveedorImagen[] {
-  const l: ProveedorImagen[] = [];
-  if (process.env.GEMINI_API_KEY) l.push('gemini');
-  if (process.env.ANTHROPIC_API_KEY) l.push('anthropic');
-  if (l.length === 2 && (process.env.IA_PROVIDER || '').toLowerCase() === 'anthropic') l.reverse();
-  return l;
+  return cadenaProveedores();
+}
+
+/** El JSON de una respuesta: sin el razonamiento (<think>…</think>), sin ```json y sin texto alrededor. */
+export function jsonDeRespuesta<T = unknown>(texto: string): T {
+  const s = String(texto || '')
+    .replace(/<think>[\s\S]*?<\/think>/gi, '')
+    .replace(/^[\s\S]*<\/think>/i, '')        // un cierre sin su apertura
+    .replace(/```(?:json)?/gi, '');
+  const i = s.indexOf('{'), j = s.lastIndexOf('}');
+  if (i < 0 || j <= i) throw new IAError('la respuesta no trae JSON');
+  try {
+    return JSON.parse(s.slice(i, j + 1)) as T;
+  } catch {
+    throw new IAError('la respuesta trae un JSON incompleto');
+  }
+}
+
+/** El error de Groq en palabras (401, 429, 413, modelo retirado…). */
+function errorGroq(status: number, detalle: string, model: string): IAError {
+  if (status === 401) return new IAError('GROQ_API_KEY inválida');
+  if (status === 429) return new IAError('cupo de Groq agotado');
+  if (status === 413) return new IAError('el archivo pesa demasiado para Groq');
+  if (/decommission|deprecat|model_not_found|does not exist|not found/i.test(detalle) || status === 404) {
+    return new IAError(`el modelo ${model} de Groq fue retirado o no existe: cambia GROQ_MODEL_VISION`);
+  }
+  return new IAError(`HTTP ${status} ${detalle.slice(0, 120)}`);
+}
+
+/** Una foto con el modelo de visión de Groq en modo JSON (el esquema va escrito en el mensaje). */
+async function leerImagenGroq<T>(system: string, user: string, schema: GeminiSchema, archivo: ArchivoIA, deadline: number): Promise<T> {
+  const model = modeloVisionGroq();
+  const res = await fetchConPresupuesto('https://api.groq.com/openai/v1/chat/completions', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${process.env.GROQ_API_KEY}` },
+    body: JSON.stringify({
+      model,
+      messages: [
+        { role: 'system', content: system },
+        {
+          role: 'user',
+          content: [
+            { type: 'text', text: `${user}\n\nResponde SOLO con un objeto JSON que cumpla este JSON Schema:\n${JSON.stringify(aJsonSchema(schema, true))}` },
+            { type: 'image_url', image_url: { url: `data:${archivo.mime};base64,${archivo.base64}` } },
+          ],
+        },
+      ],
+      response_format: { type: 'json_object' },
+      // Sin razonamiento: más rápido (cabe en el límite de Netlify) y el modo JSON no admite el «raw».
+      reasoning_effort: 'none',
+      reasoning_format: 'hidden',
+      temperature: 0.1,
+      max_completion_tokens: 6000,
+    }),
+  }, deadline, 9000);
+  if (!res.ok) throw errorGroq(res.status, await res.text().catch(() => ''), model);
+  const data = await res.json();
+  const texto: string = data?.choices?.[0]?.message?.content || '';
+  if (!texto) throw new IAError('respuesta vacía');
+  return jsonDeRespuesta<T>(texto);
+}
+
+/** El texto de un PDF (unpdf, cargado solo aquí). */
+async function textoDePdf(base64: string): Promise<string> {
+  const { getDocumentProxy, extractText } = await import('unpdf');
+  const pdf = await getDocumentProxy(new Uint8Array(Buffer.from(base64, 'base64')));
+  try {
+    const { text } = await extractText(pdf, { mergePages: true });
+    return text.replace(/[ \t]+/g, ' ').replace(/\n{3,}/g, '\n\n').trim();
+  } finally {
+    // PDFDocumentProxy no tiene destroy(): se libera con su tarea de carga.
+    await pdf.loadingTask.destroy().catch(() => {});
+  }
+}
+
+/** Un PDF con Groq: su texto al modelo de texto (esquema estricto; se rescata lo que no calce exacto). */
+async function leerPdfGroq<T>(system: string, user: string, schema: GeminiSchema, archivo: ArchivoIA, deadline: number): Promise<T> {
+  let texto: string;
+  try { texto = await textoDePdf(archivo.base64); } catch { throw new IAError('no se pudo abrir el PDF'); }
+  if (texto.replace(/\s/g, '').length < MIN_TEXTO_PDF) throw new PdfEscaneadoError();
+  return generarGroq<T>(system, `${user}\n\nTexto del documento (sacado del PDF):\n${texto.slice(0, 20000)}`, schema, deadline, true);
+}
+
+function leerGroq<T>(system: string, user: string, schema: GeminiSchema, archivo: ArchivoIA, deadline: number): Promise<T> {
+  return archivo.mime === 'application/pdf'
+    ? leerPdfGroq<T>(system, user, schema, archivo, deadline)
+    : leerImagenGroq<T>(system, user, schema, archivo, deadline);
 }
 
 function leerGemini<T>(system: string, user: string, schema: GeminiSchema, archivo: ArchivoIA, deadline: number): Promise<T> {
@@ -319,25 +422,30 @@ function leerAnthropic<T>(system: string, user: string, schema: GeminiSchema, ar
 }
 
 const LECTORES: Record<ProveedorImagen, <T>(s: string, u: string, sc: GeminiSchema, a: ArchivoIA, d: number) => Promise<T>> = {
+  groq: leerGroq,
   gemini: leerGemini,
   anthropic: leerAnthropic,
 };
 
-/** Lee una imagen o un PDF y devuelve el JSON del esquema, probando Gemini y Claude en cadena. */
+/** Lee una imagen o un PDF y devuelve el JSON del esquema, probando los proveedores en cadena.
+ *  Lanza PdfEscaneadoError si el PDF es una imagen y Groq era el único que podía leerlo. */
 export async function leerArchivoJSON<T>(opts: { system: string; user: string; schema: GeminiSchema; archivo: ArchivoIA }): Promise<T> {
   const proveedores = proveedoresConImagen();
   if (!proveedores.length) {
-    throw new Error('No hay IA que lea documentos: agrega GEMINI_API_KEY (gratis) o ANTHROPIC_API_KEY en el entorno del servidor.');
+    throw new Error('No hay IA que lea documentos: agrega GROQ_API_KEY (gratis), GEMINI_API_KEY (gratis) o ANTHROPIC_API_KEY en el entorno del servidor.');
   }
   const deadline = Date.now() + BUDGET_MS;
   const errores: string[] = [];
+  let escaneado = false;
   for (const p of proveedores) {
     if (deadline - Date.now() < 1500) { errores.push(`${p}: sin tiempo`); break; }
     try {
       return await LECTORES[p]<T>(opts.system, opts.user, opts.schema, opts.archivo, deadline);
     } catch (e) {
+      if (e instanceof PdfEscaneadoError) escaneado = true;
       errores.push(`${p}: ${e instanceof Error ? e.message : 'error'}`);
     }
   }
+  if (escaneado && proveedores.length === 1) throw new PdfEscaneadoError();
   throw new Error(`La IA no pudo leer el documento; intenta de nuevo en unos minutos. (${errores.join(' · ')})`);
 }

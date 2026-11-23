@@ -1,13 +1,15 @@
 'use client';
 
 /**
- * Equipo y mano de obra (fase 20): las fichas del personal interno (sueldo y jornada) y de los
- * externos (valor por jornada y boleta de honorarios), y lo que se registra día a día en cada
- * trabajo. El costo de cada registro lo calcula la base; las cuentas para mostrar antes de guardar
- * están en lib/manoObra.ts.
+ * Equipo y mano de obra (fases 20 y 22): las fichas del personal interno (sueldo y jornada) y de los
+ * externos (valor por jornada y boleta de honorarios), y lo que se registra en cada trabajo: días de
+ * mano de obra u horas de servicio, de un interno, un externo o un pago líquido, con su línea del
+ * presupuesto. El costo de cada registro lo calcula la base; las cuentas para mostrar antes de
+ * guardar están en lib/manoObra.ts y lib/analisisProyecto.ts.
  */
 
 import { supabase } from '@/lib/supabase';
+import type { ModalidadPago } from '@/lib/controlProyecto';
 
 export type TipoTrabajador = 'interno' | 'externo';
 export interface Trabajador {
@@ -26,12 +28,13 @@ export interface TrabajadorElegible {
 }
 
 export interface RegistroManoObra {
-  id: string; cotizacion_id: string | null; partida_id: string | null; fecha: string; trabajador_id: string | null; tipo: TipoTrabajador;
-  nombre: string; horas: number | null; monto_liquido: number | null; honorarios: boolean; retencion_pct: number; costo: number;
+  id: string; cotizacion_id: string | null; partida_id: string | null; fecha: string; trabajador_id: string | null; tipo: ModalidadPago;
+  nombre: string; horas: number | null; jornadas: number | null; monto_liquido: number | null; honorarios: boolean; retencion_pct: number; costo: number;
   pagado: boolean; fecha_pago: string | null; documento: string | null; nota: string | null; created_at: string;
+  clase: 'mano_obra' | 'servicio'; presupuesto_linea_id: string | null;
 }
-export type NuevoRegistro = Pick<RegistroManoObra, 'cotizacion_id' | 'fecha' | 'tipo'> &
-  Partial<Pick<RegistroManoObra, 'partida_id' | 'trabajador_id' | 'nombre' | 'horas' | 'monto_liquido' | 'honorarios' | 'pagado' | 'documento' | 'nota'>>;
+type CamposRegistro = 'partida_id' | 'trabajador_id' | 'nombre' | 'horas' | 'jornadas' | 'monto_liquido' | 'honorarios' | 'pagado' | 'documento' | 'nota' | 'clase' | 'presupuesto_linea_id';
+export type NuevoRegistro = Pick<RegistroManoObra, 'cotizacion_id' | 'fecha' | 'tipo'> & Partial<Pick<RegistroManoObra, CamposRegistro>>;
 
 export const fichaVacia = (tipo: TipoTrabajador): NuevoTrabajador => ({
   tipo, nombre: '', rut: null, oficio: null, usuario_id: null, activo: true,
@@ -69,16 +72,22 @@ export const manoObraService = {
     return ((data || []) as TrabajadorElegible[]).map(t => ({ ...t, horas_dia: Number(t.horas_dia), valor_jornada: Number(t.valor_jornada),
       costo_dia: t.costo_dia === null ? null : Number(t.costo_dia) }));
   },
+  /** Lo registrado en un trabajo (el técnico solo ve lo suyo). */
   async registros(cotId: string): Promise<RegistroManoObra[]> {
     const { data, error } = await supabase.from('mano_obra').select('*').eq('cotizacion_id', cotId)
       .order('fecha', { ascending: false }).order('created_at', { ascending: false });
-    if (error) return [];
+    lanzar(error);
     return (data || []) as RegistroManoObra[];
   },
   async registrar(filas: NuevoRegistro[]) {
     if (!filas.length) return;
     // Lo que una fila no trae toma el valor por omisión de la columna (no NULL).
     const { error } = await supabase.from('mano_obra').insert(filas, { defaultToNull: false });
+    lanzar(error);
+  },
+  /** Corrige un registro (la base vuelve a calcular su costo si cambian días, horas, monto, persona o tipo). */
+  async corregir(id: string, cambios: Partial<NuevoRegistro>) {
+    const { error } = await supabase.from('mano_obra').update(cambios).eq('id', id);
     lanzar(error);
   },
   async marcarPagado(id: string, pagado: boolean, documento?: string | null) {

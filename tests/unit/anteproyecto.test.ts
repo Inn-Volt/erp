@@ -3,15 +3,13 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  cuadreDocumento, ejecucionDe, lineasDesdeCotizacion, palabras, realDeLineas, resumenPresupuesto, sugerirLinea, totalLinea, type LineaPresupuesto,
+  cuadreDocumento, ejecucionDe, lineasDesdeCotizacion, palabras, resumenPresupuesto, sugerirLinea, totalLinea,
 } from '../../lib/anteproyecto.ts';
 import {
   control, flujoSemanal, kpis, movimientos, planPorDefecto, presupuesto, repartoDocumento, SIN_PARTIDA,
-  type CompraCP, type DocumentoLineaCP, type GastoCP, type ManoObraCP,
+  type CompraCP, type DocumentoLineaCP, type GastoCP,
 } from '../../lib/controlProyecto.ts';
 import { COSTO_IV0080, IV0080, PLAN_COBRO_IV0080, TOTAL_IV0080 } from './fixture_iv0080.ts';
-
-const conIds = (ls: LineaPresupuesto[]) => ls.map((l, i) => ({ ...l, id: `L${i}` }));
 
 test('El presupuesto nace copiando la cotización: mismas líneas y el mismo costo por partida', () => {
   const lineas = lineasDesdeCotizacion(IV0080);
@@ -83,21 +81,8 @@ test('¿Las líneas cuadran con el documento? (neto de la factura o total con IV
   assert.deepEqual(cuadreDocumento([50000], 100000), { suma: 50000, cuadra: false, diferencia: -50000 });
 });
 
-test('Lo comprado de cada material y lo gastado en mano de obra por persona', () => {
-  const lineas = conIds([
-    { partida_id: 'p2', tipo: 'material', descripcion: 'Cable 6 mm²', unidad: 'm', cantidad: 50, costo_unitario: 1200, linea_id: 'l1', trabajador_id: null, orden: 0 },
-    { partida_id: 'p2', tipo: 'mano_obra', descripcion: 'Joaquín', unidad: 'día', cantidad: 3, costo_unitario: 47955, linea_id: null, trabajador_id: 'T1', orden: 1 },
-  ]);
-  const compra: CompraCP = { id: 'k', fecha: '2026-11-25', tipo_doc: 'boleta', proveedor_nombre: 'X', neto: 0, exento: 0, total: 36000, pagada: true };
-  const mo: ManoObraCP = { id: 'm', fecha: '2026-11-26', tipo: 'interno', nombre: 'Joaquín', horas: 9, monto_liquido: null, honorarios: false, costo: 47955, pagado: false, fecha_pago: null, partida_id: 'p2', trabajador_id: 'T1' };
-  const m = movimientos({
-    compras: [compra], manoObra: [mo],
-    lineas: [{ id: 'd', compra_id: 'k', gasto_id: null, partida_id: 'p2', presupuesto_linea_id: 'L0', tipo: 'material', descripcion: 'Cable', cantidad: 30, monto: 36000 }],
-  });
-  const r = realDeLineas(lineas, m);
-  assert.deepEqual(r.get('L0'), { cantidad: 30, monto: 36000 });
-  assert.deepEqual(r.get('L1'), { cantidad: 9, monto: 47955 });
-  assert.equal(totalLinea(lineas[0]), 60000);
+test('El total de una línea es cantidad × costo unitario', () => {
+  assert.equal(totalLinea({ cantidad: 50, costo_unitario: 1200 }), 60000);
 });
 
 test('Sugerir a qué material corresponde lo que dice la boleta', () => {

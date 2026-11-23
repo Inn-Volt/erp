@@ -186,6 +186,12 @@ CREATE POLICY mano_obra_eliminar ON public.mano_obra FOR DELETE TO authenticated
 -- El costo: interno = costo del día × horas ÷ horas de su jornada; externo = lo líquido, o con
 -- boleta de honorarios lo bruto (líquido ÷ (1 − retención)). Se calcula al registrar o al cambiar
 -- las horas, el monto, la persona o la boleta; si no, queda como estaba.
+-- La fase 22 reemplaza esta función (pagos líquidos, servicios por hora, líneas del presupuesto):
+-- si ya se corrió, volver a correr esta fase no la pisa.
+DO $fase20$ BEGIN
+IF NOT EXISTS (SELECT 1 FROM information_schema.columns
+               WHERE table_schema = 'public' AND table_name = 'mano_obra' AND column_name = 'clase') THEN
+EXECUTE $f$
 CREATE OR REPLACE FUNCTION public.mano_obra_reglas()
 RETURNS TRIGGER LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
 DECLARE t public.trabajadores;
@@ -221,6 +227,9 @@ BEGIN
   ELSE NEW.fecha_pago := NULL; END IF;
   RETURN NEW;
 END $$;
+$f$;
+END IF;
+END $fase20$;
 REVOKE EXECUTE ON FUNCTION public.mano_obra_reglas() FROM PUBLIC, anon, authenticated;
 DROP TRIGGER IF EXISTS trg_mano_obra_reglas ON public.mano_obra;
 CREATE TRIGGER trg_mano_obra_reglas BEFORE INSERT OR UPDATE ON public.mano_obra

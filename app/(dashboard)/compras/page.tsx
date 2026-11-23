@@ -55,15 +55,14 @@ function FormCompra({ compra, destinos, proveedores, destinoInicial, onClose, on
   // Fase 20: partida del trabajo (opcional) y tipo de costo.
   const fase20 = useFase(20);
   const partidas = usePartidasDe(destino.startsWith('cot:') ? destino.slice(4) : null, fase20);
-  // Fase 21: el detalle de lo comprado (por partida y material del presupuesto).
-  const fase21 = useFase(21);
+  // El detalle de lo comprado (por partida y material del presupuesto).
   const [lineas, setLineas] = useState<LineaDocumentoEdit[]>([]);
   useEffect(() => {
-    if (!fase21 || !compra?.id) return;
+    if (!compra?.id) return;
     anteproyectoService.lineasDe({ compraId: compra.id }).then(ls => setLineas(ls.map(l => nuevaLineaDocumento({
       descripcion: l.descripcion, cantidad: l.cantidad, unidad: l.unidad || '', monto: Number(l.monto), partida_id: l.partida_id, presupuesto_linea_id: l.presupuesto_linea_id, tipo: l.tipo,
-    }))));
-  }, [fase21, compra?.id]);
+    })))).catch(() => toastError('No se pudo leer el detalle de la compra'));
+  }, [compra?.id, toastError]);
   // «Leer con IA»: lo que leyó queda en amarillo hasta guardar.
   const [deIA, setDeIA] = useState<Set<string>>(new Set());
   const [avisosIA, setAvisosIA] = useState<string[]>([]);
@@ -80,7 +79,7 @@ function FormCompra({ compra, destinos, proveedores, destinoInicial, onClose, on
     });
     setDeIA(new Set(leidos));
     setAvisosIA(avisos);
-    if (fase21 && doc.lineas.length) {
+    if (doc.lineas.length) {
       setLineas(doc.lineas.map(l => nuevaLineaDocumento({ descripcion: l.descripcion, cantidad: l.cantidad, unidad: l.unidad, monto: l.monto, tipo: d.tipo_costo || 'material' })));
     }
     if (!leidos.length) toastError('La IA no encontró datos en el documento: complétalo a mano.');
@@ -111,7 +110,7 @@ function FormCompra({ compra, destinos, proveedores, destinoInicial, onClose, on
         fecha_pago: d.pagada ? d.fecha_pago || d.fecha : null, vencimiento: d.vencimiento || null,
         ...(fase20 ? { partida_id: destino.startsWith('cot:') && d.partida_id ? d.partida_id : null, tipo_costo: d.tipo_costo || 'material' } : {}),
       });
-      if (fase21) await anteproyectoService.guardarLineas({ compra_id: id }, destino.startsWith('cot:') ? lineas : []);
+      await anteproyectoService.guardarLineas({ compra_id: id }, destino.startsWith('cot:') ? lineas : []);
       success(compra ? 'Compra actualizada' : 'Compra ingresada');
       onListo();
     } catch (e) { toastError(mensajeCompra(e)); }
@@ -175,7 +174,7 @@ function FormCompra({ compra, destinos, proveedores, destinoInicial, onClose, on
                 {TIPOS_COSTO.map(t => <option key={t.clave} value={t.clave}>{t.nombre}</option>)}
               </select></div>
           )}
-          {fase21 && destino.startsWith('cot:') && (
+          {destino.startsWith('cot:') && (
             <div style={{ gridColumn: '1 / -1', display: 'flex', flexDirection: 'column' }}>
               <LineasDocumento cotId={destino.slice(4)} partidas={partidas} partidaPorOmision={d.partida_id || null} lineas={lineas} onChange={setLineas}
                 costo={conIva || d.tipo_doc === 'factura_exenta' ? d.neto + d.exento : d.total} total={d.total} />

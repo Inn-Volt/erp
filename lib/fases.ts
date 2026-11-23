@@ -18,8 +18,8 @@ const MARCAS: Record<number, () => Promise<boolean>> = {
   19: async () => !(await supabase.from('fondo_movimientos').select('id', { head: true, count: 'exact' }).limit(1)).error,
   // Fase 20 (supabase_fase20_control_proyecto.sql): partida en gastos/compras/horas y flujo de caja del trabajo.
   20: async () => !(await supabase.from('cotizaciones').select('flujo_plan', { head: true }).limit(1)).error,
-  // Fase 21 (supabase_fase21_anteproyecto.sql): presupuesto de ejecución y detalle de boletas y facturas.
-  21: async () => !(await supabase.from('presupuesto_lineas').select('id', { head: true }).limit(1)).error,
+  // Las fases 21 y 22 (presupuesto de ejecución, detalle de boletas y análisis de proyecto) son
+  // requisito: no tienen marca, la app nueva no funciona sin ellas.
 };
 
 const cache = new Map<number, Promise<boolean>>();

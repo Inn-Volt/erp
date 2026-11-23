@@ -15,7 +15,7 @@ import { Check, Loader2, Play, Search } from 'lucide-react';
 import PageHeader from '@/components/PageHeader';
 import FaltaSQL from '@/components/FaltaSQL';
 import { ChipTrabajo, margenPct } from '@/components/trabajos/TrabajoPanel';
-import { ChipEstado } from '@/components/trabajos/ControlPresupuesto';
+import { ChipEstado } from '@/components/trabajos/ChipEstado';
 import { estadoControl } from '@/lib/controlProyecto';
 import { costoReal, faltaFase7, presupuestoDe, trabajosService, type Trabajo } from '@/services/trabajos';
 import { useIniciarTrabajo } from '@/components/trabajos/IniciarTrabajo';

@@ -35,7 +35,7 @@ export default function LineasDocumento({ cotId, partidas, partidaPorOmision, li
   const [candidatas, setCandidatas] = useState<{ cotId: string; lista: LineaAsignable[] } | null>(null);
   useEffect(() => {
     let vivo = true;
-    anteproyectoService.paraAsignar(cotId).then(lista => { if (vivo) setCandidatas({ cotId, lista }); });
+    anteproyectoService.paraAsignar(cotId).catch(() => []).then(lista => { if (vivo) setCandidatas({ cotId, lista }); });
     return () => { vivo = false; };
   }, [cotId]);
   const lista = useMemo(() => (candidatas?.cotId === cotId ? candidatas.lista : []), [candidatas, cotId]);

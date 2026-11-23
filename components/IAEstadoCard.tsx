@@ -10,7 +10,7 @@ import { Sparkles, Loader2, CheckCircle2, XCircle, Circle } from 'lucide-react';
 import { fetchConSesion } from '@/lib/fetchConSesion';
 
 type P = 'groq' | 'gemini' | 'anthropic';
-interface Estado { orden: P[]; configurados: Record<P, boolean>; modelos: Record<P, string>; }
+interface Estado { orden: P[]; configurados: Record<P, boolean>; modelos: Record<P, string>; vision?: { groq?: string } }
 
 const INFO: Record<P, { nombre: string; costo: string; env: string; link: string; linkTxt: string }> = {
   groq:      { nombre: 'Groq',   costo: 'Gratis · ~1.000 consultas/día · sin tarjeta', env: 'GROQ_API_KEY',      link: 'https://console.groq.com/keys',        linkTxt: 'console.groq.com/keys' },
@@ -78,6 +78,10 @@ export default function IAEstadoCard() {
                 {on ? (
                   <>
                     <span style={{ fontSize: '0.68rem', color: 'var(--faint)', fontFamily: 'monospace' }}>{estado.modelos[p]}</span>
+                    {p === 'groq' && estado.vision?.groq && (
+                      <span style={{ fontSize: '0.68rem', color: 'var(--faint)' }}>
+                        Boletas y facturas (fotos): <span style={{ fontFamily: 'monospace' }}>{estado.vision.groq}</span></span>
+                    )}
                     <button onClick={() => probar(p)} disabled={probando !== null} className="btn btn-ghost btn-sm" style={{ alignSelf: 'flex-start', marginTop: 4 }}>
                       {probando === p ? <Loader2 size={12} className="iv-spin" /> : <Sparkles size={12} />} Probar
                     </button>
