@@ -4,7 +4,7 @@
 
 import { NextResponse } from 'next/server';
 import { sesionConPermisos, tienePermiso, noAutorizado, sinPermiso } from '@/lib/authServidor';
-import { cadenaProveedores, probarProveedor, type ProveedorIA } from '@/lib/ia';
+import { cadenaProveedores, modeloVisionGroq, probarProveedor, type ProveedorIA } from '@/lib/ia';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -25,6 +25,8 @@ export async function GET(req: Request) {
       gemini: process.env.GEMINI_MODEL || 'gemini-3.5-flash-lite',
       anthropic: process.env.IA_MODEL || 'claude-haiku-4-5',
     },
+    // Leer boletas y facturas: Groq usa su modelo de visión para las fotos (los PDF van por su texto).
+    vision: { groq: modeloVisionGroq() },
   });
 }
 

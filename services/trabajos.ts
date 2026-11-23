@@ -67,7 +67,7 @@ export const trabajosService = {
     const [t, r, p] = await Promise.all([
       supabase.from('cotizaciones').select(SEL).eq('estado', 'Aprobada').order('aceptada_at', { ascending: false, nullsFirst: false }),
       supabase.from('cotizacion_resultado').select('*'),
-      supabase.from('presupuesto_lineas').select('cotizacion_id, cantidad, costo_unitario'),   // fase 21 (sin ella o sin permiso: nada)
+      supabase.from('presupuesto_lineas').select('cotizacion_id, cantidad, costo_unitario'),   // sin permiso de ver costos: nada
     ]);
     if (t.error) throw t.error;
     const res = new Map(((r.data || []) as ResultadoTrabajo[]).map(x => [x.cotizacion_id, x]));

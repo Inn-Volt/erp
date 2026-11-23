@@ -8,13 +8,12 @@
  *  · resumenPresupuesto: el total por partida y por tipo de costo.
  *  · sugerirLinea: a qué línea del presupuesto corresponde lo que dice una boleta («CABLE THHN 6MM»
  *    → «Cable 6 mm²»), comparando palabras. Es solo una sugerencia: la persona revisa.
- *  · realDeLineas: lo comprado de cada material (cantidad y $, de las líneas de boletas y facturas
- *    asignadas a él) y lo gastado en cada línea de mano de obra (lo registrado de esa persona en esa
- *    partida). El reparto del costo de un documento entre sus líneas está en controlProyecto.
+ *  · Lo real de cada línea (lo comprado, las jornadas y horas hechas, lo gastado) está en
+ *    lib/analisisProyecto.ts; el reparto del costo de un documento entre sus líneas, en controlProyecto.
  */
 
 import { calcular } from '@/lib/cotizador/calculo';
-import type { CotizacionCP, Movimiento, PresupuestoEjecucion, TipoCosto } from '@/lib/controlProyecto';
+import type { CotizacionCP, ModalidadPago, PresupuestoEjecucion, TipoCosto } from '@/lib/controlProyecto';
 
 export interface LineaPresupuesto {
   id?: string;
@@ -28,6 +27,13 @@ export interface LineaPresupuesto {
   trabajador_id: string | null;
   orden: number;
   nota?: string | null;
+  /** Fase 22. Mano de obra (por día) y servicios (por hora): cuántas personas (solo se muestra: la
+   *  cantidad ya es personas × días u horas), cómo se les paga y, si es externo o líquido, lo que se
+   *  les paga por día u hora (con boleta de honorarios el costo suma la retención). */
+  personas?: number;
+  modalidad?: ModalidadPago | null;
+  honorarios?: boolean;
+  valor_liquido?: number | null;
 }
 
 const n = (v: unknown) => Number(v) || 0;
@@ -108,28 +114,6 @@ export const ejecucionDe = (lineas: Pick<LineaPresupuesto, 'partida_id' | 'tipo'
   const r = resumenPresupuesto(lineas);
   return { porPartida: r.porPartida, porTipo: r.porTipo };
 };
-
-// ── Lo real de cada línea ───────────────────────────────────────────────────
-export interface RealLinea { cantidad: number; monto: number }
-
-/** Materiales: lo comprado (líneas de documentos asignadas). Mano de obra con persona: lo registrado de
- *  ella en esa partida (cantidad = horas). Las demás líneas solo se comparan por partida. */
-export function realDeLineas(lineas: (LineaPresupuesto & { id: string })[], movs: Movimiento[]): Map<string, RealLinea> {
-  const out = new Map<string, RealLinea>();
-  const sumar = (id: string, cantidad: number, monto: number) => {
-    const r = out.get(id) || { cantidad: 0, monto: 0 };
-    out.set(id, { cantidad: r.cantidad + cantidad, monto: r.monto + monto });
-  };
-  const ids = new Set(lineas.map(l => l.id));
-  for (const m of movs) if (m.presupuestoLineaId && ids.has(m.presupuestoLineaId)) sumar(m.presupuestoLineaId, n(m.cantidad), m.monto);
-  for (const l of lineas) {
-    if (l.tipo !== 'mano_obra' || !l.trabajador_id) continue;
-    for (const m of movs) {
-      if (m.origen === 'mano_obra' && m.trabajadorId === l.trabajador_id && (m.partidaId || null) === (l.partida_id || null)) sumar(l.id, n(m.cantidad), m.monto);
-    }
-  }
-  return out;
-}
 
 /** ¿Las líneas suman lo del documento? (las de una factura suelen venir en neto; las de una boleta, con IVA). */
 export function cuadreDocumento(montos: number[], costo: number, total?: number) {

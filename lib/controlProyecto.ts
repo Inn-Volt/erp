@@ -85,10 +85,15 @@ export interface CompraCP {
 export interface HoraCP {
   id: string; fecha: string; horas: number; costo_hora: number; usuario_id: string; nota?: string | null;
 }
+/** Cómo se le paga a quien trabajó: interno (su ficha), externo (líquido; con boleta suma la retención) o líquido (tal cual). */
+export type ModalidadPago = 'interno' | 'externo' | 'liquido';
 export interface ManoObraCP {
-  id: string; fecha: string; tipo: 'interno' | 'externo'; nombre: string; horas: number | null; monto_liquido: number | null;
+  id: string; fecha: string; tipo: ModalidadPago; nombre: string; horas: number | null; monto_liquido: number | null;
   honorarios: boolean; costo: number; pagado: boolean; fecha_pago: string | null; documento?: string | null; nota?: string | null;
   partida_id?: string | null; trabajador_id?: string | null;
+  /** Fase 22: mano de obra por día o servicio por hora; días trabajados; la línea del presupuesto. */
+  clase?: 'mano_obra' | 'servicio' | null; jornadas?: number | null; presupuesto_linea_id?: string | null;
+  created_at?: string;
 }
 /** Una línea del detalle de una compra o de un gasto (fase 21). */
 export interface DocumentoLineaCP {
@@ -128,6 +133,9 @@ export interface Movimiento {
   cantidad: number | null;
   /** Mano de obra: la persona del equipo. */
   trabajadorId: string | null;
+  /** Mano de obra y servicios: las horas o los días (jornadas) registrados. */
+  horas: number | null;
+  jornadas: number | null;
 }
 
 const n = (v: unknown) => Number(v) || 0;
@@ -143,7 +151,7 @@ const tipoDeGasto = (categoria: string): TipoCosto => (categoria === 'materiales
 
 const DOC_COMPRA: Record<string, string> = { factura: 'Factura', factura_exenta: 'Factura exenta', boleta: 'Boleta', nota_credito: 'Nota de crédito', otro: 'Documento' };
 const num = (v: number) => String(Math.round(v * 100) / 100).replace('.', ',');
-const sinDetalle = { detallado: false, presupuestoLineaId: null, cantidad: null, trabajadorId: null };
+const sinDetalle = { detallado: false, presupuestoLineaId: null, cantidad: null, trabajadorId: null, horas: null, jornadas: null };
 
 /** Reparte el costo de un documento entre sus líneas en proporción a sus montos: enteros, suma exacta. */
 export function repartoDocumento(costo: number, montos: number[]): number[] {
@@ -188,21 +196,27 @@ export function movimientos(d: { gastos?: GastoCP[]; compras?: CompraCP[]; manoO
     }, deCompra.get(c.id)));
   }
   for (const m of d.manoObra || []) {
-    const externo = m.tipo === 'externo';
+    const sePaga = m.tipo !== 'interno';
+    const horas = m.horas === null || m.horas === undefined ? null : n(m.horas);
+    const jornadas = m.jornadas === null || m.jornadas === undefined ? null : n(m.jornadas);
+    const servicio = m.clase === 'servicio';
+    const trabajado = jornadas !== null ? `${num(jornadas)} ${jornadas === 1 ? 'día' : 'días'}` : horas !== null ? `${num(horas)} h` : '';
     out.push({
-      origen: 'mano_obra', id: m.id, fecha: m.fecha, fechaCaja: externo && m.pagado && m.fecha_pago ? m.fecha_pago : m.fecha,
-      documento: externo ? (m.honorarios ? `Boleta de honorarios${m.documento ? ` ${m.documento}` : ''}` : 'Pago líquido') : `${num(n(m.horas))} h`,
-      quien: m.nombre, detalle: m.nota || '', partidaId: m.partida_id || SIN_PARTIDA, tipo: 'mano_obra', monto: n(m.costo),
-      // Las horas internas se pagan con el sueldo: cuentan como salidas; un externo, cuando se le paga.
-      pagable: externo, pagada: externo ? !!m.pagado : true,
-      ...sinDetalle, cantidad: externo ? null : n(m.horas), trabajadorId: m.trabajador_id || null,
+      origen: 'mano_obra', id: m.id, fecha: m.fecha, fechaCaja: sePaga && m.pagado && m.fecha_pago ? m.fecha_pago : m.fecha,
+      documento: m.tipo === 'externo' ? (m.honorarios ? `Boleta de honorarios${m.documento ? ` ${m.documento}` : ''}` : 'Pago a externo')
+        : m.tipo === 'liquido' ? 'Pago líquido' : trabajado,
+      quien: m.nombre, detalle: m.nota || '', partidaId: m.partida_id || SIN_PARTIDA, tipo: servicio ? 'servicio' : 'mano_obra', monto: n(m.costo),
+      // Las horas internas se pagan con el sueldo: cuentan como salidas; externos y líquidos, cuando se les paga.
+      pagable: sePaga, pagada: sePaga ? !!m.pagado : true,
+      ...sinDetalle, presupuestoLineaId: m.presupuesto_linea_id || null, cantidad: servicio ? horas : jornadas ?? horas,
+      trabajadorId: m.trabajador_id || null, horas, jornadas,
     });
   }
   for (const h of d.horas || []) {
     out.push({
       origen: 'hora', id: h.id, fecha: h.fecha, fechaCaja: h.fecha, documento: `${num(n(h.horas))} h`, quien: h.usuario_id,
       detalle: h.nota || '', partidaId: SIN_PARTIDA, tipo: 'mano_obra', monto: Math.round(n(h.horas) * n(h.costo_hora) * 100) / 100, pagable: false, pagada: true,
-      ...sinDetalle,
+      ...sinDetalle, horas: n(h.horas),
     });
   }
   return out.sort((a, b) => a.fecha.localeCompare(b.fecha));

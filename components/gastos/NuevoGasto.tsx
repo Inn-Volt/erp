@@ -10,6 +10,8 @@
  *     la empresa. Con `gasto`, corrige uno ya rendido (lo observado vuelve a «rendido»).
  *   · Con la fase 20: «Partida (opcional)» del trabajo, para el control de presupuesto por partida, y
  *     «Leer con IA» la foto de la boleta (prellena monto, fecha y detalle; lo leído queda en amarillo).
+ *   · Con `inicial` (fase 22) se abre ya llenado: desde «Registrar compra (IA)» (monto, detalle de lo
+ *     comprado y la foto) o desde «Agregar gasto» del análisis (partida y categoría).
  */
 
 import { useEffect, useState } from 'react';
@@ -32,13 +34,20 @@ import { fechaLocal, formatCLP } from '@/utils';
 
 /** A qué va el gasto: «cot:<id>» (trabajo), «proy:<id>» (proyecto) u «ot:<id>» (de antes). */
 export interface DestinoGasto { valor: string; etiqueta: string; grupo: 'Trabajos' | 'Proyectos' | 'OT' }
+/** Lo que trae un gasto nuevo que se abre ya llenado. */
+export interface InicialGasto {
+  monto?: number; fecha?: string; descripcion?: string; categoria?: CategoriaGasto; partida_id?: string | null;
+  lineas?: LineaDocumentoEdit[]; boleta?: File | null;
+}
 
 const destinoDe = (g: Gasto) => (g.cotizacion_id ? `cot:${g.cotizacion_id}` : g.proyecto_id ? `proy:${g.proyecto_id}` : g.ot_id ? `ot:${g.ot_id}` : '');
 
-export default function NuevoGasto({ destinos, destinoInicial, anticipos, gasto, onClose, onListo }: {
+export default function NuevoGasto({ destinos, destinoInicial, anticipos, gasto, inicial, onClose, onListo }: {
   destinos: DestinoGasto[]; destinoInicial: string; anticipos: Anticipo[];
   /** Corregir un gasto ya rendido (o observado). */
   gasto?: Gasto | null;
+  /** Un gasto nuevo ya llenado (fase 22). */
+  inicial?: InicialGasto;
   onClose: () => void; onListo: () => void;
 }) {
   const { success, error: toastError } = useToast();
@@ -46,23 +55,23 @@ export default function NuevoGasto({ destinos, destinoInicial, anticipos, gasto,
   const fondos = useFase(19);
   const vigentes = anticipos.filter(a => a.estado === 'entregado');
   const [f, setF] = useState({
-    fecha: gasto?.fecha || fechaLocal(), monto: gasto ? Number(gasto.monto) : 0, categoria: (gasto?.categoria || 'combustible') as CategoriaGasto,
-    descripcion: gasto?.descripcion || '', destino: gasto ? destinoDe(gasto) : destinoInicial, anticipo_id: vigentes[0]?.id || '',
+    fecha: gasto?.fecha || inicial?.fecha || fechaLocal(), monto: gasto ? Number(gasto.monto) : inicial?.monto || 0,
+    categoria: (gasto?.categoria || inicial?.categoria || 'combustible') as CategoriaGasto,
+    descripcion: gasto?.descripcion || inicial?.descripcion || '', destino: gasto ? destinoDe(gasto) : destinoInicial, anticipo_id: vigentes[0]?.id || '',
     pagado_con: (gasto?.pagado_con === 'empresa' ? 'empresa' : 'fondo') as 'fondo' | 'empresa', sin_boleta: !!gasto?.sin_boleta,
-    partida_id: gasto?.partida_id || '',
+    partida_id: gasto?.partida_id || inicial?.partida_id || '',
   });
   // Fase 20: la partida del trabajo elegido (opcional).
   const fase20 = useFase(20);
   const partidas = usePartidasDe(f.destino.startsWith('cot:') ? f.destino.slice(4) : null, fase20);
-  // Fase 21: el detalle de lo comprado (por partida y material del presupuesto).
-  const fase21 = useFase(21);
-  const [lineas, setLineas] = useState<LineaDocumentoEdit[]>([]);
+  // El detalle de lo comprado (por partida y material del presupuesto).
+  const [lineas, setLineas] = useState<LineaDocumentoEdit[]>(() => inicial?.lineas || []);
   useEffect(() => {
-    if (!fase21 || !gasto?.id) return;
+    if (!gasto?.id) return;
     anteproyectoService.lineasDe({ gastoId: gasto.id }).then(ls => setLineas(ls.map(l => nuevaLineaDocumento({
       descripcion: l.descripcion, cantidad: l.cantidad, unidad: l.unidad || '', monto: Number(l.monto), partida_id: l.partida_id, presupuesto_linea_id: l.presupuesto_linea_id, tipo: l.tipo,
-    }))));
-  }, [fase21, gasto?.id]);
+    })))).catch(() => toastError('No se pudo leer el detalle del gasto'));
+  }, [gasto?.id, toastError]);
   // «Leer con IA» la boleta: lo que leyó queda en amarillo para revisar.
   const [deIA, setDeIA] = useState<Set<string>>(new Set());
   const [avisosIA, setAvisosIA] = useState<string[]>([]);
@@ -72,12 +81,12 @@ export default function NuevoGasto({ destinos, destinoInicial, anticipos, gasto,
     setF(x => ({ ...x, ...(doc.total ? { monto: doc.total } : {}), ...(doc.fecha ? { fecha: doc.fecha } : {}), ...(detalle ? { descripcion: detalle } : {}) }));
     setDeIA(new Set([doc.total ? 'monto' : '', doc.fecha ? 'fecha' : '', detalle ? 'descripcion' : ''].filter(Boolean)));
     setAvisosIA(avisos.filter(a => !/RUT/.test(a)));
-    if (fase21 && doc.lineas.length) {
+    if (doc.lineas.length) {
       setLineas(doc.lineas.map(l => nuevaLineaDocumento({ descripcion: l.descripcion, cantidad: l.cantidad, unidad: l.unidad, monto: l.monto, tipo: f.categoria === 'materiales' ? 'material' : 'operacion' })));
     }
     if (!doc.total && !doc.fecha && !detalle) toastError('La IA no encontró datos en la boleta: complétala a mano.');
   };
-  const [boleta, setBoleta] = useState<File | null>(null);
+  const [boleta, setBoleta] = useState<File | null>(() => inicial?.boleta || null);
   const [guardando, setGuardando] = useState(false);
   // Lo disponible en el fondo (al corregir, cuenta también lo que este gasto ya tomaba).
   const [disponible, setDisponible] = useState<number | null>(null);
@@ -116,7 +125,7 @@ export default function NuevoGasto({ destinos, destinoInicial, anticipos, gasto,
         gastoId = await gastosService.crear(datos);
         success(fondos && f.pagado_con !== 'empresa' && reparto.propio > 0 ? `Gasto rendido: te debemos ${formatCLP(reparto.propio)}` : 'Gasto rendido');
       }
-      if (fase21 && gastoId) await anteproyectoService.guardarLineas({ gasto_id: gastoId }, tipo === 'cot' ? lineas : []);
+      if (gastoId) await anteproyectoService.guardarLineas({ gasto_id: gastoId }, tipo === 'cot' ? lineas : []);
       onListo();
     } catch (e) { toastError(e instanceof Error ? e.message : 'No se pudo rendir'); }
     finally { setGuardando(false); }
@@ -148,7 +157,7 @@ export default function NuevoGasto({ destinos, destinoInicial, anticipos, gasto,
             </select>
             {destinos.length === 0 && <p style={{ margin: '4px 0 0', fontSize: '0.76rem', color: 'var(--muted)' }}>Aún no hay trabajos aprobados ni proyectos.</p>}</div>
           {fase20 && <SelectorPartida partidas={partidas} value={f.partida_id} onChange={v => setF({ ...f, partida_id: v })} />}
-          {fase21 && f.destino.startsWith('cot:') && f.monto > 0 && (
+          {f.destino.startsWith('cot:') && f.monto > 0 && (
             <LineasDocumento cotId={f.destino.slice(4)} partidas={partidas} partidaPorOmision={f.partida_id || null} lineas={lineas} onChange={setLineas}
               costo={f.monto} total={f.monto} />
           )}
