@@ -1,26 +1,48 @@
 /**
- * Calculadora HH (fase 23): la UF y el dólar del día.
- * La ruta /api/hh/indicadores los consulta en mindicador.cl desde el servidor, guarda el valor del
- * día en hh_indicadores y lo reutiliza ese día. Si mindicador no responde (o da un valor fuera de
- * rango), usa el último guardado y, si no hay ninguno, el respaldo de los parámetros. Aquí está la
- * parte pura de esa decisión (con pruebas en tests/unit/hh.test.ts).
+ * La UF y el dólar del día (Calculadora HH y botón «UF de hoy» del cotizador).
+ * La ruta /api/hh/indicadores los consulta desde el servidor en dos fuentes a la vez
+ * (mindicador.cl y boostr.cl: se queda con la primera que dé los dos valores), guarda el valor del
+ * día en hh_indicadores y lo reutiliza ese día. Si ninguna responde (o dan valores fuera de rango
+ * o viejos), usa el último guardado y, si no hay ninguno, el respaldo de los parámetros. Aquí está
+ * la parte pura de esa decisión (con pruebas en tests/unit/hh.test.ts).
  */
 
 export type TipoIndicador = 'uf' | 'usd';
-export type FuenteIndicador = 'mindicador' | 'respaldo' | 'manual';
+export type FuenteEnLinea = 'mindicador' | 'boostr';
+export type FuenteIndicador = FuenteEnLinea | 'respaldo' | 'manual';
 
 /** Rangos sanos: fuera de esto se descarta el valor (una API caída a veces responde 0 o basura). */
 export const RANGOS: Record<TipoIndicador, [number, number]> = { uf: [20000, 80000], usd: [500, 2000] };
+
+/** Un valor de una API con más días que esto se descarta: una fuente que dejó de actualizarse no congela la UF. */
+const DIAS_MAXIMOS = 7;
 
 export const valorSano = (tipo: TipoIndicador, v: unknown): number | null => {
   const x = Number(v);
   return Number.isFinite(x) && x >= RANGOS[tipo][0] && x <= RANGOS[tipo][1] ? x : null;
 };
 
-/** El valor de una respuesta de mindicador.cl (`serie[0].valor`), si es sano. */
-export function valorMindicador(tipo: TipoIndicador, json: unknown): number | null {
-  const serie = (json as { serie?: { valor?: unknown }[] } | null)?.serie;
-  return Array.isArray(serie) && serie.length ? valorSano(tipo, serie[0]?.valor) : null;
+/** ¿La fecha de un valor (ISO) es de los últimos días? Sin fecha (o sin «hoy» para comparar) se acepta. */
+export function fechaReciente(fecha: unknown, hoy?: string): boolean {
+  if (!hoy || fecha === undefined || fecha === null || fecha === '') return true;
+  const f = Date.parse(String(fecha).slice(0, 10));
+  return Number.isFinite(f) && (Date.parse(hoy) - f) / 86_400_000 <= DIAS_MAXIMOS;
+}
+
+const valorReciente = (tipo: TipoIndicador, x: { valor?: unknown; fecha?: unknown } | undefined, hoy?: string) =>
+  x && fechaReciente(x.fecha, hoy) ? valorSano(tipo, x.valor) : null;
+
+/** El valor de una respuesta de mindicador.cl (`/api/uf` o `/api/dolar`: `serie[0]`), si es sano y reciente. */
+export function valorMindicador(tipo: TipoIndicador, json: unknown, hoy?: string): number | null {
+  const serie = (json as { serie?: { valor?: unknown; fecha?: unknown }[] } | null)?.serie;
+  return Array.isArray(serie) ? valorReciente(tipo, serie[0], hoy) : null;
+}
+
+/** El valor de una respuesta de boostr.cl (`/economy/indicators.json`: `data.uf` y `data.dolar`), si es sano y reciente. */
+export function valorBoostr(tipo: TipoIndicador, json: unknown, hoy?: string): number | null {
+  const d = (json as { data?: Record<string, { value?: unknown; date?: unknown }> } | null)?.data;
+  const x = d?.[tipo === 'uf' ? 'uf' : 'dolar'];
+  return valorReciente(tipo, x ? { valor: x.value, fecha: x.date } : undefined, hoy);
 }
 
 /** La fecha de hoy en Chile (AAAA-MM-DD), aunque el servidor esté en otra zona horaria. */
@@ -30,12 +52,15 @@ export function hoyEnChile(ahora: Date = new Date()): string {
 
 export interface FilaIndicador { fecha: string; uf: number; usd: number; fuente: FuenteIndicador }
 
+/** Lo que respondió una fuente en línea (null = no respondió o vino fuera de rango). */
+export interface ConsultaEnLinea { fuente: FuenteEnLinea; uf: number | null; usd: number | null }
+
 export interface ValorIndicador {
   valor: number;
   /** De qué día es el valor. */
   fecha: string;
   fuente: FuenteIndicador;
-  /** true = no es de hoy (mindicador no respondió y se usó uno guardado antes o el respaldo). */
+  /** true = no es de hoy (no respondió ninguna fuente y se usó uno guardado antes o el respaldo). */
   anterior: boolean;
 }
 
@@ -43,18 +68,18 @@ export interface IndicadoresDia { uf: ValorIndicador; usd: ValorIndicador }
 
 interface EntradaIndicadores {
   hoy: string;
-  /** Lo guardado para hoy (de mindicador o fijado a mano): manda. */
+  /** Lo guardado para hoy (de internet o fijado a mano): manda. */
   deHoy: FilaIndicador | null;
-  /** Lo que respondió mindicador (null = no respondió o vino fuera de rango). */
-  consultado: { uf: number | null; usd: number | null } | null;
+  /** Lo que respondieron las fuentes en línea, en orden de preferencia ([] = no se consultó). */
+  consultado: ConsultaEnLinea[];
   /** El último valor guardado antes de hoy. */
   ultimo: FilaIndicador | null;
   respaldo: { uf: number; usd: number; fecha: string };
 }
 
 /**
- * Qué UF y qué dólar usar hoy, y si hay que guardar lo consultado (solo cuando mindicador dio los
- * dos valores sanos: si uno falla, se vuelve a consultar en la próxima visita).
+ * Qué UF y qué dólar usar hoy, y si hay que guardar lo consultado: solo cuando una misma fuente
+ * dio los dos valores sanos (si no, se vuelve a consultar en la próxima visita).
  */
 export function elegirIndicadores(e: EntradaIndicadores): IndicadoresDia & { guardar: boolean } {
   if (e.deHoy) {
@@ -62,18 +87,21 @@ export function elegirIndicadores(e: EntradaIndicadores): IndicadoresDia & { gua
     return { uf: de('uf'), usd: de('usd'), guardar: false };
   }
   const elegir = (t: TipoIndicador): ValorIndicador => {
-    const c = e.consultado ? valorSano(t, e.consultado[t]) : null;
-    if (c !== null) return { valor: c, fecha: e.hoy, fuente: 'mindicador', anterior: false };
+    for (const c of e.consultado) {
+      const v = valorSano(t, c[t]);
+      if (v !== null) return { valor: v, fecha: e.hoy, fuente: c.fuente, anterior: false };
+    }
     const u = e.ultimo ? valorSano(t, e.ultimo[t]) : null;
     if (u !== null && e.ultimo) return { valor: u, fecha: e.ultimo.fecha, fuente: e.ultimo.fuente, anterior: true };
     return { valor: Number(e.respaldo[t]), fecha: e.respaldo.fecha, fuente: 'respaldo', anterior: true };
   };
   const uf = elegir('uf'), usd = elegir('usd');
-  return { uf, usd, guardar: uf.fuente === 'mindicador' && !uf.anterior && usd.fuente === 'mindicador' && !usd.anterior };
+  return { uf, usd, guardar: !uf.anterior && !usd.anterior && uf.fuente === usd.fuente };
 }
 
 export const NOMBRE_FUENTE: Record<FuenteIndicador, string> = {
   mindicador: 'mindicador.cl',
+  boostr: 'boostr.cl',
   respaldo: 'valor de respaldo',
   manual: 'fijado a mano',
 };

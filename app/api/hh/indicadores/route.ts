@@ -1,31 +1,48 @@
-// GET /api/hh/indicadores → la UF y el dólar del día para la Calculadora HH (fase 23).
-// Consulta mindicador.cl desde el servidor (con un tiempo corto), descarta valores fuera de rango,
-// guarda el valor del día en hh_indicadores y lo reutiliza ese día. Si mindicador falla, usa el
-// último guardado y, si no hay ninguno, el respaldo de los parámetros. Siempre dice la fuente y la
-// fecha de cada valor. Requiere sesión con hh.ver o hh.configurar.
-// La caché la escribe el servidor con la service role: así nadie puede inventar «la UF de
-// mindicador» desde el navegador (a mano la fija quien configura, en la pantalla de parámetros).
+// GET /api/hh/indicadores → la UF y el dólar del día (Calculadora HH y botón «UF de hoy» del cotizador).
+// Consulta desde el servidor mindicador.cl y boostr.cl a la vez (con un tiempo corto) y se queda con
+// la primera que dé los dos valores sanos y recientes; guarda el valor del día en hh_indicadores y lo
+// reutiliza ese día. Si ninguna responde, usa el último guardado y, si no hay ninguno, el respaldo de
+// los parámetros. Siempre dice la fuente y la fecha de cada valor.
+// Requiere sesión con algún permiso de la calculadora HH o del cotizador.
+// La caché la escribe el servidor con la service role: así nadie puede inventar «la UF de internet»
+// desde el navegador (a mano la fija quien configura, en la pantalla de parámetros).
 
 import { NextResponse } from 'next/server';
 import { clienteComoUsuario, noAutorizado, sesionConPermisos, sinPermiso } from '@/lib/authServidor';
 import { getSupabaseAdmin } from '@/lib/supabaseAdmin';
 import { PARAMETROS_INICIALES } from '@/lib/hh/calculo';
-import { elegirIndicadores, hoyEnChile, valorMindicador, type FilaIndicador, type TipoIndicador } from '@/lib/hh/indicadores';
+import {
+  elegirIndicadores, hoyEnChile, valorBoostr, valorMindicador, type ConsultaEnLinea, type FilaIndicador,
+} from '@/lib/hh/indicadores';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
-const SERIE: Record<TipoIndicador, string> = { uf: 'uf', usd: 'dolar' };
-
-async function consultar(tipo: TipoIndicador): Promise<number | null> {
+async function leerJson(url: string): Promise<unknown> {
   try {
-    const r = await fetch(`https://mindicador.cl/api/${SERIE[tipo]}`, {
-      signal: AbortSignal.timeout(5000), cache: 'no-store', headers: { Accept: 'application/json' },
-    });
-    return r.ok ? valorMindicador(tipo, await r.json()) : null;
+    const r = await fetch(url, { signal: AbortSignal.timeout(4000), cache: 'no-store', headers: { Accept: 'application/json' } });
+    return r.ok ? await r.json() : null;
   } catch {
     return null;
   }
+}
+
+async function deMindicador(hoy: string): Promise<ConsultaEnLinea> {
+  const [uf, usd] = await Promise.all([leerJson('https://mindicador.cl/api/uf'), leerJson('https://mindicador.cl/api/dolar')]);
+  return { fuente: 'mindicador', uf: valorMindicador('uf', uf, hoy), usd: valorMindicador('usd', usd, hoy) };
+}
+
+async function deBoostr(hoy: string): Promise<ConsultaEnLinea> {
+  const j = await leerJson('https://api.boostr.cl/economy/indicators.json');
+  return { fuente: 'boostr', uf: valorBoostr('uf', j, hoy), usd: valorBoostr('usd', j, hoy) };
+}
+
+/** La primera fuente que dé la UF y el dólar; si ninguna da los dos, lo que alcanzó a dar cada una. */
+async function consultarEnLinea(hoy: string): Promise<ConsultaEnLinea[]> {
+  const intentos = [deMindicador(hoy), deBoostr(hoy)];
+  const completa = await Promise.any(intentos.map(p => p.then(c => (c.uf !== null && c.usd !== null ? c : Promise.reject(new Error('incompleta'))))))
+    .catch(() => null);
+  return completa ? [completa] : Promise.all(intentos);
 }
 
 const fila = (d: unknown): FilaIndicador | null => {
@@ -37,8 +54,10 @@ export async function GET(req: Request) {
   const ses = await sesionConPermisos(req);
   if (!ses) return noAutorizado();
   const p = ses.permisos;
-  if (p !== null && !p.includes('*') && !p.includes('hh.ver') && !p.includes('hh.configurar')) return sinPermiso();
+  if (p !== null && !p.some(x => x === '*' || x.startsWith('hh.') || x.startsWith('cotizaciones.'))) return sinPermiso();
 
+  // Quien solo cotiza no lee las tablas hh_ (RLS): para él no hay guardado ni respaldo propio,
+  // y el cotizador solo usa un valor de hoy.
   const sb = clienteComoUsuario(ses.token);
   const hoy = hoyEnChile();
   const [deHoy, ultimo, param] = await Promise.all([
@@ -53,10 +72,9 @@ export async function GET(req: Request) {
   }
 
   const guardadoHoy = fila(deHoy.data);
-  const consultado = guardadoHoy ? null : await Promise.all([consultar('uf'), consultar('usd')]).then(([uf, usd]) => ({ uf, usd }));
   const pr = param.data as { uf_respaldo?: number; usd_respaldo?: number; updated_at?: string } | null;
   const r = elegirIndicadores({
-    hoy, deHoy: guardadoHoy, consultado, ultimo: fila(ultimo.data),
+    hoy, deHoy: guardadoHoy, consultado: guardadoHoy ? [] : await consultarEnLinea(hoy), ultimo: fila(ultimo.data),
     respaldo: {
       uf: Number(pr?.uf_respaldo ?? PARAMETROS_INICIALES.uf_respaldo),
       usd: Number(pr?.usd_respaldo ?? PARAMETROS_INICIALES.usd_respaldo),
@@ -68,7 +86,7 @@ export async function GET(req: Request) {
     try {
       // Sin pisar un valor fijado a mano en el mismo momento.
       await getSupabaseAdmin().from('hh_indicadores')
-        .upsert({ fecha: hoy, uf: r.uf.valor, usd: r.usd.valor, fuente: 'mindicador' }, { onConflict: 'fecha', ignoreDuplicates: true });
+        .upsert({ fecha: hoy, uf: r.uf.valor, usd: r.usd.valor, fuente: r.uf.fuente }, { onConflict: 'fecha', ignoreDuplicates: true });
     } catch {
       // Sin la service role en el entorno no hay caché: se vuelve a consultar en la próxima visita.
     }

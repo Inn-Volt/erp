@@ -229,16 +229,21 @@ CREATE TRIGGER trg_hh_persona_cargos_reglas BEFORE INSERT OR UPDATE ON public.hh
   FOR EACH ROW EXECUTE FUNCTION public.hh_persona_cargos_reglas();
 
 -- ─── 6. UF y dólar del día (caché) ───────────────────────────────────────────
--- Un valor por día. Los de mindicador.cl los guarda el servidor (/api/hh/indicadores, con la
--- service role: nadie los puede inventar desde el navegador); a mano, quien configura.
+-- Un valor por día. Los de internet (mindicador.cl o boostr.cl) los guarda el servidor
+-- (/api/hh/indicadores, con la service role: nadie los puede inventar desde el navegador);
+-- a mano, quien configura.
 CREATE TABLE IF NOT EXISTS public.hh_indicadores (
   fecha      DATE PRIMARY KEY,
   uf         NUMERIC(12,2) NOT NULL CHECK (uf BETWEEN 20000 AND 80000),
   usd        NUMERIC(10,2) NOT NULL CHECK (usd BETWEEN 500 AND 2000),
-  fuente     TEXT NOT NULL DEFAULT 'mindicador' CHECK (fuente IN ('mindicador','respaldo','manual')),
+  fuente     TEXT NOT NULL DEFAULT 'mindicador',
   created_by UUID DEFAULT auth.uid() REFERENCES public.profiles(id) ON DELETE SET NULL,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
+-- boostr.cl entró después como segunda fuente (mindicador.cl se cae): el CHECK se rehace.
+ALTER TABLE public.hh_indicadores DROP CONSTRAINT IF EXISTS hh_indicadores_fuente_check;
+ALTER TABLE public.hh_indicadores ADD CONSTRAINT hh_indicadores_fuente_check
+  CHECK (fuente IN ('mindicador','boostr','respaldo','manual'));
 
 -- ─── 7. Cálculos guardados ───────────────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS public.hh_calculos (
@@ -468,7 +473,7 @@ CREATE POLICY hh_equipo_cargos_borrar ON public.hh_persona_cargos FOR DELETE TO 
   USING ((SELECT public.tiene_permiso('hh.ver')) AND persona_id IN (SELECT public.hh_personas_a_cargo())
          AND persona_id IS DISTINCT FROM (SELECT public.hh_mi_persona()));
 
--- UF y dólar: a mano solo quien configura (los de mindicador los guarda el servidor).
+-- UF y dólar: a mano solo quien configura (los de internet los guarda el servidor).
 DROP POLICY IF EXISTS hh_indicador_manual ON public.hh_indicadores;
 CREATE POLICY hh_indicador_manual ON public.hh_indicadores FOR ALL TO authenticated
   USING ((SELECT public.tiene_permiso('hh.configurar')))
