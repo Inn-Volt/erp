@@ -4,6 +4,7 @@ import assert from 'node:assert/strict';
 import { avisoRut, formatearRut, rutValido } from '../../lib/rut.ts';
 import { fechaCL, numeroCL, parsearCartola, sugerirCobro, sugerirCompra } from '../../lib/cartola.ts';
 import { desglosarCobro, ivaDelMes } from '../../lib/contabilidad.ts';
+import { cobroAbierto, cobroAbonado, cobroPagado, saldoCobro } from '../../lib/cobros.ts';
 
 test('RUT: dígito verificador y formato', () => {
   assert.ok(rutValido('12.345.678-5'));
@@ -59,4 +60,18 @@ test('Libro de ventas: neto, exento e IVA en la proporción de la cotización', 
   assert.equal(h.neto + h.exento + h.iva, 695000);
   assert.deepEqual(ivaDelMes(190000, 50000), { debito: 190000, credito: 50000, aPagar: 140000, remanente: 0 });
   assert.equal(ivaDelMes(10000, 50000).remanente, 40000);
+});
+
+test('Cobros: el pago va aparte de la factura (un anticipo pagado sin factura queda pagado)', () => {
+  const anticipo = { etapa: 'por_revisar', monto: 500000, monto_pagado: 500000 };
+  assert.deepEqual([cobroPagado(anticipo), cobroAbierto(anticipo), saldoCobro(anticipo)], [true, false, 0]);
+  const abono = { etapa: 'esperando_oc', monto: 500000, monto_pagado: 200000 };
+  assert.deepEqual([cobroPagado(abono), cobroAbierto(abono), cobroAbonado(abono), saldoCobro(abono)], [false, true, true, 300000]);
+  const facturada = { etapa: 'facturado', monto: '800000', monto_pagado: null };
+  assert.deepEqual([cobroPagado(facturada), cobroAbierto(facturada), cobroAbonado(facturada), saldoCobro(facturada)], [false, true, false, 800000]);
+  // Garantía o cortesía: ni se cobra ni cuenta como pagada.
+  const garantia = { etapa: 'sin_cobro', monto: 120000, monto_pagado: 0 };
+  assert.deepEqual([cobroPagado(garantia), cobroAbierto(garantia)], [false, false]);
+  assert.equal(cobroPagado({ etapa: 'facturado', monto: 0, monto_pagado: 0 }), false);
+  assert.equal(saldoCobro({ etapa: 'facturado', monto: 100, monto_pagado: 150 }), 0);   // pagó de más: saldo 0
 });

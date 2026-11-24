@@ -23,6 +23,7 @@ import MisHoras from '@/components/trabajos/MisHoras';
 import { useFase } from '@/lib/fases';
 import { anticiposService, type Anticipo } from '@/services/fase5';
 import { CATEGORIAS_GASTO, ETAPAS_COBRO, type Gasto, type PorFacturar } from '@/services/operacion';
+import { cobroPagado } from '@/lib/cobros';
 import { CUANDO_COBRO, estadoTrabajo, type EstadoTrabajo, type HitoCobro } from '@/lib/cotizador/tipos';
 import { usePermisos } from '@/hooks/usePermisos';
 import { useToast } from '@/hooks/useToast';
@@ -134,7 +135,7 @@ export default function TrabajoPanel({ cot, plan, onCambio, cliente, responsable
           <p className="label-muted" style={{ marginBottom: 6 }}>Cobros · {formatCLP(cobrado)} cobrado de {formatCLP(cot.total)}</p>
           {cobros.map(c => {
             const e = ETAPAS_COBRO.find(x => x.clave === c.etapa);
-            const pagado = Number(c.monto_pagado || 0) >= Number(c.monto) && Number(c.monto) > 0;
+            const pagado = cobroPagado(c);
             return (
               <div key={c.id} style={{ display: 'flex', gap: 8, alignItems: 'center', fontSize: '0.86rem', padding: '0.35rem 0', borderBottom: '1px solid var(--border2)', color: 'var(--text)' }}>
                 <span style={{ flex: 1 }}>{c.hito || 'Cobro'}{c.porcentaje ? ` · ${String(c.porcentaje).replace('.', ',')} %` : ''}{c.numero_factura ? <span style={{ color: 'var(--muted)' }}> · fact. {c.numero_factura}</span> : null}</span>

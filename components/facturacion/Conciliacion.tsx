@@ -2,22 +2,22 @@
 
 /**
  * Conciliación bancaria (fase 15): se sube la cartola del banco (CSV o Excel), se guardan sus
- * movimientos (una vez cada uno, aunque se suba de nuevo) y cada abono se cruza con un cobro
- * facturado y cada cargo con una compra impaga. Confirmar marca el cobro (o la compra) pagado.
+ * movimientos (una vez cada uno, aunque se suba de nuevo) y cada abono se cruza con un cobro que
+ * falte pagar (tenga o no factura: un anticipo se paga antes) y cada cargo con una compra impaga.
+ * Confirmar marca el cobro (o la compra) pagado.
  */
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Check, EyeOff, Landmark, Loader2, Upload, X } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { parsearCartola, sugerirCobro, sugerirCompra, type CobroAbierto, type CompraAbierta } from '@/lib/cartola';
+import { cobroAbierto, saldoCobro as saldo } from '@/lib/cobros';
 import type { PorFacturar } from '@/services/operacion';
 import { usePermisos } from '@/hooks/usePermisos';
 import { useToast } from '@/hooks/useToast';
 import { formatCLP, formatDate } from '@/utils';
 
 interface MovBanco { id: string; fecha: string; descripcion: string | null; monto: number; referencia: string | null }
-
-const saldo = (p: PorFacturar) => Math.max(0, Number(p.monto) - Number(p.monto_pagado || 0));
 
 export default function Conciliacion({ cobros, onClose, onCambio }: { cobros: PorFacturar[]; onClose: () => void; onCambio: () => void }) {
   const { perfil, puede } = usePermisos();
@@ -29,7 +29,7 @@ export default function Conciliacion({ cobros, onClose, onCambio }: { cobros: Po
   const [ocupado, setOcupado] = useState<string | null>(null);
   const [verCargos, setVerCargos] = useState(false);
 
-  const abiertos: CobroAbierto[] = useMemo(() => cobros.filter(p => p.etapa === 'facturado' && saldo(p) > 0)
+  const abiertos: CobroAbierto[] = useMemo(() => cobros.filter(cobroAbierto)
     .map(p => ({ id: p.id, saldo: saldo(p), numero_factura: p.numero_factura, cliente: p.clientes?.nombre_cliente || null })), [cobros]);
 
   const cargar = useCallback(async () => {

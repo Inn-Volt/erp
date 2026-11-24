@@ -15,6 +15,7 @@ import Link from 'next/link';
 import { Banknote, Scale, TrendingUp, Wallet } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { finDeMes, mesDe } from '@/lib/meses';
+import { cobroAbierto, saldoCobro as saldo } from '@/lib/cobros';
 import { costoReal, type ResultadoTrabajo } from '@/services/trabajos';
 import { usePermisos } from '@/hooks/usePermisos';
 import { fechaLocal, formatCLP, sumarDias } from '@/utils';
@@ -50,8 +51,8 @@ export default function PanelDinero({ ventaNetaMes }: { ventaNetaMes: number }) 
       ]);
       type PF = { etapa: string; monto: number; monto_pagado: number | null; fecha_pago: string | null; fecha_factura: string | null; vencimiento: string | null; created_at: string };
       const filas = (pf.data || []) as PF[];
-      const saldo = (p: PF) => Math.max(0, Number(p.monto) - Number(p.monto_pagado || 0));
-      const abiertas = filas.filter(p => p.etapa === 'facturado' && saldo(p) > 0);
+      // Por cobrar: lo que falta pagar, tenga o no factura (un anticipo se cobra antes de facturar).
+      const abiertas = filas.filter(cobroAbierto);
       const dias = (p: PF) => Math.floor((Date.parse(hoy) - Date.parse(p.fecha_factura || p.created_at.slice(0, 10))) / 864e5);
       const tramos: [number, number, number] = [0, 0, 0];
       for (const p of abiertas) tramos[dias(p) <= 30 ? 0 : dias(p) <= 60 ? 1 : 2] += saldo(p);
@@ -134,7 +135,7 @@ export default function PanelDinero({ ventaNetaMes }: { ventaNetaMes: number }) 
           </Link>
         )}
         {verCobros && caja !== null && (
-          <div style={caja2} title="Lo facturado que vence en 30 días (o ya vencido) menos las compras impagas que vencen en 30 días y los gastos fijos del mes">
+          <div style={caja2} title="Lo por cobrar que vence en 30 días (o ya vencido, o sin vencimiento) menos las compras impagas que vencen en 30 días y los gastos fijos del mes">
             <span style={titulo}><Banknote size={12} /> Caja próximos 30 días</span>
             <span style={{ ...valor, color: caja >= 0 ? 'var(--success)' : 'var(--danger)' }}>{caja >= 0 ? '+' : '−'}{formatCLP(Math.abs(caja))}</span>
             <span style={sub}>entra {formatCLP(d.entra30)} · sale {formatCLP(d.sale30 || 0)}{d.gastosFijos ? ' (con gastos fijos)' : ''}</span>

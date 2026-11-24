@@ -2,14 +2,15 @@
 
 /**
  * Finanzas → Por facturar y cobranza (traído de TecApp).
- * Cada cobro de un trabajo (anticipo, saldo…) y cada OT cerrada cae aquí solo. Se avanza por
- * etapas (OC, HES, factura) hasta el pago. Fase 15: antigüedad de lo por cobrar, recordatorio
- * de pago para el cliente y conciliación con la cartola del banco.
+ * Cada cobro de un trabajo (anticipo, saldo…) y cada OT cerrada cae aquí solo. El pago y la
+ * factura van por separado: el pago se anota apenas llega y el cobro queda pagado aunque no tenga
+ * factura todavía; las etapas (OC, HES, factura) dicen en qué va la factura. Fase 15: antigüedad
+ * de lo por cobrar, recordatorio de pago para el cliente y conciliación con la cartola del banco.
  */
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
-import { Copy, Landmark, Loader2, Mail, MessageCircle, Save, Search, Wallet, X } from 'lucide-react';
+import { CheckCircle2, Copy, Landmark, Loader2, Mail, MessageCircle, Save, Search, Wallet, X } from 'lucide-react';
 import Conciliacion from '@/components/facturacion/Conciliacion';
 import { EmitirDTE } from '@/components/facturacion/FacturaElectronica';
 import type { EmpresaInfo } from '@/types';
@@ -23,10 +24,16 @@ import { ETAPAS_COBRO, facturacionService, faltaFase2, folioOT, type EtapaCobro,
 import { usePermisos } from '@/hooks/usePermisos';
 import { useToast } from '@/hooks/useToast';
 import { fechaLocal, formatCLP, formatDate } from '@/utils';
+import { cobroAbierto, cobroAbonado, cobroPagado, saldoCobro as saldo } from '@/lib/cobros';
 
 const etapa = (e: EtapaCobro) => ETAPAS_COBRO.find(x => x.clave === e) || ETAPAS_COBRO[0];
-const saldo = (p: PorFacturar) => Math.max(0, Number(p.monto) - Number(p.monto_pagado || 0));
 const vencida = (p: PorFacturar) => p.etapa === 'facturado' && saldo(p) > 0 && !!p.vencimiento && p.vencimiento < fechaLocal();
+/** Lo que muestra la lista: primero el pago (vencida, pagada, abonada) y si no, en qué va la factura. */
+const estadoFila = (p: PorFacturar): { nombre: string; color: string } =>
+  vencida(p) ? { nombre: 'Vencida', color: '#dc2626' }
+  : cobroPagado(p) ? { nombre: p.etapa === 'facturado' ? 'Pagada' : 'Pagada · sin factura', color: '#16a34a' }
+  : cobroAbonado(p) ? { nombre: 'Pago parcial', color: '#0891b2' }
+  : etapa(p.etapa);
 /** Días desde que se facturó (o desde que llegó, si no tiene fecha de factura). */
 const diasFactura = (p: PorFacturar) => Math.max(0, Math.floor((Date.parse(fechaLocal()) - Date.parse(p.fecha_factura || p.created_at.slice(0, 10))) / 864e5));
 const TRAMOS = [
@@ -126,11 +133,27 @@ function Ficha({ p, puedeEditar, empresa, onClose, onGuardado }: { p: PorFactura
             <div><label className="label-muted" style={lbl}>N° factura</label><input className="input" value={d.numero_factura || ''} onChange={e => set({ numero_factura: e.target.value })} /></div>
             <div><label className="label-muted" style={lbl}>Fecha factura</label><input className="input" type="date" value={d.fecha_factura || ''} onChange={e => set({ fecha_factura: e.target.value })} /></div>
             <div><label className="label-muted" style={lbl}>Vencimiento</label><input className="input" type="date" value={d.vencimiento || ''} onChange={e => set({ vencimiento: e.target.value })} /></div>
-            <div><label className="label-muted" style={lbl}>Pagado</label><NumeroInput className="input" value={Number(d.monto_pagado || 0)} onChange={v => set({ monto_pagado: v })} /></div>
-            <div><label className="label-muted" style={lbl}>Fecha de pago</label><input className="input" type="date" value={d.fecha_pago || ''} onChange={e => set({ fecha_pago: e.target.value })} /></div>
           </div>
-          {puedeEditar && saldo(d) > 0 && d.etapa === 'facturado' && (
-            <button type="button" className="btn btn-ghost" style={{ alignSelf: 'flex-start' }} onClick={() => set({ monto_pagado: d.monto, fecha_pago: d.fecha_pago || fechaLocal() })}>Marcar pagada completa</button>
+          {d.etapa !== 'sin_cobro' && (
+            <div style={{ background: 'var(--bg3)', borderRadius: 8, padding: '0.7rem', display: 'flex', flexDirection: 'column', gap: 8 }}>
+              <span className="label-muted">Pago del cliente</span>
+              <p style={{ margin: 0, fontSize: '0.8rem', color: 'var(--muted)' }}>
+                Anótalo apenas llegue, aunque todavía no haya factura (un anticipo, por ejemplo): con eso el cobro queda pagado.</p>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 160px), 1fr))', gap: 10 }}>
+                <div><label className="label-muted" style={lbl}>Monto pagado</label>
+                  <NumeroInput className="input" value={Number(d.monto_pagado || 0)}
+                    onChange={v => set({ monto_pagado: v, ...(v > 0 && !d.fecha_pago ? { fecha_pago: fechaLocal() } : {}) })} /></div>
+                <div><label className="label-muted" style={lbl}>Fecha de pago</label><input className="input" type="date" value={d.fecha_pago || ''} onChange={e => set({ fecha_pago: e.target.value })} /></div>
+              </div>
+              {cobroPagado(d) ? (
+                <p style={{ margin: 0, fontSize: '0.82rem', color: 'var(--success)', display: 'flex', gap: 6, alignItems: 'center' }}>
+                  <CheckCircle2 size={14} aria-hidden /> Pagado.{d.etapa !== 'facturado' ? ' Falta la factura: cuando la emitas, anota su número y pásalo a «Facturado».' : ''}</p>
+              ) : puedeEditar && (
+                <button type="button" className="btn btn-ghost btn-sm" style={{ alignSelf: 'flex-start' }}
+                  onClick={() => set({ monto_pagado: d.monto, fecha_pago: d.fecha_pago || fechaLocal() })}>
+                  <CheckCircle2 size={13} /> Pagó todo ({formatCLP(Number(d.monto))})</button>
+              )}
+            </div>
           )}
           <EmitirDTE p={p} puedeEmitir={puedeEditar} onEmitida={onGuardado} />
           {p.etapa === 'facturado' && saldo(p) > 0 && <Recordatorio p={p} empresa={empresa} />}
@@ -155,7 +178,7 @@ export default function FacturacionPage() {
   const [filas, setFilas] = useState<PorFacturar[]>([]);
   const [cargando, setCargando] = useState(true);
   const [falta, setFalta] = useState(false);
-  const [filtro, setFiltro] = useState<'pendientes' | 'por_cobrar' | 'todas' | EtapaCobro>('pendientes');
+  const [filtro, setFiltro] = useState<'pendientes' | 'por_cobrar' | 'pagadas' | 'todas' | EtapaCobro>('pendientes');
   const [busca, setBusca] = useState('');
   const [abierta, setAbierta] = useState<PorFacturar | null>(null);
   const [tramo, setTramo] = useState<Tramo | ''>('');
@@ -176,7 +199,7 @@ export default function FacturacionPage() {
   const total = (f: (p: PorFacturar) => boolean, v: (p: PorFacturar) => number = p => Number(p.monto)) => filas.filter(f).reduce((s, p) => s + v(p), 0);
   const kpis = [
     { t: 'Por facturar', v: total(p => !['facturado', 'sin_cobro'].includes(p.etapa)), c: '#d97706', f: 'pendientes' as const },
-    { t: 'Por cobrar', v: total(p => p.etapa === 'facturado', saldo), c: '#2563eb', f: 'por_cobrar' as const },
+    { t: 'Por cobrar', v: total(cobroAbierto, saldo), c: '#2563eb', f: 'por_cobrar' as const },
     { t: 'Vencido', v: total(vencida, saldo), c: '#dc2626', f: 'por_cobrar' as const },
   ];
 
@@ -184,11 +207,12 @@ export default function FacturacionPage() {
     const q = busca.trim().toLowerCase();
     return filas.filter(p => filtro === 'todas' ? true
       : filtro === 'pendientes' ? !['facturado', 'sin_cobro'].includes(p.etapa)
-      : filtro === 'por_cobrar' ? p.etapa === 'facturado' && saldo(p) > 0 && (!tramo || tramoDe(p) === tramo)
+      : filtro === 'por_cobrar' ? cobroAbierto(p) && (!tramo || tramoDe(p) === tramo)
+      : filtro === 'pagadas' ? cobroPagado(p)
       : p.etapa === filtro)
       .filter(p => !q || `${p.descripcion || ''} ${p.clientes?.nombre_cliente || ''} ${p.numero_factura || ''} ${p.numero_oc || ''}`.toLowerCase().includes(q));
   }, [filas, filtro, busca, tramo]);
-  const porCobrar = filas.filter(p => p.etapa === 'facturado' && saldo(p) > 0);
+  const porCobrar = filas.filter(cobroAbierto);
 
   if (falta) return <div className="anim-in"><PageHeader eyebrow="Finanzas" title="Por facturar y cobranza" /><FaltaSQL /></div>;
 
@@ -197,7 +221,7 @@ export default function FacturacionPage() {
       {abierta && <Ficha p={abierta} puedeEditar={puede('facturacion.gestionar')} empresa={empresa} onClose={() => setAbierta(null)} onGuardado={() => { setAbierta(null); cargar(); }} />}
       {conciliando && <Conciliacion cobros={filas} onClose={() => setConciliando(false)} onCambio={cargar} />}
       <PageHeader eyebrow="Finanzas" title="Por facturar y cobranza"
-        subtitle="Cada cobro de un trabajo (anticipo, saldo) y cada OT cerrada llega aquí solo. Avánzalo hasta que esté pagado."
+        subtitle="Cada cobro de un trabajo (anticipo, saldo) y cada OT cerrada llega aquí solo. Anota el pago apenas llegue (queda pagado aunque falte la factura) y avanza la factura por sus etapas."
         actions={fase15 && puede('facturacion.gestionar') ? <button className="btn btn-ghost" onClick={() => setConciliando(true)}><Landmark size={14} /> Conciliar con el banco</button> : null} />
 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 170px), 1fr))', gap: 8, marginBottom: 12 }}>
@@ -210,7 +234,7 @@ export default function FacturacionPage() {
 
       {porCobrar.length > 0 && (
         <div className="panel-y" style={{ padding: '0.8rem 1rem', marginBottom: 12, display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
-          <span className="label-muted" style={{ marginRight: 4 }}>Antigüedad de lo por cobrar (desde la factura)</span>
+          <span className="label-muted" style={{ marginRight: 4 }}>Antigüedad de lo por cobrar (desde la factura o, si no tiene, desde que llegó)</span>
           {TRAMOS.map(t => {
             const enTramo = porCobrar.filter(p => tramoDe(p) === t.clave);
             const activo = filtro === 'por_cobrar' && tramo === t.clave;
@@ -233,13 +257,14 @@ export default function FacturacionPage() {
             <input className="input" value={busca} onChange={e => setBusca(e.target.value)} placeholder="Buscar cliente, OT, factura u OC…" style={{ paddingLeft: '2.2rem' }} />
           </div>
           <select className="input" style={{ maxWidth: 200 }} value={filtro} onChange={e => { setFiltro(e.target.value as typeof filtro); setTramo(''); }}>
-            <option value="pendientes">Pendientes de facturar</option><option value="por_cobrar">Facturadas por cobrar</option><option value="todas">Todas</option>
+            <option value="pendientes">Pendientes de facturar</option><option value="por_cobrar">Por cobrar (falta el pago)</option>
+            <option value="pagadas">Pagadas</option><option value="todas">Todas</option>
             {ETAPAS_COBRO.map(e => <option key={e.clave} value={e.clave}>{e.nombre}</option>)}
           </select>
         </div>
         {cargando ? <div style={{ padding: '1.5rem' }}><div className="skeleton" style={{ height: 120 }} /></div>
           : lista.length === 0 ? <p style={{ padding: '2.5rem 1rem', textAlign: 'center', color: 'var(--muted)' }}>Nada en esta vista.</p>
-          : lista.map(p => { const e = etapa(p.etapa); return (
+          : lista.map(p => { const e = estadoFila(p); return (
             <button key={p.id} onClick={() => setAbierta(p)} style={{ display: 'flex', width: '100%', gap: 12, padding: '0.85rem 1rem', borderTop: '1px solid var(--border2)', background: 'none', border: 'none', borderTopStyle: 'solid', cursor: 'pointer', textAlign: 'left', alignItems: 'center' }}>
               <span style={{ flex: 1, minWidth: 0 }}>
                 <span style={{ display: 'block', fontWeight: 600, color: 'var(--text)', fontSize: '0.9rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.descripcion || 'Cobro'}</span>
@@ -248,11 +273,12 @@ export default function FacturacionPage() {
                   {p.numero_oc ? ` · OC ${p.numero_oc}` : ''}{p.numero_factura ? ` · Fact. ${p.numero_factura}` : ''}
                   {p.vencimiento && p.etapa === 'facturado' ? ` · vence ${formatDate(p.vencimiento)}` : ''}
                   {p.etapa === 'facturado' && saldo(p) > 0 ? ` · facturada hace ${diasFactura(p)} d` : ''}
+                  {cobroAbonado(p) ? ` · pagado ${formatCLP(Number(p.monto_pagado))} de ${formatCLP(Number(p.monto))}` : ''}
                 </span>
               </span>
               <span style={{ textAlign: 'right' }}>
-                <span style={{ display: 'block', fontWeight: 700, color: 'var(--text)', fontVariantNumeric: 'tabular-nums' }}>{formatCLP(p.etapa === 'facturado' ? saldo(p) : Number(p.monto))}</span>
-                <span className="badge" style={{ background: vencida(p) ? '#dc2626' : e.color, color: '#fff', fontSize: '0.7rem' }}>{vencida(p) ? 'Vencida' : p.etapa === 'facturado' && saldo(p) === 0 ? 'Pagada' : e.nombre}</span>
+                <span style={{ display: 'block', fontWeight: 700, color: 'var(--text)', fontVariantNumeric: 'tabular-nums' }}>{formatCLP(cobroAbierto(p) ? saldo(p) : Number(p.monto))}</span>
+                <span className="badge" style={{ background: e.color, color: '#fff', fontSize: '0.7rem' }}>{e.nombre}</span>
               </span>
             </button>); })}
         <div style={{ padding: '0.75rem 1rem', borderTop: '1px solid var(--border2)', color: 'var(--muted)', fontSize: '0.78rem' }}>{lista.length} registros</div>
