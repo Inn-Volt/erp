@@ -3,7 +3,9 @@
 /**
  * Calculadora HH (fase 23): cargos, tarifas, parámetros, trabajos tipo, el equipo HH y los cálculos
  * guardados (tablas hh_). Módulo independiente: no lee ni escribe nada del cotizador. Las cuentas
- * están en lib/hh/. La seguridad la pone la base (RLS con hh.ver y hh.configurar).
+ * están en lib/hh/. La seguridad la pone la base (RLS con hh.ver y hh.configurar): sin
+ * hh.configurar, cada uno solo recibe su persona y su equipo hacia abajo, y sus cálculos y los de
+ * su equipo.
  */
 
 import { supabase } from '@/lib/supabase';
@@ -19,7 +21,8 @@ export interface TrabajoTipoHH {
   cargo_principal_id: string; cargo_apoyo_id: string | null; hh_apoyo: number; tipo_tarea_clave: string | null;
   precio_mercado_ref: string | null; duracion_equipo: string | null; notas: string | null; activo: boolean; orden: number;
 }
-export interface PersonaHH { id: string; nombre: string; profile_id: string | null; activo: boolean }
+/** jefe_id: la persona de la que está a cargo (el equipo hacia abajo de cada uno). */
+export interface PersonaHH { id: string; nombre: string; profile_id: string | null; jefe_id: string | null; activo: boolean }
 export interface PersonaCargoHH {
   id: string; persona_id: string; cargo_id: string; tarifa_base_propia: number | null; predeterminado: boolean; activo: boolean;
 }
@@ -87,7 +90,7 @@ export const hhService = {
       supabase.from('hh_cargos').select('*').order('orden').order('nombre'),
       supabase.from('hh_tipos_tarea').select('*').order('orden').order('nombre'),
       supabase.from('hh_trabajos_tipo').select('*').order('categoria').order('orden').order('nombre'),
-      supabase.from('hh_personas').select('id, nombre, profile_id, activo').order('nombre'),
+      supabase.from('hh_personas').select('id, nombre, profile_id, jefe_id, activo').order('nombre'),
       supabase.from('hh_persona_cargos').select('id, persona_id, cargo_id, tarifa_base_propia, predeterminado, activo'),
     ]);
     for (const r of [p, c, t, tr, pe, pc]) lanzar(r.error);

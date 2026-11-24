@@ -1,9 +1,9 @@
 'use client';
 
 /**
- * Parámetros y multiplicadores (hh.configurar): los parámetros del cálculo (horas facturables,
- * costo empresa, gastos generales, utilidad mínima, urgencia, IVA, respaldos y redondeos), los
- * tipos de tarea con su multiplicador sugerido, y fijar a mano la UF y el dólar de un día.
+ * Ajustes (hh.configurar): los parámetros del cálculo (horas facturables, costo empresa, gastos
+ * generales, utilidad mínima, urgencia, IVA, respaldos y redondeos), los tipos de tarea con su
+ * multiplicador sugerido, y fijar a mano la UF y el dólar de un día.
  */
 
 import { useEffect, useState } from 'react';
@@ -13,27 +13,28 @@ import { useToast } from '@/hooks/useToast';
 import { formatoIndicador, type ParametrosHH as Parametros } from '@/lib/hh/calculo';
 import { NOMBRE_FUENTE, RANGOS, hoyEnChile } from '@/lib/hh/indicadores';
 import { hhService, mensajeHH, type IndicadorGuardado, type TipoTareaHH } from '@/services/hh';
-import { Campo, Interruptor, fechaCL, tdEstilo, thEstilo, type PropsPestana } from './comun';
+import { Campo, Interruptor, fechaCL, type PropsPestana } from './comun';
+import s from './hh.module.css';
 
 /** Los que se editan como porcentaje (0,25 ↔ 25 %). */
 const PORCENTAJES: (keyof Parametros)[] = ['gastos_generales', 'utilidad_minima', 'recargo_urgencia', 'iva'];
 const CAMPOS: [keyof Parametros, string, string?][] = [
-  ['horas_facturables_mes', 'Horas facturables al mes'],
+  ['horas_facturables_mes', 'Horas facturables al mes', 'Las que de verdad se cobran en un mes'],
   ['factor_costo_empresa', 'Factor costo empresa', 'Leyes sociales, seguros, EPP (1,35 = +35 %)'],
   ['gastos_generales', 'Gastos generales', 'Vehículo, bencina, herramientas, software'],
   ['utilidad_minima', 'Utilidad mínima'],
-  ['recargo_urgencia', 'Recargo urgencia', 'Urgencia o fin de semana'],
+  ['recargo_urgencia', 'Recargo por urgencia', 'Urgencia o fin de semana'],
   ['iva', 'IVA'],
   ['uf_respaldo', 'UF de respaldo', 'Si mindicador no responde y no hay nada guardado'],
   ['usd_respaldo', 'Dólar de respaldo'],
-  ['redondeo_tarifa', 'Redondeo de la tarifa ($)'],
-  ['redondeo_total', 'Redondeo del total ($)'],
+  ['redondeo_tarifa', 'Redondear tarifas a', 'Ej.: 100 → $28.945 queda en $28.900'],
+  ['redondeo_total', 'Redondear el total a'],
   ['validez_dias', 'Validez de la cotización (días)'],
 ];
 
 export default function ParametrosHH({ cat, onCambio, onIndicadores }: PropsPestana & { onIndicadores: () => void }) {
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+    <div className={s.tarjetas}>
       <FormParametros key={JSON.stringify(cat.parametros)} inicial={cat.parametros} onCambio={onCambio} />
       <TiposTarea tipos={cat.tipos} onCambio={onCambio} />
       <IndicadorManual onIndicadores={onIndicadores} />
@@ -54,26 +55,27 @@ function FormParametros({ inicial, onCambio }: { inicial: Parametros & { updated
     finally { setOcupado(false); }
   };
   return (
-    <div className="panel-y" style={{ padding: '0.9rem 1rem', display: 'flex', flexDirection: 'column', gap: 10 }}>
-      <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
-        <p className="section-label" style={{ margin: 0 }}>Parámetros</p>
-        {updated_at && <span style={{ fontSize: '0.76rem', color: 'var(--muted)' }}>Último cambio: {fechaCL(hoyEnChile(new Date(updated_at)))}</span>}
+    <div className={`panel-y ${s.tarjeta}`}>
+      <div className={s.tarjetaCabeza}>
+        <p className="section-label" style={{ margin: 0, flex: 1 }}>Parámetros del cálculo</p>
+        {updated_at && <span className={s.ayuda}>Último cambio: {fechaCL(hoyEnChile(new Date(updated_at)))}</span>}
       </div>
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 200px), 1fr))', gap: 8 }}>
+      <div className={s.rejilla}>
         {CAMPOS.map(([k, nombre, ayuda]) => {
           const pct = PORCENTAJES.includes(k);
+          const pesos = k === 'uf_respaldo' || k === 'usd_respaldo' || k === 'redondeo_tarifa' || k === 'redondeo_total';
           return (
             <Campo key={k} etiqueta={nombre} ayuda={ayuda}>
               <NumeroInput className="input input-sm" value={pct ? Math.round(p[k] * 1000) / 10 : p[k]} sufijo={pct ? '%' : undefined}
-                prefijo={k === 'uf_respaldo' || k === 'usd_respaldo' ? '$' : undefined} min={0}
+                prefijo={pesos ? '$' : undefined} min={0}
                 decimales={k === 'factor_costo_empresa' ? 3 : pct || k === 'uf_respaldo' || k === 'usd_respaldo' ? 2 : 0}
-                onChange={v => setP({ ...p, [k]: pct ? v / 100 : v })} mostrarCero ariaLabel={nombre} title={ayuda} />
+                onChange={v => setP({ ...p, [k]: pct ? v / 100 : v })} mostrarCero ariaLabel={nombre} />
             </Campo>
           );
         })}
       </div>
       {cambiado && (
-        <div style={{ display: 'flex', gap: 6, justifyContent: 'flex-end' }}>
+        <div style={{ display: 'flex', gap: 6, justifyContent: 'flex-end', flexWrap: 'wrap' }}>
           <button className="btn btn-ghost btn-sm" onClick={() => setP(base)}><RotateCcw size={13} /> Descartar</button>
           <button className="btn btn-primary btn-sm" disabled={ocupado} onClick={guardar}>{ocupado ? <Loader2 size={13} className="iv-spin" /> : <Save size={13} />} Guardar parámetros</button>
         </div>
@@ -88,22 +90,16 @@ const claveDe = (nombre: string) => nombre.normalize('NFD').replace(/[̀-ͯ]/g, 
 function TiposTarea({ tipos, onCambio }: { tipos: TipoTareaHH[]; onCambio: () => Promise<void> | void }) {
   const [nuevo, setNuevo] = useState<TipoTareaHH | null>(null);
   return (
-    <div className="panel-y">
-      <div style={{ padding: '0.8rem 1rem', display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap', borderBottom: '1px solid var(--border2)' }}>
-        <p className="section-label" style={{ margin: 0 }}>Tipos de tarea y multiplicadores</p>
-        <span style={{ fontSize: '0.78rem', color: 'var(--muted)' }}>Horas cobradas = horas reales × multiplicador (lo que la IA acelera se cobra a valor de mercado).</span>
-        <span style={{ flex: 1 }} />
+    <div className={`panel-y ${s.tarjeta}`}>
+      <div className={s.tarjetaCabeza}>
+        <p className="section-label" style={{ margin: 0, flex: 1 }}>Tipos de tarea y multiplicadores</p>
         <button className="btn btn-primary btn-sm" disabled={!!nuevo}
           onClick={() => setNuevo({ clave: '', nombre: '', multiplicador: 1, descripcion: null, activo: true, orden: tipos.length + 1 })}><Plus size={13} /> Nuevo tipo</button>
       </div>
-      <div style={{ overflowX: 'auto' }}>
-        <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 720, fontSize: '0.82rem' }}>
-          <thead><tr>{['Activo', 'Tipo de tarea', 'Multiplicador', 'Descripción', 'Orden', ''].map(h => <th key={h} style={thEstilo}>{h}</th>)}</tr></thead>
-          <tbody>
-            {nuevo && <FilaTipo key="nuevo" inicial={nuevo} nuevo onListo={async () => { setNuevo(null); await onCambio(); }} onDescartar={() => setNuevo(null)} />}
-            {tipos.map(t => <FilaTipo key={`${t.clave}:${JSON.stringify(t)}`} inicial={t} onListo={onCambio} />)}
-          </tbody>
-        </table>
+      <p className={s.ayuda}>Horas que se cobran = horas trabajadas × multiplicador. En terreno es × 1; donde la IA acelera (software) se cobran las horas de mercado aunque te tome menos.</p>
+      <div>
+        {nuevo && <FilaTipo key="nuevo" inicial={nuevo} nuevo onListo={async () => { setNuevo(null); await onCambio(); }} onDescartar={() => setNuevo(null)} />}
+        {tipos.map(t => <FilaTipo key={`${t.clave}:${JSON.stringify(t)}`} inicial={t} onListo={onCambio} />)}
       </div>
     </div>
   );
@@ -119,8 +115,10 @@ function FilaTipo({ inicial, nuevo, onListo, onDescartar }: { inicial: TipoTarea
     if (!(x.multiplicador > 0)) { warning('El multiplicador tiene que ser mayor que 0.'); return; }
     if (nuevo) x.clave = claveDe(x.nombre);
     if (!x.clave) { warning('El nombre necesita letras o números.'); return; }
-    try { await hhService.guardarTipo(x, !!nuevo); success(nuevo ? 'Tipo de tarea creado.' : 'Tipo de tarea guardado.'); await onListo(); }
-    catch (e) { toastError(mensajeHH(e)); }
+    try {
+      await hhService.guardarTipo({ clave: x.clave, nombre: x.nombre, multiplicador: x.multiplicador, descripcion: x.descripcion, activo: x.activo, orden: x.orden }, !!nuevo);
+      success(nuevo ? 'Tipo de tarea creado.' : 'Tipo de tarea guardado.'); await onListo();
+    } catch (e) { toastError(mensajeHH(e)); }
   };
   const borrar = async () => {
     if (!confirm(`¿Borrar «${t.nombre}»? Los trabajos tipo que lo usan quedan sin tipo; los cálculos guardados no cambian.`)) return;
@@ -128,18 +126,19 @@ function FilaTipo({ inicial, nuevo, onListo, onDescartar }: { inicial: TipoTarea
     catch (e) { toastError(mensajeHH(e, 'No se pudo borrar.')); }
   };
   return (
-    <tr style={{ borderTop: '1px solid var(--border2)', opacity: t.activo ? 1 : 0.55, background: nuevo ? 'var(--y-soft)' : undefined }}>
-      <td style={tdEstilo}><Interruptor activo={t.activo} etiqueta={`${t.nombre || 'Tipo'} activo`} onChange={() => (cambiado ? setT({ ...t, activo: !t.activo }) : guardar({ activo: !t.activo }))} /></td>
-      <td style={{ ...tdEstilo, minWidth: 240 }}><input className="input input-sm" value={t.nombre} onChange={e => setT({ ...t, nombre: e.target.value })} aria-label="Nombre del tipo de tarea" /></td>
-      <td style={tdEstilo}><NumeroInput className="input input-sm" envoltura={{ width: 90 }} prefijo="×" value={t.multiplicador} decimales={2} min={0} onChange={v => setT({ ...t, multiplicador: v })} ariaLabel="Multiplicador" /></td>
-      <td style={{ ...tdEstilo, minWidth: 240 }}><input className="input input-sm" value={t.descripcion ?? ''} onChange={e => setT({ ...t, descripcion: e.target.value })} aria-label="Descripción" /></td>
-      <td style={tdEstilo}><NumeroInput className="input input-sm" envoltura={{ width: 60 }} value={t.orden} decimales={0} mostrarCero onChange={v => setT({ ...t, orden: Math.round(v) })} ariaLabel="Orden" /></td>
-      <td style={{ ...tdEstilo, whiteSpace: 'nowrap', textAlign: 'right' }}>
-        {cambiado && <button className="btn btn-primary btn-xs" onClick={() => guardar()} aria-label="Guardar el tipo de tarea"><Check size={12} /></button>}{' '}
+    <div className={s.subtarjeta} style={{ opacity: t.activo ? 1 : 0.55 }}>
+      <Interruptor activo={t.activo} etiqueta={`${t.nombre || 'Tipo'} activo`} onChange={() => (cambiado ? setT({ ...t, activo: !t.activo }) : guardar({ activo: !t.activo }))} />
+      <div style={{ flex: '1 1 260px', minWidth: 0, display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) 96px', gap: 6 }}>
+        <input className="input input-sm" value={t.nombre} onChange={e => setT({ ...t, nombre: e.target.value })} aria-label="Nombre del tipo de tarea" placeholder="Nombre" />
+        <NumeroInput className="input input-sm" prefijo="×" value={t.multiplicador} decimales={2} min={0} onChange={v => setT({ ...t, multiplicador: v })} ariaLabel="Multiplicador" />
+        <input className="input input-sm" style={{ gridColumn: '1 / -1' }} value={t.descripcion ?? ''} onChange={e => setT({ ...t, descripcion: e.target.value })} aria-label="Descripción" placeholder="Descripción" />
+      </div>
+      <span style={{ display: 'inline-flex', gap: 4, marginLeft: 'auto' }}>
+        {cambiado && <button className="btn btn-primary btn-xs" onClick={() => guardar()} aria-label="Guardar el tipo de tarea"><Check size={12} /></button>}
         {cambiado && <button className="btn btn-ghost btn-xs" onClick={() => (nuevo ? onDescartar?.() : setT(inicial))} aria-label="Descartar los cambios"><RotateCcw size={12} /></button>}
-        {!nuevo && !cambiado && <button className="btn btn-ghost btn-xs" onClick={borrar} aria-label={`Borrar ${t.nombre}`}><Trash2 size={12} /></button>}
-      </td>
-    </tr>
+        {!nuevo && !cambiado && <button className={s.iconoBtn} onClick={borrar} aria-label={`Borrar ${t.nombre}`}><Trash2 size={15} /></button>}
+      </span>
+    </div>
   );
 }
 
@@ -165,28 +164,26 @@ function IndicadorManual({ onIndicadores }: { onIndicadores: () => void }) {
     finally { setOcupado(false); }
   };
   return (
-    <div className="panel-y" style={{ padding: '0.9rem 1rem', display: 'flex', flexDirection: 'column', gap: 10 }}>
+    <div className={`panel-y ${s.tarjeta}`}>
       <p className="section-label" style={{ margin: 0 }}>Fijar la UF y el dólar a mano</p>
-      <p style={{ margin: 0, fontSize: '0.8rem', color: 'var(--muted)' }}>Para un día en que mindicador falle o dé un valor raro. El valor fijado manda ese día.</p>
-      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'flex-end' }}>
-        <Campo etiqueta="Día" ancho={160}><input className="input input-sm" type="date" value={f.fecha} onChange={e => setF({ ...f, fecha: e.target.value })} /></Campo>
-        <Campo etiqueta="UF" ancho={150}><NumeroInput className="input input-sm" prefijo="$" decimales={2} value={f.uf} onChange={v => setF({ ...f, uf: v })} ariaLabel="UF" /></Campo>
-        <Campo etiqueta="Dólar" ancho={130}><NumeroInput className="input input-sm" prefijo="$" decimales={2} value={f.usd} onChange={v => setF({ ...f, usd: v })} ariaLabel="Dólar" /></Campo>
-        <button className="btn btn-primary btn-sm" disabled={ocupado || !f.fecha} onClick={fijar}>{ocupado ? <Loader2 size={13} className="iv-spin" /> : <Save size={13} />} Fijar</button>
+      <p className={s.ayuda}>Para un día en que mindicador falle o dé un valor raro. El valor fijado manda ese día.</p>
+      <div className={s.rejilla}>
+        <Campo etiqueta="Día"><input className="input input-sm" type="date" value={f.fecha} onChange={e => setF({ ...f, fecha: e.target.value })} /></Campo>
+        <Campo etiqueta="UF"><NumeroInput className="input input-sm" prefijo="$" decimales={2} value={f.uf} onChange={v => setF({ ...f, uf: v })} ariaLabel="UF" /></Campo>
+        <Campo etiqueta="Dólar"><NumeroInput className="input input-sm" prefijo="$" decimales={2} value={f.usd} onChange={v => setF({ ...f, usd: v })} ariaLabel="Dólar" /></Campo>
       </div>
+      <button className="btn btn-primary btn-sm" style={{ alignSelf: 'flex-end' }} disabled={ocupado || !f.fecha} onClick={fijar}>
+        {ocupado ? <Loader2 size={13} className="iv-spin" /> : <Save size={13} />} Fijar
+      </button>
       {ultimos && ultimos.length > 0 && (
-        <div style={{ overflowX: 'auto' }}>
-          <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 420, fontSize: '0.8rem' }}>
-            <thead><tr>{['Día', 'UF', 'Dólar', 'Fuente'].map(h => <th key={h} style={thEstilo}>{h}</th>)}</tr></thead>
-            <tbody>{ultimos.map(u => (
-              <tr key={u.fecha} style={{ borderTop: '1px solid var(--border2)' }}>
-                <td style={tdEstilo}>{fechaCL(u.fecha)}</td>
-                <td style={{ ...tdEstilo, fontVariantNumeric: 'tabular-nums' }}>{formatoIndicador(u.uf)}</td>
-                <td style={{ ...tdEstilo, fontVariantNumeric: 'tabular-nums' }}>{formatoIndicador(u.usd)}</td>
-                <td style={{ ...tdEstilo, color: 'var(--muted)' }}>{NOMBRE_FUENTE[u.fuente]}</td>
-              </tr>
-            ))}</tbody>
-          </table>
+        <div>
+          <p className="label-muted" style={{ margin: '4px 0' }}>Últimos valores guardados</p>
+          {ultimos.map(u => (
+            <div key={u.fecha} className={s.fila} style={{ padding: '6px 0', borderTop: '1px solid var(--border2)' }}>
+              <span>{fechaCL(u.fecha)} · {NOMBRE_FUENTE[u.fuente]}</span>
+              <span>UF {formatoIndicador(u.uf)} · US$ {formatoIndicador(u.usd)}</span>
+            </div>
+          ))}
         </div>
       )}
     </div>

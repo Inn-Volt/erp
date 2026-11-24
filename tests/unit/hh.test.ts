@@ -9,6 +9,8 @@ import {
 } from '../../lib/hh/calculo.ts';
 import { elegirIndicadores, hoyEnChile, valorMindicador, valorSano } from '../../lib/hh/indicadores.ts';
 import { faltaEnLinea, filaLinea, hojasCalculo, lineaDesdeFila, lineaVacia, tarifasDeLinea, totalesDe, type LineaHH } from '../../lib/hh/lineas.ts';
+import { ayudasCatalogo, conPersona, conTrabajo, iniciales } from '../../components/hh/catalogo.ts';
+import type { CatalogoHH } from '../../services/hh.ts';
 
 const P = PARAMETROS_INICIALES;
 const IND = { uf: 41350.42, usd: 950 };
@@ -170,4 +172,61 @@ test('Una línea guardada vuelve igual (con la foto de la tarifa) y el Excel tra
   const hojas = hojasCalculo({ nombre: 'Prueba', cliente: 'Cliente', lineas: [l], cab, nombreTipo: () => 'Ejecución en terreno' }, t, IND, P);
   assert.deepEqual(hojas.map(h => h.nombre), ['Cálculo', 'Totales']);
   assert.equal(hojas[0].filas[0]['Subtotal CLP'], 272800);
+});
+
+// ─── Agregar un trabajo (components/hh/catalogo.ts) ─────────────────────────
+const CAT: CatalogoHH = {
+  parametros: { ...P, updated_at: null },
+  cargos: [
+    cargo({ id: 'ay', nombre: 'Ayudante eléctrico', tarifa_base: 0.3 }),
+    cargo({ id: 'red', nombre: 'Técnico redes', tarifa_base: 0.5 }),
+    SEC, FULL,
+  ],
+  tipos: [
+    { clave: 'terreno', nombre: 'Ejecución en terreno', multiplicador: 1, descripcion: null, activo: true, orden: 1 },
+    { clave: 'interfaz', nombre: 'Interfaces', multiplicador: 3, descripcion: null, activo: true, orden: 2 },
+  ],
+  trabajos: [
+    { id: 'punto', categoria: 'Redes', nombre: 'Punto de red Cat6', unidad: 'punto', hh_referencia: 1.25, cargo_principal_id: 'red', cargo_apoyo_id: 'ay', hh_apoyo: 1.25, tipo_tarea_clave: 'terreno', precio_mercado_ref: null, duracion_equipo: null, notas: null, activo: true, orden: 1 },
+    { id: 'landing', categoria: 'Software', nombre: 'Landing page', unidad: 'proyecto', hh_referencia: 25, cargo_principal_id: 'full', cargo_apoyo_id: null, hh_apoyo: 0, tipo_tarea_clave: 'interfaz', precio_mercado_ref: null, duracion_equipo: null, notas: null, activo: true, orden: 2 },
+    { id: 'tablero', categoria: 'Electricidad', nombre: 'Cambio de tablero', unidad: 'tablero', hh_referencia: 8, cargo_principal_id: 'sec', cargo_apoyo_id: 'ay', hh_apoyo: 6, tipo_tarea_clave: 'terreno', precio_mercado_ref: null, duracion_equipo: null, notas: null, activo: true, orden: 3 },
+  ],
+  personas: [
+    { id: 'pedro', nombre: 'Pedro Soto', profile_id: null, jefe_id: 'joaquin', activo: true },
+    { id: 'joaquin', nombre: 'Joaquín', profile_id: 'u-joaquin', jefe_id: 'cesar', activo: true },
+    { id: 'cesar', nombre: 'César', profile_id: 'u-cesar', jefe_id: null, activo: true },
+  ],
+  personaCargos: [
+    { id: 'a1', persona_id: 'cesar', cargo_id: 'full', tarifa_base_propia: 40, predeterminado: true, activo: true },
+    { id: 'a2', persona_id: 'joaquin', cargo_id: 'sec', tarifa_base_propia: null, predeterminado: true, activo: true },
+    { id: 'a3', persona_id: 'pedro', cargo_id: 'ay', tarifa_base_propia: 0.25, predeterminado: true, activo: true },
+  ],
+};
+
+test('Un trabajo tipo trae las horas de mercado ya listas: en terreno las mismas; con IA (× 3) un tercio y se cobran las de mercado', () => {
+  const ay = ayudasCatalogo(CAT, 'u-joaquin');
+  const punto = conTrabajo(lineaVacia(), 'punto', ay);
+  assert.deepEqual([punto.horas_reales, punto.multiplicador, punto.cargo_id, punto.persona_id, punto.cargo_apoyo_id, punto.horas_apoyo], [1.25, 1, 'red', null, 'ay', 1.25]);
+  assert.equal(punto.descripcion, 'Punto de red Cat6');
+  const landing = conTrabajo(lineaVacia(), 'landing', ay);
+  assert.deepEqual([landing.horas_reales, landing.multiplicador], [8.333333, 3]);
+  assert.equal(totalesDe([landing], { urgencia: false, materiales_clp: 0, margen_materiales: 0, traslado_uf: 0 }, IND, P).lineas[0].horasCobradas, 25);   // se cobran las 25 de mercado, exactas
+  // El tablero lo hace quien tiene el cargo (Joaquín, el usuario conectado, primero).
+  const tablero = conTrabajo(lineaVacia(), 'tablero', ay);
+  assert.deepEqual([tablero.persona_id, tablero.cargo_id, tablero.horas_reales, tablero.horas_apoyo], ['joaquin', 'sec', 8, 6]);
+});
+
+test('El equipo va en orden de jerarquía y cada persona entra con su cargo y su tarifa propia', () => {
+  const ay = ayudasCatalogo(CAT, 'u-cesar');
+  assert.deepEqual(ay.arbol.map(x => [x.p.nombre, x.nivel]), [['César', 0], ['Joaquín', 1], ['Pedro Soto', 2]]);
+  assert.equal(ay.miPersona?.id, 'cesar');
+  const conPedro = conPersona(lineaVacia(), 'pedro', ay);
+  assert.deepEqual([conPedro.cargo_id, conPedro.cargo_tarifa_base], ['ay', 0.25]);
+  const conCesar = conPersona(lineaVacia(), 'cesar', ay);
+  assert.deepEqual([conCesar.cargo_id, conCesar.cargo_tarifa_base, conCesar.cargo_moneda], ['full', 40, 'USD']);
+  // Sin hh.configurar la base solo manda su persona y su equipo: Joaquín queda arriba.
+  const soloJoaquin = ayudasCatalogo({ ...CAT, personas: CAT.personas.filter(p => p.id !== 'cesar') }, 'u-joaquin');
+  assert.deepEqual(soloJoaquin.arbol.map(x => [x.p.nombre, x.nivel]), [['Joaquín', 0], ['Pedro Soto', 1]]);
+  assert.equal(iniciales('Pedro Soto'), 'PS');
+  assert.equal(iniciales('  joaquín '), 'J');
 });

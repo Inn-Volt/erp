@@ -4,12 +4,12 @@
  * Comercial → Calculadora HH (fase 23): el valor de la hora-hombre por cargo con la base en UF (o
  * en USD para software), para que las tarifas no se desvaloricen. Módulo independiente del
  * cotizador. Pestañas:
- *   · Calculadora (hh.ver): quién hace el trabajo, con cuál de sus cargos (o un trabajo tipo), las
- *     horas reales y el multiplicador según el tipo de tarea → precio neto en CLP y en UF.
- *   · Equipo HH: con hh.configurar, las personas y sus cargos (tarifa propia, predeterminado); sin
- *     él, «Mis cargos HH».
- *   · Cargos HH, Trabajos tipo y Parámetros (hh.configurar).
- * La UF y el dólar del día se muestran arriba, siempre con su fuente y su fecha.
+ *   · Calcular (hh.ver): qué trabajo, quién lo hace y cuánto → precio neto en pesos y en UF.
+ *   · Equipo: con hh.configurar, todo el equipo por jerarquía (cargos, tarifas, quién está a cargo
+ *     de quién); sin él, «Mi equipo»: tus cargos y las personas a tu cargo hacia abajo.
+ *   · Cargos, Trabajos tipo y Ajustes (hh.configurar).
+ * La UF y el dólar del día se muestran arriba, siempre con su fuente y su fecha. La calculadora
+ * queda montada al cambiar de pestaña: lo que se está calculando no se pierde.
  */
 
 import { useCallback, useEffect, useState } from 'react';
@@ -27,8 +27,9 @@ import EquipoHH from './EquipoHH';
 import CargosHH from './CargosHH';
 import TrabajosTipoHH from './TrabajosTipoHH';
 import ParametrosHH from './ParametrosHH';
+import s from './hh.module.css';
 
-type Pestana = 'calculadora' | 'equipo' | 'cargos' | 'trabajos' | 'parametros';
+type Pestana = 'calcular' | 'equipo' | 'cargos' | 'trabajos' | 'ajustes';
 
 /** Sin respuesta de la ruta (sin red): el respaldo de los parámetros. */
 function respaldoDia(cat: CatalogoHH): IndicadoresDia {
@@ -41,12 +42,12 @@ function respaldoDia(cat: CatalogoHH): IndicadoresDia {
 
 function Indicador({ nombre, v }: { nombre: string; v: ValorIndicador }) {
   return (
-    <span style={{ display: 'inline-flex', alignItems: 'baseline', gap: 6, flexWrap: 'wrap' }}>
+    <span className={s.indicador}>
       <span className="label-muted">{nombre}</span>
-      <b style={{ color: 'var(--text)', fontVariantNumeric: 'tabular-nums' }}>{formatoIndicador(v.valor)}</b>
-      <span style={{ fontSize: '0.74rem', color: v.anterior ? 'var(--danger)' : 'var(--muted)', display: 'inline-flex', alignItems: 'center', gap: 3 }}>
+      <span className={s.indicadorValor}>{formatoIndicador(v.valor)}</span>
+      <span className={`${s.indicadorFuente} ${v.anterior ? s.indicadorAviso : ''}`} title={v.anterior ? 'No es el valor de hoy' : undefined}>
         {v.anterior && <AlertTriangle size={11} aria-hidden />}
-        {NOMBRE_FUENTE[v.fuente]} · {fechaCL(v.fecha)}{v.anterior ? ' (no es de hoy)' : ''}
+        {NOMBRE_FUENTE[v.fuente]} · {fechaCL(v.fecha)}
       </span>
     </span>
   );
@@ -61,7 +62,7 @@ export default function CalculoHH() {
   const [errInd, setErrInd] = useState('');
   const [leyendoInd, setLeyendoInd] = useState(false);
   const [falta, setFalta] = useState(false);
-  const [pestana, setPestana] = useState<Pestana>('calculadora');
+  const [pestana, setPestana] = useState<Pestana>('calcular');
 
   const cargar = useCallback(async () => {
     try { setCat(await hhService.catalogo()); }
@@ -80,39 +81,39 @@ export default function CalculoHH() {
   const dia = ind ?? respaldoDia(cat);
   const valores = { uf: dia.uf.valor, usd: dia.usd.valor };
   const PESTANAS: [Pestana, string][] = [
-    ['calculadora', 'Calculadora'],
-    ['equipo', configura ? 'Equipo HH' : 'Mis cargos HH'],
-    ...(configura ? [['cargos', 'Cargos HH'], ['trabajos', 'Trabajos tipo'], ['parametros', 'Parámetros'] ] as [Pestana, string][] : []),
+    ['calcular', 'Calcular'],
+    ['equipo', configura ? 'Equipo' : 'Mi equipo'],
+    ...(configura ? [['cargos', 'Cargos'], ['trabajos', 'Trabajos tipo'], ['ajustes', 'Ajustes']] as [Pestana, string][] : []),
   ];
   const props = { cat, valores, dia, onCambio: cargar };
+  const miId = perfil?.id ?? null;
 
   return (
-    <div className="anim-in" style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+    <div className={`anim-in ${s.pagina}`}>
       <PageHeader eyebrow="Comercial" title="Calculadora HH"
-        subtitle="El valor de la hora-hombre por cargo, en UF (o USD para software) para que no se desvalorice. Valores netos: el IVA va al final." />
+        subtitle="Cuánto cobrar por un trabajo según quién lo hace y cuánto toma. En UF (o USD para software), valores netos: el IVA va al final." />
 
-      <div className="panel" style={{ padding: '0.65rem 1rem', display: 'flex', gap: '0.6rem 1.4rem', flexWrap: 'wrap', alignItems: 'center' }}>
+      <div className={`panel ${s.indicadores}`}>
         <Indicador nombre="UF" v={dia.uf} />
         <Indicador nombre="Dólar" v={dia.usd} />
         <span style={{ flex: 1 }} />
-        {errInd && <span style={{ fontSize: '0.76rem', color: 'var(--danger)' }}>{errInd}</span>}
+        {errInd && <span style={{ fontSize: '0.74rem', color: 'var(--danger)' }}>{errInd}</span>}
         <button className="btn btn-ghost btn-xs" disabled={leyendoInd} onClick={() => { setLeyendoInd(true); leerIndicadores(); }} aria-label="Volver a leer la UF y el dólar">
           {leyendoInd ? <Loader2 size={12} className="iv-spin" /> : <RefreshCw size={12} />} Actualizar
         </button>
       </div>
 
-      <div role="tablist" aria-label="Secciones de la calculadora HH" style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
+      <div role="tablist" aria-label="Secciones de la calculadora HH" className={s.pestanas}>
         {PESTANAS.map(([v, t]) => (
-          <button key={v} role="tab" aria-selected={pestana === v} className="btn btn-sm" onClick={() => setPestana(v)}
-            style={{ background: pestana === v ? 'var(--y-brand)' : 'var(--bg3)', color: pestana === v ? '#111' : 'var(--muted)' }}>{t}</button>
+          <button key={v} role="tab" aria-selected={pestana === v} className={s.pestana} onClick={() => setPestana(v)}>{t}</button>
         ))}
       </div>
 
-      {pestana === 'calculadora' && <Calculadora {...props} configura={configura} miId={perfil?.id ?? null} />}
-      {pestana === 'equipo' && <EquipoHH {...props} configura={configura} miId={perfil?.id ?? null} />}
+      <div hidden={pestana !== 'calcular'}><Calculadora {...props} configura={configura} miId={miId} /></div>
+      {pestana === 'equipo' && <EquipoHH {...props} configura={configura} miId={miId} />}
       {pestana === 'cargos' && configura && <CargosHH {...props} />}
       {pestana === 'trabajos' && configura && <TrabajosTipoHH {...props} />}
-      {pestana === 'parametros' && configura && <ParametrosHH {...props} onIndicadores={() => { setLeyendoInd(true); leerIndicadores(); }} />}
+      {pestana === 'ajustes' && configura && <ParametrosHH {...props} onIndicadores={() => { setLeyendoInd(true); leerIndicadores(); }} />}
     </div>
   );
 }
