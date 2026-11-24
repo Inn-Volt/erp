@@ -20,8 +20,8 @@ INSERT INTO public.usuario_roles (usuario_id, rol_id) SELECT :'JOAQUIN', id FROM
 INSERT INTO r (ok, txt) SELECT count(*) = 11 AND count(*) FILTER (WHERE moneda_base = 'USD') = 3, '11 cargos HH (3 en USD)' FROM public.hh_cargos;
 INSERT INTO r (ok, txt) SELECT count(*) = 5 AND bool_and(multiplicador = CASE clave WHEN 'interfaz' THEN 3 WHEN 'logica' THEN 2 WHEN 'integracion' THEN 1.3 ELSE 1 END),
   '5 tipos de tarea con su multiplicador' FROM public.hh_tipos_tarea;
-INSERT INTO r (ok, txt) SELECT count(*) = 38 AND bool_and(tipo_tarea_clave IS NOT NULL) AND count(*) FILTER (WHERE categoria = 'Pantallas LED' OR nombre ILIKE '%pantalla%') = 0,
-  '38 trabajos tipo con su tipo de tarea (sin pantallas LED)' FROM public.hh_trabajos_tipo;
+INSERT INTO r (ok, txt) SELECT count(*) = 41 AND bool_and(tipo_tarea_clave IS NOT NULL) AND count(*) FILTER (WHERE categoria = 'Pantallas LED') = 2,
+  '41 trabajos tipo con su tipo de tarea (también pantallas LED)' FROM public.hh_trabajos_tipo;
 INSERT INTO r (ok, txt) SELECT count(*) = 4 AND bool_and(t.tipo_tarea_clave = v.tipo), 'Visita y NVR son coordinación; landing es interfaz; MVP es lógica'
   FROM public.hh_trabajos_tipo t JOIN (VALUES ('Visita técnica / diagnóstico', 'coordinacion'), ('Configuración NVR + app + usuarios', 'coordinacion'),
     ('Landing page (1 página)', 'interfaz'), ('App web a medida (MVP)', 'logica')) AS v(nombre, tipo) ON v.nombre = t.nombre;
@@ -38,7 +38,7 @@ INSERT INTO r (ok, txt) SELECT count(*) = 2, 'César y Joaquín en el equipo HH,
 UPDATE public.hh_cargos SET tarifa_base = 0.8 WHERE nombre = 'Instalador eléctrico SEC (declara TE1/TE4)';
 \i /tmp/supabase_fase23_calculo_hh.sql
 SELECT set_config('request.jwt.claim.sub', '', false);
-INSERT INTO r (ok, txt) SELECT (SELECT count(*) FROM public.hh_cargos) = 11 AND (SELECT count(*) FROM public.hh_trabajos_tipo) = 38
+INSERT INTO r (ok, txt) SELECT (SELECT count(*) FROM public.hh_cargos) = 11 AND (SELECT count(*) FROM public.hh_trabajos_tipo) = 41
   AND (SELECT tarifa_base FROM public.hh_cargos WHERE nombre = 'Instalador eléctrico SEC (declara TE1/TE4)') = 0.8,
   'Idempotente: no duplica semillas ni pisa la tarifa cambiada';
 

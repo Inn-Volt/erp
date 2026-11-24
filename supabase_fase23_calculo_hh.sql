@@ -510,9 +510,10 @@ CREATE POLICY hh_lineas_escribir ON public.hh_calculo_lineas FOR ALL TO authenti
 
 -- ─── 10. Semillas (del Excel «InnVolt – Tarifas HH») ─────────────────────────
 -- ON CONFLICT DO NOTHING: volver a correr el archivo no pisa lo cambiado desde la pantalla.
--- Las pantallas no son de InnVolt: el técnico de integración queda solo para domótica.
-UPDATE public.hh_cargos SET nombre = 'Técnico integración (domótica)'
- WHERE nombre = 'Técnico integración (domótica / pantallas)' AND NOT EXISTS (SELECT 1 FROM public.hh_cargos WHERE nombre = 'Técnico integración (domótica)');
+-- Si se corrió la versión que lo renombró a «(domótica)», el cargo vuelve a su nombre: InnVolt
+-- también hace pantallas.
+UPDATE public.hh_cargos SET nombre = 'Técnico integración (domótica / pantallas)'
+ WHERE nombre = 'Técnico integración (domótica)' AND NOT EXISTS (SELECT 1 FROM public.hh_cargos WHERE nombre = 'Técnico integración (domótica / pantallas)');
 INSERT INTO public.hh_cargos (orden, nombre, moneda_base, tarifa_base, mercado_min, mercado_max, sueldo_mercado_clp, notas) VALUES
   (1,  'Ayudante eléctrico', 'UF', 0.3, 0.1, 0.3, 650000, 'Va siempre junto a un maestro; no se cobra solo.'),
   (2,  'Maestro electricista', 'UF', 0.5, 0.3, 1.0, 800000, 'Para trabajos de varios días. En visitas cortas cobra como mínimo una «primera hora» de ~1 UF (precio medio en Chile ~$40.000/h según Cronoshare).'),
@@ -520,7 +521,7 @@ INSERT INTO public.hh_cargos (orden, nombre, moneda_base, tarifa_base, mercado_m
   (4,  'Técnico instalador solar FV', 'UF', 0.5, 0.44, 0.97, 1000000, 'Trabajo en altura y especializado.'),
   (5,  'Técnico CCTV / control de acceso', 'UF', 0.5, 0.36, 0.85, 850000, 'La configuración (NVR, app, usuarios) se cobra aparte del montaje.'),
   (6,  'Técnico redes y cableado estructurado', 'UF', 0.5, 0.36, 0.85, 850000, 'Mejor cotizar por punto de red que por hora.'),
-  (7,  'Técnico integración (domótica)', 'UF', 0.5, 0.44, 0.97, 850000, 'Combina electricidad + configuración de software.'),
+  (7,  'Técnico integración (domótica / pantallas)', 'UF', 0.5, 0.44, 0.97, 850000, 'Combina electricidad + configuración de software.'),
   (8,  'Desarrollador full stack', 'USD', 35.0, 27.0, 48.0, 2000000, 'Mediana senior US$35/h; nivel medio US$27/h; senior fuerte US$48/h (lemon.io, Q3 2026).'),
   (9,  'Integración de sistemas / arquitectura', 'USD', 45.0, 35.0, 60.0, 2500000, 'APIs de terceros + hardware + software (ej. VSX). Lo más especializado que haces. Rango estimado sobre la base de lemon.io.'),
   (10, 'Diseño UI / UX (dashboards, web)', 'USD', 30.0, 20.0, 45.0, 1600000, 'Rango estimado.'),
@@ -571,8 +572,10 @@ FROM (VALUES
   (26, 'Redes', 'Rack / gabinete + patch panel + ordenamiento', 'rack', 6.0, 'Técnico redes y cableado estructurado', '', 0.0, 'terreno', '', '1 técnico', ''),
   (27, 'Redes', 'Access point WiFi instalado y configurado', 'unidad', 1.5, 'Técnico redes y cableado estructurado', '', 0.0, 'terreno', '', '1 técnico', ''),
   (28, 'Redes', 'Configuración router / switch / VLAN pyme', 'servicio', 4.0, 'Técnico redes y cableado estructurado', '', 0.0, 'terreno', '', '1 técnico', ''),
-  (29, 'Domótica', 'Interruptor / enchufe inteligente', 'unidad', 0.75, 'Técnico integración (domótica)', '', 0.0, 'terreno', '', '1 técnico', ''),
-  (30, 'Domótica', 'Configuración app, escenas y automatizaciones', 'casa', 4.0, 'Técnico integración (domótica)', '', 0.0, 'terreno', '', '1 técnico', ''),
+  (29, 'Domótica', 'Interruptor / enchufe inteligente', 'unidad', 0.75, 'Técnico integración (domótica / pantallas)', '', 0.0, 'terreno', '', '1 técnico', ''),
+  (30, 'Domótica', 'Configuración app, escenas y automatizaciones', 'casa', 4.0, 'Técnico integración (domótica / pantallas)', '', 0.0, 'terreno', '', '1 técnico', ''),
+  (31, 'Pantallas LED', 'Montaje pantalla LED / TV comercial', 'unidad', 4.0, 'Técnico integración (domótica / pantallas)', '', 0.0, 'terreno', '', '2 personas', ''),
+  (32, 'Pantallas LED', 'Configuración software de contenidos', 'pantalla', 3.0, 'Integración de sistemas / arquitectura', '', 0.0, 'integracion', '', 'Remoto', ''),
   (33, 'Software', 'Landing page (1 página)', 'proyecto', 25.0, 'Desarrollador full stack', '', 0.0, 'interfaz', '', '1–2 semanas', 'Horas equivalentes sin IA.'),
   (34, 'Software', 'Sitio corporativo 5–7 páginas', 'proyecto', 60.0, 'Desarrollador full stack', '', 0.0, 'interfaz', '', '3–4 semanas', 'Horas equivalentes sin IA.'),
   (35, 'Software', 'Diseño UI de dashboard', 'proyecto', 30.0, 'Diseño UI / UX (dashboards, web)', '', 0.0, 'interfaz', '', '1–2 semanas', ''),
@@ -580,17 +583,12 @@ FROM (VALUES
   (37, 'Software', 'Integración con API externa', 'integración', 40.0, 'Integración de sistemas / arquitectura', '', 0.0, 'integracion', '', '2–3 semanas', 'Depende de qué tan bien documentada esté la API.'),
   (38, 'Software', 'App web a medida (MVP)', 'proyecto', 220.0, 'Desarrollador full stack', '', 0.0, 'logica', '', '2–4 meses', 'Horas equivalentes sin IA.'),
   (39, 'Software', 'Soporte y mantención mensual', 'mes', 8.0, 'Desarrollador full stack', '', 0.0, 'logica', '', 'Mensual', 'Ingreso recurrente: cóbralo como plan mensual en UF.'),
-  (40, 'Gestión', 'Levantamiento técnico + cotización compleja', 'proyecto', 4.0, 'Gestión de proyecto / administración', 'Ayudante eléctrico', 4.0, 'coordinacion', '', '1 persona', 'En proyectos grandes, cóbralo o inclúyelo explícitamente en la propuesta.')
+  (40, 'Gestión', 'Levantamiento técnico + cotización compleja', 'proyecto', 4.0, 'Gestión de proyecto / administración', 'Ayudante eléctrico', 4.0, 'coordinacion', '', '1 persona', 'En proyectos grandes, cóbralo o inclúyelo explícitamente en la propuesta.'),
+  (41, 'Software', 'Integración audio pantallas', 'proyecto', 4.0, 'Técnico integración (domótica / pantallas)', '', 0.0, 'integracion', '', '', '')
 ) AS v(orden, categoria, nombre, unidad, hh, principal, apoyo, hh_apoyo, tipo, ref, dur, nota)
 JOIN public.hh_cargos p ON p.nombre = v.principal
 LEFT JOIN public.hh_cargos a ON a.nombre = NULLIF(v.apoyo, '')
 ON CONFLICT (categoria, nombre) DO NOTHING;
--- Las pantallas LED no son trabajo de InnVolt: fuera las que traía la primera versión (los cálculos
--- guardados que las usaban no cambian: guardan su foto).
-DELETE FROM public.hh_trabajos_tipo
- WHERE (categoria, nombre) IN (('Pantallas LED', 'Montaje pantalla LED / TV comercial'),
-                               ('Pantallas LED', 'Configuración software de contenidos'),
-                               ('Software', 'Integración audio pantallas'));
 
 -- César y Joaquín, sin cargos: se asignan (y se vinculan a su usuario) desde «Equipo».
 INSERT INTO public.hh_personas (nombre) VALUES ('César'), ('Joaquín') ON CONFLICT (nombre) DO NOTHING;
