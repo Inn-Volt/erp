@@ -21,7 +21,7 @@ import {
   control, cuadre, flujoSemanal, hojasControl, inicioPorDefecto, kpis, movimientos, nombreArchivoControl, normalizarPlan,
   opcionesDePartida, planPorDefecto, presupuesto, type FlujoPlan, type ManoObraCP, type TipoCosto,
 } from '@/lib/controlProyecto';
-import { analizar, hojasAnalisis, type LineaEntrada } from '@/lib/analisisProyecto';
+import { analizar, hojasAnalisis, saldoAFavor, type LineaEntrada } from '@/lib/analisisProyecto';
 import { ejecucionDe, totalLinea } from '@/lib/anteproyecto';
 import { RETENCION_HONORARIOS } from '@/lib/manoObra';
 import { controlProyectoService, type DatosControl } from '@/services/controlProyecto';
@@ -210,13 +210,16 @@ export default function AnalisisProyecto({ cotId, folio, plan, resultado, versio
   if (!datos || !base || !a) return <div className="skeleton" style={{ height: 140 }} />;
 
   const registros = (clase: 'mano_obra' | 'servicio') => datos.manoObra.filter(r => (r.clase === 'servicio' ? 'servicio' : 'mano_obra') === clase);
-  const cotizadoTotal = base.c.total.cotizado;
+  // Queda = el saldo a favor: lo abonado por el cliente (sin IVA) menos lo gastado.
+  const s = saldoAFavor({ abonado: datos.cobros.reduce((t, c) => t + (Number(c.monto_pagado) || 0), 0), venta: a.venta, total: base.total, gastado: a.gastado });
   const tarjetas: [string, React.ReactNode, string?][] = [
-    ['Para gastar', formatCLP(a.paraGastar), a.paraGastar !== cotizadoTotal ? `cotizado ${formatCLP(cotizadoTotal)}` : 'igual a lo cotizado'],
-    ['Gastado', formatCLP(a.gastado), a.paraGastar > 0 ? `${pct((a.gastado / a.paraGastar) * 100)} del presupuesto` : undefined],
-    ['Queda', <Queda key="q" v={a.queda} />, a.queda < 0 ? 'se pasó del presupuesto' : 'para terminar'],
+    ['Total cotización', formatCLP(base.total), base.total > a.venta ? `neto ${formatCLP(a.venta)} + IVA` : 'sin IVA'],
     ['Margen proyectado', <span key="m" style={{ color: a.margenProyectado < 0 ? 'var(--danger)' : 'var(--success)' }}>{formatCLP(a.margenProyectado)}</span>,
-      `${pct(a.margenProyectadoPct)} de la venta ${formatCLP(a.venta)}`],
+      `${pct(a.margenProyectadoPct)} de la venta neta`],
+    ['Gastado', formatCLP(a.gastado), a.paraGastar > 0 ? `${pct((a.gastado / a.paraGastar) * 100)} de ${formatCLP(a.paraGastar)} presupuestado` : undefined],
+    ['Queda', <Queda key="q" v={s.saldo} />,
+      !s.abonado ? 'sin abonos todavía'
+        : `de ${formatCLP(s.abonado)} abonado${s.sinIva !== s.abonado ? ` (${formatCLP(s.sinIva)} sin IVA)` : ''}${s.saldo < 0 ? ': se ha gastado más' : ''}`],
   ];
   const props = { a, partidas: base.partidas, edicion };
 

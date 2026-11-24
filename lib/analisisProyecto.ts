@@ -253,6 +253,17 @@ export function analizar(e: EntradaAnalisis): Analisis {
   };
 }
 
+/**
+ * El saldo a favor del trabajo: lo que el cliente ya abonó, sin el IVA (ese va al SII), menos lo
+ * gastado (que también va sin IVA: las compras con factura cuentan su neto). Negativo = se ha
+ * gastado más de lo que ha entrado. `venta` (neta) y `total` (con IVA) son de la cotización, en pesos.
+ */
+export function saldoAFavor(o: { abonado: number; venta: number; total: number; gastado: number }) {
+  const abonado = Math.round(n(o.abonado));
+  const sinIva = n(o.total) > 0 ? Math.round(abonado * Math.min(n(o.venta) / n(o.total), 1)) : abonado;
+  return { abonado, sinIva, saldo: sinIva - Math.round(n(o.gastado)) };
+}
+
 // ── Editar el presupuesto: mano de obra por día y servicios por hora ────────
 /** Días de una línea de mano de obra (la cantidad es personas × días). */
 export const diasDeLinea = (l: Pick<LineaPresupuesto, 'cantidad' | 'personas'>) => r3(n(l.cantidad) / (n(l.personas) || 1));
