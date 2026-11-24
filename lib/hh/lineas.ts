@@ -65,12 +65,7 @@ function aLineaCalculo(l: LineaHH, ind: Indicadores, p: ParametrosHH): LineaCalc
   };
 }
 
-interface CabeceraHH {
-  urgencia: boolean;
-  materiales_clp: number;
-  margen_materiales: number;
-  traslado_uf: number;
-}
+export type CabeceraHH = Omit<EntradaTotales, 'lineas'>;
 
 export function totalesDe(lineas: LineaHH[], cab: CabeceraHH, ind: Indicadores, p: ParametrosHH): Totales {
   const e: EntradaTotales = { ...cab, lineas: lineas.map(l => aLineaCalculo(l, ind, p)) };
@@ -160,8 +155,10 @@ export function hojasCalculo(
     ['Subtotal líneas', t.subtotalLineas],
     ['Recargo urgencia', t.recargoUrgencia],
     ['Mano de obra', t.manoObra],
-    ['Materiales (con margen)', t.materialesVenta],
-    ['Traslado', t.trasladoCLP],
+    ['Materiales (venta)', t.materialesVenta],
+    ['Utilidad de los materiales', t.utilidadMateriales === null ? '' : `${Math.round(t.utilidadMateriales * 1000) / 10} %`],
+    ['Operación', t.operacion],
+    ['Gestión de proyecto', t.gestion],
     ['Neto CLP', t.neto],
     ['Neto UF', t.netoUF],
     [`IVA (${Math.round(p.iva * 100)} %)`, t.iva],

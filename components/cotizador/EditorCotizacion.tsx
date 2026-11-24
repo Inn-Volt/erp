@@ -63,6 +63,7 @@ import {
 import { clientesService } from '@/services/clientes';
 import { archivosOT, folioOT, informesService, otService, sucursalesService, type Contacto, type InformeOT, type Sucursal } from '@/services/operacion';
 import { solicitudesService } from '@/services/solicitudes';
+import { hhService } from '@/services/hh';
 import { levantamientosService } from '@/services/levantamientos';
 import { fotosService } from '@/services/fotos';
 import { vendedoresService, firmaVendedor } from '@/services/vendedores';
@@ -93,8 +94,10 @@ const huella = (d: CotizacionDoc) => JSON.stringify([
   d.valida_hasta_a_mano, d.incluir_fotos, d.proyecto_id, d.vendedor_id,
 ]);
 
-export default function EditorCotizacion({ id, clonarDe, clienteInicial, solicitudInicial, otInicial, visitaInicial, proyectoInicial }: {
+export default function EditorCotizacion({ id, clonarDe, clienteInicial, solicitudInicial, otInicial, visitaInicial, proyectoInicial, hhInicial }: {
   id: string | null; clonarDe?: string | null; clienteInicial?: string | null; solicitudInicial?: string | null; otInicial?: string | null; visitaInicial?: string | null; proyectoInicial?: string | null;
+  /** Un anteproyecto de la Calculadora HH (hh_calculos.id): la cotización nace con sus trabajos. */
+  hhInicial?: string | null;
 }) {
   const router = useRouter();
   const { perfil, puede } = usePermisos();
@@ -261,6 +264,15 @@ export default function EditorCotizacion({ id, clonarDe, clienteInicial, solicit
               if (an.resumen) nuevo.descripcion_general = an.resumen;
             }
           }
+        }
+        if (hhInicial) {
+          // Desde un anteproyecto de la Calculadora HH: sus trabajos (con su costo real), los materiales,
+          // la operación y la gestión de proyecto. El cliente se elige aquí (en el cálculo es texto libre).
+          try {
+            const desde = await hhService.paraCotizar(hhInicial);
+            Object.assign(nuevo, { titulo: desde.titulo, descripcion_general: desde.descripcion_general, partidas: desde.partidas, items: desde.items });
+            if (desde.cliente && !nuevo.cliente_id) setBuscaCliente(desde.cliente);
+          } catch (e) { toastError('No se pudo traer el anteproyecto: ' + (e instanceof Error ? e.message : '')); }
         }
         // La visita (agenda): la pedida, o la última realizada de la solicitud. Lo que se vio va a la
         // introducción y sus fotos, al PDF.

@@ -43,10 +43,6 @@ const TODO: AreaDef[] = [
       { clave: 'proyectos.ver', nombre: 'Ver' },
       { clave: 'proyectos.gestionar', nombre: 'Crear y editar' },
     ] },
-    { modulo: 'traslados', nombre: 'Traslados', permisos: [
-      { clave: 'traslados.ver', nombre: 'Ver la lista y cotizar traslados' },
-      { clave: 'traslados.gestionar', nombre: 'Editar comunas, bases y tarifa' },
-    ] },
     { modulo: 'hh', nombre: 'Calculadora HH', permisos: [
       { clave: 'hh.ver', nombre: 'Usar la calculadora', ayuda: 'Calcular, guardar cálculos y elegir sus propios cargos HH (sin cambiar su tarifa)' },
       { clave: 'hh.configurar', nombre: 'Configurar cargos y tarifas', ayuda: 'Cargos, tarifas, parámetros, trabajos tipo, multiplicadores y los cargos HH de cada persona' },
@@ -132,18 +128,18 @@ export const PLANTILLAS_BASE: Record<string, string[]> = {
   comercial: ['solicitudes.ver', 'solicitudes.crear', 'cotizaciones.ver', 'cotizaciones.crear', 'cotizaciones.aprobar',
     'cotizaciones.ver_costos', 'clientes.ver', 'clientes.crear', 'plantillas.gestionar', 'agenda.ver',
     'agenda.gestionar', 'levantamientos.ver', 'dashboard.ver', 'biblioteca.ver', 'ia.usar',
-    'ot.ver', 'ot.crear', 'facturacion.ver', 'tareas.ver', 'tareas.gestionar', 'proyectos.ver', 'proyectos.gestionar', 'traslados.ver'],
+    'ot.ver', 'ot.crear', 'facturacion.ver', 'tareas.ver', 'tareas.gestionar', 'proyectos.ver', 'proyectos.gestionar'],
   administrativo: ['solicitudes.ver', 'solicitudes.crear', 'cotizaciones.ver', 'cotizaciones.crear', 'cotizaciones.aprobar',
     'cotizaciones.ver_costos', 'clientes.ver', 'clientes.crear', 'agenda.ver', 'dashboard.ver',
     'biblioteca.ver', 'biblioteca.editar', 'plantillas.gestionar', 'ia.usar',
     'ot.ver', 'ot.crear', 'ot.cerrar', 'facturacion.ver', 'facturacion.gestionar', 'bodega.ver', 'bodega.mover',
     'bodega.ajustar', 'gastos.crear', 'gastos.ver_todos', 'gastos.aprobar', 'tareas.ver', 'tareas.gestionar',
-    'proyectos.ver', 'proyectos.gestionar', 'personas.ver', 'personas.gestionar', 'traslados.ver', 'traslados.gestionar',
+    'proyectos.ver', 'proyectos.gestionar', 'personas.ver', 'personas.gestionar',
     'compras.ver', 'compras.gestionar'],
   tecnico: ['solicitudes.ver', 'cotizaciones.ver', 'clientes.ver', 'agenda.ver', 'agenda.gestionar',
-    'levantamientos.ver', 'levantamientos.crear', 'biblioteca.ver', 'ot.ejecutar', 'bodega.ver', 'bodega.mover', 'gastos.crear', 'traslados.ver'],
+    'levantamientos.ver', 'levantamientos.crear', 'biblioteca.ver', 'ot.ejecutar', 'bodega.ver', 'bodega.mover', 'gastos.crear'],
   solo_lectura: ['solicitudes.ver', 'cotizaciones.ver', 'clientes.ver', 'agenda.ver', 'levantamientos.ver',
-    'biblioteca.ver', 'dashboard.ver', 'ot.ver', 'facturacion.ver', 'bodega.ver', 'tareas.ver', 'proyectos.ver', 'personas.ver', 'traslados.ver',
+    'biblioteca.ver', 'dashboard.ver', 'ot.ver', 'facturacion.ver', 'bodega.ver', 'tareas.ver', 'proyectos.ver', 'personas.ver',
     'compras.ver'],
 };
 
@@ -186,7 +182,6 @@ export const PERMISO_DE_RUTA: { prefijo: string; permisos: string[] }[] = [
   { prefijo: '/trabajos', permisos: ['cotizaciones.ver'] },
   { prefijo: '/plantillas-informe', permisos: ['cotizaciones.aprobar', 'configuracion.gestionar'] },
   { prefijo: '/personas', permisos: ['personas.ver', 'personas.gestionar'] },
-  { prefijo: '/traslados', permisos: ['traslados.ver', 'traslados.gestionar'] },
   { prefijo: '/calculo-hh', permisos: ['hh.ver', 'hh.configurar'] },
 ];
 

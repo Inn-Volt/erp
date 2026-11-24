@@ -59,7 +59,6 @@ const MENU: { grupo: string; icono: React.ElementType; items: Item[] }[] = [
     { href: '/cotizador/ajustes', label: 'Ajustes', permisos: ['cotizaciones.aprobar'], sub: true },
     { href: '/cotizador/utilidad', label: 'Utilidad', permisos: ['cotizaciones.aprobar'], sub: true },
     { href: '/clientes', label: 'Clientes', permisos: ['clientes.ver'] },
-    { href: '/traslados', label: 'Traslados', permisos: ['traslados.ver', 'traslados.gestionar'] },
     { href: '/calculo-hh', label: 'Calculadora HH', permisos: ['hh.ver', 'hh.configurar'] },
   ] },
   { grupo: 'Seguimiento', icono: ClipboardCheck, items: [

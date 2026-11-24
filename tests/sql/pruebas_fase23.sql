@@ -20,7 +20,8 @@ INSERT INTO public.usuario_roles (usuario_id, rol_id) SELECT :'JOAQUIN', id FROM
 INSERT INTO r (ok, txt) SELECT count(*) = 11 AND count(*) FILTER (WHERE moneda_base = 'USD') = 3, '11 cargos HH (3 en USD)' FROM public.hh_cargos;
 INSERT INTO r (ok, txt) SELECT count(*) = 5 AND bool_and(multiplicador = CASE clave WHEN 'interfaz' THEN 3 WHEN 'logica' THEN 2 WHEN 'integracion' THEN 1.3 ELSE 1 END),
   '5 tipos de tarea con su multiplicador' FROM public.hh_tipos_tarea;
-INSERT INTO r (ok, txt) SELECT count(*) = 41 AND bool_and(tipo_tarea_clave IS NOT NULL), '41 trabajos tipo, todos con su tipo de tarea' FROM public.hh_trabajos_tipo;
+INSERT INTO r (ok, txt) SELECT count(*) = 41 AND bool_and(tipo_tarea_clave IS NOT NULL) AND count(*) FILTER (WHERE categoria = 'Pantallas LED') = 2,
+  '41 trabajos tipo con su tipo de tarea (también pantallas LED)' FROM public.hh_trabajos_tipo;
 INSERT INTO r (ok, txt) SELECT count(*) = 4 AND bool_and(t.tipo_tarea_clave = v.tipo), 'Visita y NVR son coordinación; landing es interfaz; MVP es lógica'
   FROM public.hh_trabajos_tipo t JOIN (VALUES ('Visita técnica / diagnóstico', 'coordinacion'), ('Configuración NVR + app + usuarios', 'coordinacion'),
     ('Landing page (1 página)', 'interfaz'), ('App web a medida (MVP)', 'logica')) AS v(nombre, tipo) ON v.nombre = t.nombre;
@@ -28,8 +29,8 @@ INSERT INTO r (ok, txt) SELECT count(*) = 1 AND bool_and(c.nombre = 'Instalador 
   'El cambio de tablero va con instalador SEC y 6 HH de ayudante'
   FROM public.hh_trabajos_tipo t JOIN public.hh_cargos c ON c.id = t.cargo_principal_id JOIN public.hh_cargos a ON a.id = t.cargo_apoyo_id
   WHERE t.nombre = 'Cambio tablero domiciliario (hasta 12 circuitos)';
-INSERT INTO r (ok, txt) SELECT count(*) = 1 AND bool_and(horas_facturables_mes = 140 AND factor_costo_empresa = 1.35 AND uf_respaldo = 41350.42 AND redondeo_total = 1000 AND validez_dias = 15),
-  'Una sola fila de parámetros con los valores del Excel' FROM public.hh_parametros;
+INSERT INTO r (ok, txt) SELECT count(*) = 1 AND bool_and(horas_facturables_mes = 140 AND factor_costo_empresa = 1.35 AND uf_respaldo = 41350.42 AND redondeo_total = 1000 AND validez_dias = 15 AND gestion_proyecto = 0.10),
+  'Una sola fila de parámetros con los valores del Excel (y gestión 10 %)' FROM public.hh_parametros;
 INSERT INTO r (ok, txt) SELECT count(*) = 2, 'César y Joaquín en el equipo HH, sin cargos' FROM public.hh_personas p
   WHERE nombre IN ('César', 'Joaquín') AND NOT EXISTS (SELECT 1 FROM public.hh_persona_cargos pc WHERE pc.persona_id = p.id);
 
@@ -41,8 +42,10 @@ INSERT INTO r (ok, txt) SELECT (SELECT count(*) FROM public.hh_cargos) = 11 AND 
   AND (SELECT tarifa_base FROM public.hh_cargos WHERE nombre = 'Instalador eléctrico SEC (declara TE1/TE4)') = 0.8,
   'Idempotente: no duplica semillas ni pisa la tarifa cambiada';
 
--- Joaquín vinculado a su usuario.
+-- Joaquín vinculado a su usuario. Los id de las personas, para usarlos como Joaquín (que no ve a César).
 UPDATE public.hh_personas SET profile_id = :'JOAQUIN' WHERE nombre = 'Joaquín';
+CREATE TEMP TABLE pers AS SELECT nombre, id FROM public.hh_personas;
+GRANT SELECT ON pers TO authenticated;
 
 -- ═══ B. Quien solo usa la calculadora no toca la configuración ═══
 SELECT pg_temp.como(:'JOAQUIN');
@@ -90,7 +93,7 @@ EXCEPTION WHEN OTHERS THEN INSERT INTO r (ok, txt) VALUES (SQLERRM LIKE '%no est
 END $$;
 DO $$ BEGIN
   INSERT INTO public.hh_persona_cargos (persona_id, cargo_id)
-    SELECT p.id, c.id FROM public.hh_personas p, public.hh_cargos c WHERE p.nombre = 'César' AND c.nombre = 'Ayudante eléctrico';
+    SELECT p.id, c.id FROM pers p, public.hh_cargos c WHERE p.nombre = 'César' AND c.nombre = 'Ayudante eléctrico';
   INSERT INTO r (ok, txt) VALUES (FALSE, 'No le asigna cargos a otra persona');
 EXCEPTION WHEN OTHERS THEN INSERT INTO r (ok, txt) VALUES (TRUE, 'No le asigna cargos a otra persona');
 END $$;
@@ -126,7 +129,7 @@ UPDATE public.hh_persona_cargos SET activo = FALSE
  WHERE cargo_id = (SELECT id FROM public.hh_cargos WHERE nombre = 'Maestro electricista')
    AND persona_id = (SELECT id FROM public.hh_personas WHERE nombre = 'Joaquín');
 -- Lo de César no lo toca ni lo borra; lo suyo no lo borra (lo desactiva).
-UPDATE public.hh_persona_cargos SET activo = FALSE WHERE persona_id = (SELECT id FROM public.hh_personas WHERE nombre = 'César');
+UPDATE public.hh_persona_cargos SET activo = FALSE WHERE persona_id = (SELECT id FROM pers WHERE nombre = 'César');
 DELETE FROM public.hh_persona_cargos;
 RESET ROLE;
 INSERT INTO r (ok, txt) SELECT count(*) = 1 AND bool_and(c.nombre = 'Técnico instalador solar FV'), 'Un solo predeterminado: el último que marcó'
@@ -166,12 +169,17 @@ INSERT INTO r (ok, txt) SELECT count(*) = 1 AND bool_and(c.created_by = '2222222
 
 SELECT pg_temp.como(:'CESAR');
 SET ROLE authenticated;
-INSERT INTO ids SELECT 'cesar', public.hh_guardar_calculo(jsonb_build_object('nombre', 'Landing', 'uf_usada', 41400, 'usd_usada', 950), '[]'::JSONB);
+INSERT INTO ids SELECT 'cesar', public.hh_guardar_calculo(jsonb_build_object('nombre', 'Landing', 'uf_usada', 41400, 'usd_usada', 950,
+  'materiales_clp', 100000, 'margen_materiales', 0.25, 'materiales_venta_clp', 120000, 'gestion_pct', 0.12,
+  'operacion', jsonb_build_array(jsonb_build_object('descripcion', 'Traslado', 'monto', 25000))), '[]'::JSONB);
 RESET ROLE;
+INSERT INTO r (ok, txt) SELECT count(*) = 1 AND bool_and(materiales_venta_clp = 120000 AND gestion_pct = 0.12 AND operacion->0->>'descripcion' = 'Traslado'
+  AND (operacion->0->>'monto')::NUMERIC = 25000), 'Se guardan el precio de los materiales, la operación y la gestión'
+  FROM public.hh_calculos WHERE id = (SELECT id FROM ids WHERE quien = 'cesar');
 
 SELECT pg_temp.como(:'JOAQUIN');
 SET ROLE authenticated;
-INSERT INTO r (ok, txt) SELECT count(*) = 2, 'Joaquín ve todos los cálculos guardados' FROM public.hh_calculos;
+INSERT INTO r (ok, txt) SELECT count(*) = 1, 'Joaquín ve sus cálculos, no los de César (está sobre él)' FROM public.hh_calculos;
 DO $$ BEGIN
   PERFORM public.hh_guardar_calculo(jsonb_build_object('id', (SELECT id FROM ids WHERE quien = 'cesar'), 'nombre', 'Cambiado', 'uf_usada', 41400, 'usd_usada', 950), '[]'::JSONB);
   INSERT INTO r (ok, txt) VALUES (FALSE, 'No cambia el cálculo de otro');
@@ -211,6 +219,68 @@ DO $$ BEGIN
   PERFORM 1 FROM public.hh_cargos;
   INSERT INTO r (ok, txt) VALUES (FALSE, 'Sin sesión no se ve nada');
 EXCEPTION WHEN insufficient_privilege THEN INSERT INTO r (ok, txt) VALUES (TRUE, 'Sin sesión no se ve nada');
+END $$;
+RESET ROLE;
+
+-- ═══ F. Equipo por jerarquía: César → Joaquín → Pedro ═══
+SELECT set_config('request.jwt.claim.sub', '', false);
+INSERT INTO r (ok, txt) SELECT count(*) = 1, 'Joaquín quedó a cargo de César'
+  FROM public.hh_personas j JOIN public.hh_personas c ON c.id = j.jefe_id WHERE j.nombre = 'Joaquín' AND c.nombre = 'César';
+
+SELECT pg_temp.como(:'JOAQUIN');
+SET ROLE authenticated;
+INSERT INTO r (ok, txt) SELECT count(*) = 1 AND bool_and(nombre = 'Joaquín'), 'Joaquín ve su persona, no a César' FROM public.hh_personas;
+INSERT INTO r (ok, txt) SELECT count(*) = 0, 'No ve los cargos ni las tarifas de César'
+  FROM public.hh_persona_cargos WHERE persona_id = (SELECT id FROM pers WHERE nombre = 'César');
+-- Agrega a Pedro a su cargo y le maneja cargo y tarifa (de su equipo hacia abajo).
+INSERT INTO public.hh_personas (nombre, jefe_id) VALUES ('Pedro (ayudante)', (SELECT id FROM pers WHERE nombre = 'Joaquín'));
+INSERT INTO public.hh_persona_cargos (persona_id, cargo_id, tarifa_base_propia, predeterminado)
+  SELECT p.id, c.id, 0.25, TRUE FROM public.hh_personas p, public.hh_cargos c WHERE p.nombre = 'Pedro (ayudante)' AND c.nombre = 'Ayudante eléctrico';
+UPDATE public.hh_persona_cargos SET tarifa_base_propia = 0.28 WHERE persona_id = (SELECT id FROM public.hh_personas WHERE nombre = 'Pedro (ayudante)');
+DO $$ BEGIN
+  INSERT INTO public.hh_personas (nombre, jefe_id) VALUES ('Bajo César', (SELECT id FROM pers WHERE nombre = 'César'));
+  INSERT INTO r (ok, txt) VALUES (FALSE, 'No agrega personas fuera de su equipo');
+EXCEPTION WHEN OTHERS THEN INSERT INTO r (ok, txt) VALUES (TRUE, 'No agrega personas fuera de su equipo');
+END $$;
+DO $$ BEGIN
+  INSERT INTO public.hh_personas (nombre, jefe_id, profile_id) VALUES ('Con usuario', (SELECT id FROM pers WHERE nombre = 'Joaquín'), '11111111-1111-1111-1111-111111111111');
+  INSERT INTO r (ok, txt) VALUES (FALSE, 'No vincula usuarios');
+EXCEPTION WHEN OTHERS THEN INSERT INTO r (ok, txt) VALUES (TRUE, 'No vincula usuarios');
+END $$;
+UPDATE public.hh_personas SET jefe_id = NULL WHERE nombre = 'Joaquín';
+UPDATE public.hh_personas SET nombre = 'César cambiado' WHERE id = (SELECT id FROM pers WHERE nombre = 'César');
+-- Calcula con Pedro, no con César.
+INSERT INTO ids SELECT 'pedro', public.hh_guardar_calculo(
+  jsonb_build_object('nombre', 'Con Pedro', 'uf_usada', 41400, 'usd_usada', 950),
+  jsonb_build_array(jsonb_build_object('descripcion', 'Apoyo', 'persona_id', (SELECT id FROM public.hh_personas WHERE nombre = 'Pedro (ayudante)'),
+    'persona_nombre', 'Pedro (ayudante)', 'cargo_id', (SELECT id FROM public.hh_cargos WHERE nombre = 'Ayudante eléctrico'), 'cargo_nombre', 'Ayudante eléctrico',
+    'cargo_moneda', 'UF', 'cargo_tarifa_base', 0.28, 'cargo_tarifa_clp', 11600, 'cantidad', 1, 'horas_reales', 4, 'horas_cobradas', 4, 'subtotal_clp', 46400)));
+DO $$ BEGIN
+  PERFORM public.hh_guardar_calculo(jsonb_build_object('nombre', 'Con César', 'uf_usada', 41400, 'usd_usada', 950),
+    jsonb_build_array(jsonb_build_object('descripcion', 'Desarrollo', 'persona_id', (SELECT id FROM pers WHERE nombre = 'César'), 'persona_nombre', 'César',
+      'cargo_id', (SELECT id FROM public.hh_cargos WHERE nombre = 'Desarrollador full stack'), 'cargo_nombre', 'Desarrollador full stack',
+      'cargo_moneda', 'USD', 'cargo_tarifa_base', 40, 'cargo_tarifa_clp', 38000, 'cantidad', 1, 'horas_reales', 1, 'horas_cobradas', 1, 'subtotal_clp', 38000)));
+  INSERT INTO r (ok, txt) VALUES (FALSE, 'No calcula con las HH de César');
+EXCEPTION WHEN OTHERS THEN INSERT INTO r (ok, txt) VALUES (SQLERRM LIKE '%tu equipo%', 'No calcula con las HH de César');
+END $$;
+RESET ROLE;
+INSERT INTO r (ok, txt) SELECT count(*) = 1 AND bool_and(pc.tarifa_base_propia = 0.28 AND j.nombre = 'Joaquín'), 'Pedro quedó a cargo de Joaquín con su tarifa'
+  FROM public.hh_personas p JOIN public.hh_personas j ON j.id = p.jefe_id JOIN public.hh_persona_cargos pc ON pc.persona_id = p.id
+  WHERE p.nombre = 'Pedro (ayudante)';
+INSERT INTO r (ok, txt) SELECT (SELECT count(*) FROM public.hh_personas WHERE nombre = 'César') = 1
+  AND (SELECT c.nombre FROM public.hh_personas j JOIN public.hh_personas c ON c.id = j.jefe_id WHERE j.nombre = 'Joaquín') = 'César',
+  'No toca a César ni se saca de su jefe';
+INSERT INTO r (ok, txt) SELECT count(*) = 1, 'Su cálculo con Pedro se guardó' FROM public.hh_calculos WHERE id = (SELECT id FROM ids WHERE quien = 'pedro');
+
+-- Quien configura ve y maneja todo; el equipo no admite círculos.
+SELECT pg_temp.como(:'CESAR');
+SET ROLE authenticated;
+INSERT INTO r (ok, txt) SELECT count(*) >= 3, 'César ve a todo el equipo' FROM public.hh_personas;
+INSERT INTO r (ok, txt) SELECT count(*) = 2, 'César ve los cálculos de Joaquín' FROM public.hh_calculos WHERE created_by = '22222222-2222-2222-2222-222222222222';
+DO $$ BEGIN
+  UPDATE public.hh_personas SET jefe_id = (SELECT id FROM public.hh_personas WHERE nombre = 'Pedro (ayudante)') WHERE nombre = 'César';
+  INSERT INTO r (ok, txt) VALUES (FALSE, 'Sin círculos en el equipo');
+EXCEPTION WHEN OTHERS THEN INSERT INTO r (ok, txt) VALUES (SQLERRM LIKE '%círculo%', 'Sin círculos en el equipo');
 END $$;
 RESET ROLE;
 

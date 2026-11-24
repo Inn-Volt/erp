@@ -9,15 +9,20 @@
 --     cada tarifa: no cambian aunque después cambien.
 --   · NO toca el cotizador ni ninguna tabla existente: todo va en tablas hh_, sin claves foráneas
 --     hacia cotizaciones, clientes ni proyectos (el cliente es texto libre).
+--   · Equipo por jerarquía: cada persona puede estar a cargo de otra (jefe_id). Quien usa la
+--     calculadora trabaja con SUS HH y las de las personas a su cargo (y las de ellas, hacia abajo):
+--     no ve ni usa las de quien está sobre él. Ej.: César → Joaquín → sus ayudantes.
 -- Permisos (lib/permisos.ts):
---   hh.ver        → usar la calculadora, ver y guardar cálculos, y elegir SUS propios cargos HH
---                   (entre los activos) sin cambiar su tarifa.
---   hh.configurar → cargos, tarifas, parámetros, trabajos tipo, multiplicadores y los cargos HH (y
---                   tarifas propias) de cualquier persona.
+--   hh.ver        → usar la calculadora con sus HH y las de su equipo hacia abajo; ver y guardar
+--                   sus cálculos (y ver los de su equipo); elegir SUS cargos HH (entre los activos)
+--                   sin cambiar su tarifa; agregar personas a su cargo y manejar sus cargos y tarifas.
+--   hh.configurar → todo: cargos, tarifas, parámetros, trabajos tipo, multiplicadores y el equipo
+--                   completo (incluidos sus cálculos).
 --   Solo los tiene el Administrador ('*'): se dan a otros roles en Roles. No se agregan a las
 --   plantillas de los roles base, porque lo que está en una plantilla ya no se puede quitar.
 -- Ejecutar DESPUÉS de la fase 1 (usa tiene_permiso, tiene_alguno y auditar). Es idempotente: las
--- semillas no pisan lo que se haya cambiado desde la pantalla.
+-- semillas no pisan lo que se haya cambiado desde la pantalla. Si ya se ejecutó una versión
+-- anterior de este archivo, se vuelve a ejecutar entero (agrega el equipo por jerarquía).
 -- ═══════════════════════════════════════════════════════════════════════════════
 
 -- ─── 1. Parámetros (una sola fila) ───────────────────────────────────────────
@@ -37,6 +42,8 @@ CREATE TABLE IF NOT EXISTS public.hh_parametros (
   updated_at            TIMESTAMPTZ   NOT NULL DEFAULT NOW(),
   updated_by            UUID REFERENCES public.profiles(id) ON DELETE SET NULL
 );
+ALTER TABLE public.hh_parametros ADD COLUMN IF NOT EXISTS gestion_proyecto NUMERIC(5,3) NOT NULL DEFAULT 0.10
+  CHECK (gestion_proyecto >= 0 AND gestion_proyecto <= 0.5);   -- gestión de proyecto y coordinación (0,10 = 10 %)
 INSERT INTO public.hh_parametros (id) VALUES (1) ON CONFLICT (id) DO NOTHING;
 
 CREATE OR REPLACE FUNCTION public.hh_parametros_cambio()
@@ -104,9 +111,11 @@ CREATE INDEX IF NOT EXISTS idx_hh_trabajos_principal ON public.hh_trabajos_tipo(
 CREATE INDEX IF NOT EXISTS idx_hh_trabajos_apoyo ON public.hh_trabajos_tipo(cargo_apoyo_id) WHERE cargo_apoyo_id IS NOT NULL;
 CREATE INDEX IF NOT EXISTS idx_hh_trabajos_tipo_tarea ON public.hh_trabajos_tipo(tipo_tarea_clave) WHERE tipo_tarea_clave IS NOT NULL;
 
--- ─── 5. Personas y sus cargos HH ─────────────────────────────────────────────
--- Una persona puede estar vinculada a su usuario (para «Mis cargos HH») o ser un colaborador
--- externo sin usuario. La referencia a profiles es solo de lectura: esa tabla no cambia.
+-- ─── 5. Personas (equipo por jerarquía) y sus cargos HH ──────────────────────
+-- Una persona puede estar vinculada a su usuario (para usar la calculadora con sus HH) o ser un
+-- colaborador externo sin usuario. Cada una puede estar a cargo de otra (jefe_id): quien usa la
+-- calculadora trabaja con sus HH y las de su equipo hacia abajo. La referencia a profiles es solo de
+-- lectura: esa tabla no cambia.
 CREATE TABLE IF NOT EXISTS public.hh_personas (
   id         UUID DEFAULT gen_random_uuid() PRIMARY KEY,
   nombre     TEXT NOT NULL UNIQUE CHECK (trim(nombre) <> ''),
@@ -115,6 +124,10 @@ CREATE TABLE IF NOT EXISTS public.hh_personas (
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
+ALTER TABLE public.hh_personas ADD COLUMN IF NOT EXISTS jefe_id UUID REFERENCES public.hh_personas(id) ON DELETE SET NULL;
+CREATE INDEX IF NOT EXISTS idx_hh_personas_jefe ON public.hh_personas(jefe_id) WHERE jefe_id IS NOT NULL;
+ALTER TABLE public.hh_personas DROP CONSTRAINT IF EXISTS hh_personas_no_es_su_jefe;
+ALTER TABLE public.hh_personas ADD CONSTRAINT hh_personas_no_es_su_jefe CHECK (jefe_id IS NULL OR jefe_id <> id);
 
 CREATE TABLE IF NOT EXISTS public.hh_persona_cargos (
   id                 UUID DEFAULT gen_random_uuid() PRIMARY KEY,
@@ -130,19 +143,73 @@ CREATE TABLE IF NOT EXISTS public.hh_persona_cargos (
 CREATE INDEX IF NOT EXISTS idx_hh_persona_cargos_cargo ON public.hh_persona_cargos(cargo_id);
 CREATE UNIQUE INDEX IF NOT EXISTS uq_hh_persona_predeterminado ON public.hh_persona_cargos(persona_id) WHERE predeterminado;
 
--- Quien no configura la calculadora solo elige (o quita) SUS cargos entre los activos: no pone ni
--- cambia tarifas ni mueve un cargo a otra persona (la RLS ya le limita las filas a las suyas). Un
--- cargo inactivo deja de ser el predeterminado, y marcar uno desmarca el anterior.
+-- La persona del usuario conectado (null = no está vinculado).
+CREATE OR REPLACE FUNCTION public.hh_mi_persona()
+RETURNS UUID LANGUAGE sql STABLE SECURITY DEFINER SET search_path = public AS $$
+  SELECT id FROM public.hh_personas WHERE profile_id = auth.uid() AND activo;
+$$;
+-- Su persona y todo su equipo hacia abajo (las de su cargo, las del cargo de ellas, …).
+CREATE OR REPLACE FUNCTION public.hh_personas_a_cargo()
+RETURNS SETOF UUID LANGUAGE sql STABLE SECURITY DEFINER SET search_path = public AS $$
+  WITH RECURSIVE arbol(id) AS (
+    SELECT id FROM public.hh_personas WHERE profile_id = auth.uid() AND activo
+    UNION
+    SELECT p.id FROM public.hh_personas p JOIN arbol a ON p.jefe_id = a.id
+  )
+  SELECT id FROM arbol;
+$$;
+-- ¿Puede trabajar con esa persona? (quien configura: con todas).
+CREATE OR REPLACE FUNCTION public.hh_puede_usar_persona(p_persona UUID)
+RETURNS BOOLEAN LANGUAGE sql STABLE SECURITY DEFINER SET search_path = public AS $$
+  SELECT public.tiene_permiso('hh.configurar')
+      OR (public.tiene_permiso('hh.ver') AND p_persona IN (SELECT public.hh_personas_a_cargo()));
+$$;
+REVOKE EXECUTE ON FUNCTION public.hh_mi_persona(), public.hh_personas_a_cargo(), public.hh_puede_usar_persona(UUID) FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION public.hh_mi_persona(), public.hh_personas_a_cargo(), public.hh_puede_usar_persona(UUID) TO authenticated;
+
+-- Sin círculos en el equipo (A a cargo de B y B a cargo de A). Quien no configura no vincula
+-- usuarios: eso lo hace quien configura.
+CREATE OR REPLACE FUNCTION public.hh_personas_reglas()
+RETURNS TRIGGER LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
+BEGIN
+  IF NEW.jefe_id IS NOT NULL AND (TG_OP = 'INSERT' OR NEW.jefe_id IS DISTINCT FROM OLD.jefe_id) AND EXISTS (
+       WITH RECURSIVE sube(id) AS (
+         SELECT NEW.jefe_id
+         UNION
+         SELECT p.jefe_id FROM public.hh_personas p JOIN sube s ON p.id = s.id WHERE p.jefe_id IS NOT NULL
+       ) SELECT 1 FROM sube WHERE id = NEW.id) THEN
+    RAISE EXCEPTION 'Así quedaría un círculo en el equipo: % no puede quedar a cargo de alguien de su propio equipo.', NEW.nombre USING ERRCODE = '23514';
+  END IF;
+  IF auth.uid() IS NOT NULL AND NOT public.tiene_permiso('hh.configurar')
+     AND (TG_OP = 'INSERT' AND NEW.profile_id IS NOT NULL OR TG_OP = 'UPDATE' AND NEW.profile_id IS DISTINCT FROM OLD.profile_id) THEN
+    RAISE EXCEPTION 'Vincular una persona con su usuario lo hace quien configura la calculadora.' USING ERRCODE = '42501';
+  END IF;
+  RETURN NEW;
+END $$;
+REVOKE EXECUTE ON FUNCTION public.hh_personas_reglas() FROM PUBLIC, anon, authenticated;
+DROP TRIGGER IF EXISTS trg_hh_personas_reglas ON public.hh_personas;
+CREATE TRIGGER trg_hh_personas_reglas BEFORE INSERT OR UPDATE ON public.hh_personas
+  FOR EACH ROW EXECUTE FUNCTION public.hh_personas_reglas();
+
+-- Los cargos de cada persona. Quien no configura la calculadora:
+--   · los suyos: los elige (o quita) entre los activos, sin poner ni cambiar su tarifa;
+--   · los de su equipo hacia abajo: los maneja entero (también la tarifa propia).
+-- Nadie mueve una asignación a otra persona u otro cargo (se crea otra). Un cargo inactivo deja de
+-- ser el predeterminado, y marcar uno desmarca el anterior.
 CREATE OR REPLACE FUNCTION public.hh_persona_cargos_reglas()
 RETURNS TRIGGER LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
-DECLARE v_configura BOOLEAN := auth.uid() IS NULL OR public.tiene_permiso('hh.configurar');
+DECLARE
+  v_configura BOOLEAN := auth.uid() IS NULL OR public.tiene_permiso('hh.configurar');
+  v_suyo BOOLEAN := NOT v_configura AND NEW.persona_id = public.hh_mi_persona();
 BEGIN
   IF NOT NEW.activo THEN NEW.predeterminado := FALSE; END IF;
   IF NOT v_configura THEN
-    IF TG_OP = 'INSERT' AND NEW.tarifa_base_propia IS NOT NULL
-       OR TG_OP = 'UPDATE' AND (NEW.tarifa_base_propia IS DISTINCT FROM OLD.tarifa_base_propia
-                                OR NEW.persona_id <> OLD.persona_id OR NEW.cargo_id <> OLD.cargo_id) THEN
-      RAISE EXCEPTION 'Las tarifas de los cargos HH las cambia quien configura la calculadora.' USING ERRCODE = '42501';
+    IF TG_OP = 'UPDATE' AND (NEW.persona_id <> OLD.persona_id OR NEW.cargo_id <> OLD.cargo_id) THEN
+      RAISE EXCEPTION 'Una asignación no se mueve a otra persona ni a otro cargo: crea otra.' USING ERRCODE = '42501';
+    END IF;
+    IF v_suyo AND (TG_OP = 'INSERT' AND NEW.tarifa_base_propia IS NOT NULL
+                   OR TG_OP = 'UPDATE' AND NEW.tarifa_base_propia IS DISTINCT FROM OLD.tarifa_base_propia) THEN
+      RAISE EXCEPTION 'Tus tarifas propias las cambia quien está sobre ti en el equipo HH o quien configura la calculadora.' USING ERRCODE = '42501';
     END IF;
     IF NEW.activo AND (TG_OP = 'INSERT' OR NOT OLD.activo)
        AND NOT EXISTS (SELECT 1 FROM public.hh_cargos WHERE id = NEW.cargo_id AND activo) THEN
@@ -201,6 +268,13 @@ CREATE TABLE IF NOT EXISTS public.hh_calculos (
   created_at        TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at        TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
+-- Materiales: margen_materiales es la utilidad sobre el precio (como el cotizador); si se fija el
+-- precio de venta, va en materiales_venta_clp y la utilidad real sale de él. La operación (traslado,
+-- peajes, estacionamiento…) va como lista de gastos que se cobran tal cual; traslado_uf queda solo
+-- para los cálculos de antes. gestion_pct: gestión de proyecto (0 = no se suma).
+ALTER TABLE public.hh_calculos ADD COLUMN IF NOT EXISTS materiales_venta_clp NUMERIC(14,0) CHECK (materiales_venta_clp >= 0);
+ALTER TABLE public.hh_calculos ADD COLUMN IF NOT EXISTS operacion JSONB NOT NULL DEFAULT '[]'::JSONB;
+ALTER TABLE public.hh_calculos ADD COLUMN IF NOT EXISTS gestion_pct NUMERIC(5,3) NOT NULL DEFAULT 0 CHECK (gestion_pct >= 0 AND gestion_pct <= 0.5);
 CREATE INDEX IF NOT EXISTS idx_hh_calculos_fecha ON public.hh_calculos(created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_hh_calculos_autor ON public.hh_calculos(created_by);
 
@@ -223,7 +297,7 @@ CREATE TABLE IF NOT EXISTS public.hh_calculo_lineas (
   multiplicador           NUMERIC(5,2) NOT NULL DEFAULT 1 CHECK (multiplicador > 0),
   multiplicador_editado   BOOLEAN NOT NULL DEFAULT FALSE,
   cantidad                NUMERIC(10,2) NOT NULL DEFAULT 1 CHECK (cantidad > 0),
-  horas_reales            NUMERIC(10,2) NOT NULL CHECK (horas_reales > 0),     -- por unidad
+  horas_reales            NUMERIC(14,6) NOT NULL CHECK (horas_reales > 0),     -- por unidad (con IA puede ser 25 ÷ 3)
   horas_cobradas          NUMERIC(12,2) NOT NULL,
   cargo_apoyo_id          UUID REFERENCES public.hh_cargos(id) ON DELETE RESTRICT,
   cargo_apoyo_nombre      TEXT,
@@ -234,6 +308,8 @@ CREATE TABLE IF NOT EXISTS public.hh_calculo_lineas (
   subtotal_clp            NUMERIC(14,0) NOT NULL DEFAULT 0,
   created_at              TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
+-- Las horas llevan 6 decimales: 25 HH de mercado con multiplicador 3 son 8,333333 h y se cobran 25 exactas.
+ALTER TABLE public.hh_calculo_lineas ALTER COLUMN horas_reales TYPE NUMERIC(14,6);
 CREATE INDEX IF NOT EXISTS idx_hh_lineas_calculo ON public.hh_calculo_lineas(calculo_id, orden);
 CREATE INDEX IF NOT EXISTS idx_hh_lineas_cargo ON public.hh_calculo_lineas(cargo_id);
 CREATE INDEX IF NOT EXISTS idx_hh_lineas_apoyo ON public.hh_calculo_lineas(cargo_apoyo_id) WHERE cargo_apoyo_id IS NOT NULL;
@@ -251,11 +327,12 @@ BEGIN
   IF v_id IS NULL THEN
     INSERT INTO public.hh_calculos (nombre, cliente_texto, notas, fecha, uf_usada, usd_usada, uf_fecha, uf_fuente,
       usd_fecha, usd_fuente, parametros, urgencia, traslado_uf, materiales_clp, margen_materiales, validez_dias,
-      neto_clp, neto_uf, iva_clp, total_clp, created_by)
+      neto_clp, neto_uf, iva_clp, total_clp, materiales_venta_clp, operacion, gestion_pct, created_by)
     VALUES (c.nombre, c.cliente_texto, c.notas, COALESCE(c.fecha, CURRENT_DATE), c.uf_usada, c.usd_usada, c.uf_fecha, c.uf_fuente,
       c.usd_fecha, c.usd_fuente, COALESCE(c.parametros, '{}'::JSONB), COALESCE(c.urgencia, FALSE), COALESCE(c.traslado_uf, 0),
       COALESCE(c.materiales_clp, 0), COALESCE(c.margen_materiales, 0), COALESCE(c.validez_dias, 15),
-      COALESCE(c.neto_clp, 0), COALESCE(c.neto_uf, 0), COALESCE(c.iva_clp, 0), COALESCE(c.total_clp, 0), auth.uid())
+      COALESCE(c.neto_clp, 0), COALESCE(c.neto_uf, 0), COALESCE(c.iva_clp, 0), COALESCE(c.total_clp, 0),
+      c.materiales_venta_clp, COALESCE(c.operacion, '[]'::JSONB), COALESCE(c.gestion_pct, 0), auth.uid())
     RETURNING id INTO v_id;
   ELSE
     UPDATE public.hh_calculos SET nombre = c.nombre, cliente_texto = c.cliente_texto, notas = c.notas,
@@ -265,7 +342,8 @@ BEGIN
       traslado_uf = COALESCE(c.traslado_uf, 0), materiales_clp = COALESCE(c.materiales_clp, 0),
       margen_materiales = COALESCE(c.margen_materiales, 0), validez_dias = COALESCE(c.validez_dias, 15),
       neto_clp = COALESCE(c.neto_clp, 0), neto_uf = COALESCE(c.neto_uf, 0), iva_clp = COALESCE(c.iva_clp, 0),
-      total_clp = COALESCE(c.total_clp, 0), updated_at = NOW()
+      total_clp = COALESCE(c.total_clp, 0), materiales_venta_clp = c.materiales_venta_clp,
+      operacion = COALESCE(c.operacion, '[]'::JSONB), gestion_pct = COALESCE(c.gestion_pct, 0), updated_at = NOW()
     WHERE id = v_id;
     IF NOT FOUND THEN
       RAISE EXCEPTION 'No puedes cambiar ese cálculo: es de otra persona (puedes duplicarlo).' USING ERRCODE = '42501';
@@ -287,6 +365,21 @@ BEGIN
 END $$;
 REVOKE EXECUTE ON FUNCTION public.hh_guardar_calculo(JSONB, JSONB) FROM PUBLIC, anon;
 GRANT EXECUTE ON FUNCTION public.hh_guardar_calculo(JSONB, JSONB) TO authenticated;
+
+-- Cada uno calcula con sus HH y las de su equipo hacia abajo (quien configura, con todas).
+CREATE OR REPLACE FUNCTION public.hh_lineas_reglas()
+RETURNS TRIGGER LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
+BEGIN
+  IF NEW.persona_id IS NOT NULL AND auth.uid() IS NOT NULL AND NOT public.hh_puede_usar_persona(NEW.persona_id) THEN
+    RAISE EXCEPTION 'Solo puedes calcular con tus HH y las de tu equipo: % no está en tu equipo.', COALESCE(NEW.persona_nombre, 'esa persona')
+      USING ERRCODE = '42501';
+  END IF;
+  RETURN NEW;
+END $$;
+REVOKE EXECUTE ON FUNCTION public.hh_lineas_reglas() FROM PUBLIC, anon, authenticated;
+DROP TRIGGER IF EXISTS trg_hh_lineas_reglas ON public.hh_calculo_lineas;
+CREATE TRIGGER trg_hh_lineas_reglas BEFORE INSERT OR UPDATE OF persona_id ON public.hh_calculo_lineas
+  FOR EACH ROW EXECUTE FUNCTION public.hh_lineas_reglas();
 
 -- Los usuarios a los que se puede vincular una persona (solo para quien configura).
 CREATE OR REPLACE FUNCTION public.hh_usuarios_para_vincular()
@@ -324,13 +417,16 @@ BEGIN
     EXECUTE format('ALTER TABLE public.%I ENABLE ROW LEVEL SECURITY', t);
     EXECUTE format('REVOKE ALL ON public.%I FROM anon', t);
     EXECUTE format('GRANT SELECT, INSERT, UPDATE, DELETE ON public.%I TO authenticated', t);
-    -- Ver: quien usa o configura la calculadora.
     EXECUTE format('DROP POLICY IF EXISTS hh_ver ON public.%I', t);
+  END LOOP;
+  -- El catálogo (parámetros, cargos, tipos de tarea, trabajos tipo y la UF): lo ve quien usa o
+  -- configura la calculadora.
+  FOREACH t IN ARRAY ARRAY['hh_parametros','hh_cargos','hh_tipos_tarea','hh_trabajos_tipo','hh_indicadores'] LOOP
     EXECUTE format('CREATE POLICY hh_ver ON public.%I FOR SELECT TO authenticated
                     USING ((SELECT public.tiene_alguno(ARRAY[''hh.ver'',''hh.configurar''])))', t);
   END LOOP;
-  -- Configuración: solo quien configura.
-  FOREACH t IN ARRAY ARRAY['hh_parametros','hh_cargos','hh_tipos_tarea','hh_trabajos_tipo','hh_personas'] LOOP
+  -- Quien configura: todo el catálogo y el equipo completo.
+  FOREACH t IN ARRAY ARRAY['hh_parametros','hh_cargos','hh_tipos_tarea','hh_trabajos_tipo','hh_personas','hh_persona_cargos'] LOOP
     EXECUTE format('DROP POLICY IF EXISTS hh_configurar ON public.%I', t);
     EXECUTE format('CREATE POLICY hh_configurar ON public.%I FOR ALL TO authenticated
                     USING ((SELECT public.tiene_permiso(''hh.configurar'')))
@@ -338,22 +434,39 @@ BEGIN
   END LOOP;
 END $$;
 
--- Cargos de cada persona: quien configura, todos; quien usa la calculadora, los suyos (sin borrar:
--- los quita desactivándolos, así no pierde la tarifa propia que le hayan puesto).
-DROP POLICY IF EXISTS hh_configurar ON public.hh_persona_cargos;
-CREATE POLICY hh_configurar ON public.hh_persona_cargos FOR ALL TO authenticated
-  USING ((SELECT public.tiene_permiso('hh.configurar')))
-  WITH CHECK ((SELECT public.tiene_permiso('hh.configurar')));
+-- Equipo: cada uno ve su persona y su equipo hacia abajo (no a quien está sobre él). Agrega
+-- personas a su cargo (sin usuario: eso lo vincula quien configura) y cambia las de su equipo, no
+-- la suya (no se puede sacar de su jefe). No se borran: se desactivan.
+DROP POLICY IF EXISTS hh_equipo_ver ON public.hh_personas;
+CREATE POLICY hh_equipo_ver ON public.hh_personas FOR SELECT TO authenticated
+  USING ((SELECT public.tiene_permiso('hh.ver')) AND id IN (SELECT public.hh_personas_a_cargo()));
+DROP POLICY IF EXISTS hh_equipo_crear ON public.hh_personas;
+CREATE POLICY hh_equipo_crear ON public.hh_personas FOR INSERT TO authenticated
+  WITH CHECK ((SELECT public.tiene_permiso('hh.ver')) AND profile_id IS NULL AND jefe_id IN (SELECT public.hh_personas_a_cargo()));
+DROP POLICY IF EXISTS hh_equipo_cambiar ON public.hh_personas;
+CREATE POLICY hh_equipo_cambiar ON public.hh_personas FOR UPDATE TO authenticated
+  USING ((SELECT public.tiene_permiso('hh.ver')) AND id IN (SELECT public.hh_personas_a_cargo()) AND id IS DISTINCT FROM (SELECT public.hh_mi_persona()))
+  WITH CHECK ((SELECT public.tiene_permiso('hh.ver')) AND id IS DISTINCT FROM (SELECT public.hh_mi_persona()) AND jefe_id IN (SELECT public.hh_personas_a_cargo()));
+
+-- Cargos de cada persona: los suyos y los de su equipo hacia abajo (el trigger no le deja cambiar
+-- su propia tarifa). Borra los de su equipo; los suyos los quita desactivándolos, así no pierde la
+-- tarifa propia que le hayan puesto.
 DROP POLICY IF EXISTS hh_mis_cargos_crear ON public.hh_persona_cargos;
-CREATE POLICY hh_mis_cargos_crear ON public.hh_persona_cargos FOR INSERT TO authenticated
-  WITH CHECK ((SELECT public.tiene_permiso('hh.ver'))
-    AND EXISTS (SELECT 1 FROM public.hh_personas p WHERE p.id = persona_id AND p.profile_id = (SELECT auth.uid()) AND p.activo));
 DROP POLICY IF EXISTS hh_mis_cargos_cambiar ON public.hh_persona_cargos;
-CREATE POLICY hh_mis_cargos_cambiar ON public.hh_persona_cargos FOR UPDATE TO authenticated
-  USING ((SELECT public.tiene_permiso('hh.ver'))
-    AND EXISTS (SELECT 1 FROM public.hh_personas p WHERE p.id = persona_id AND p.profile_id = (SELECT auth.uid()) AND p.activo))
-  WITH CHECK ((SELECT public.tiene_permiso('hh.ver'))
-    AND EXISTS (SELECT 1 FROM public.hh_personas p WHERE p.id = persona_id AND p.profile_id = (SELECT auth.uid()) AND p.activo));
+DROP POLICY IF EXISTS hh_equipo_cargos_ver ON public.hh_persona_cargos;
+CREATE POLICY hh_equipo_cargos_ver ON public.hh_persona_cargos FOR SELECT TO authenticated
+  USING ((SELECT public.tiene_permiso('hh.ver')) AND persona_id IN (SELECT public.hh_personas_a_cargo()));
+DROP POLICY IF EXISTS hh_equipo_cargos_crear ON public.hh_persona_cargos;
+CREATE POLICY hh_equipo_cargos_crear ON public.hh_persona_cargos FOR INSERT TO authenticated
+  WITH CHECK ((SELECT public.tiene_permiso('hh.ver')) AND persona_id IN (SELECT public.hh_personas_a_cargo()));
+DROP POLICY IF EXISTS hh_equipo_cargos_cambiar ON public.hh_persona_cargos;
+CREATE POLICY hh_equipo_cargos_cambiar ON public.hh_persona_cargos FOR UPDATE TO authenticated
+  USING ((SELECT public.tiene_permiso('hh.ver')) AND persona_id IN (SELECT public.hh_personas_a_cargo()))
+  WITH CHECK ((SELECT public.tiene_permiso('hh.ver')) AND persona_id IN (SELECT public.hh_personas_a_cargo()));
+DROP POLICY IF EXISTS hh_equipo_cargos_borrar ON public.hh_persona_cargos;
+CREATE POLICY hh_equipo_cargos_borrar ON public.hh_persona_cargos FOR DELETE TO authenticated
+  USING ((SELECT public.tiene_permiso('hh.ver')) AND persona_id IN (SELECT public.hh_personas_a_cargo())
+         AND persona_id IS DISTINCT FROM (SELECT public.hh_mi_persona()));
 
 -- UF y dólar: a mano solo quien configura (los de mindicador los guarda el servidor).
 DROP POLICY IF EXISTS hh_indicador_manual ON public.hh_indicadores;
@@ -361,7 +474,14 @@ CREATE POLICY hh_indicador_manual ON public.hh_indicadores FOR ALL TO authentica
   USING ((SELECT public.tiene_permiso('hh.configurar')))
   WITH CHECK ((SELECT public.tiene_permiso('hh.configurar')) AND fuente = 'manual');
 
--- Cálculos: los crea quien usa la calculadora; los cambia o borra quien lo hizo (o quien configura).
+-- Cálculos: cada uno ve los suyos y los de su equipo hacia abajo (quien configura, todos); los
+-- crea quien usa la calculadora; los cambia o borra quien lo hizo (o quien configura).
+DROP POLICY IF EXISTS hh_calculo_ver ON public.hh_calculos;
+CREATE POLICY hh_calculo_ver ON public.hh_calculos FOR SELECT TO authenticated
+  USING ((SELECT public.tiene_permiso('hh.configurar'))
+      OR ((SELECT public.tiene_permiso('hh.ver')) AND (created_by = (SELECT auth.uid())
+          OR created_by IN (SELECT p.profile_id FROM public.hh_personas p
+                            WHERE p.profile_id IS NOT NULL AND p.id IN (SELECT public.hh_personas_a_cargo())))));
 DROP POLICY IF EXISTS hh_calculo_crear ON public.hh_calculos;
 CREATE POLICY hh_calculo_crear ON public.hh_calculos FOR INSERT TO authenticated
   WITH CHECK ((SELECT public.tiene_alguno(ARRAY['hh.ver','hh.configurar'])) AND created_by = (SELECT auth.uid()));
@@ -375,6 +495,10 @@ DROP POLICY IF EXISTS hh_calculo_borrar ON public.hh_calculos;
 CREATE POLICY hh_calculo_borrar ON public.hh_calculos FOR DELETE TO authenticated
   USING ((SELECT public.tiene_alguno(ARRAY['hh.ver','hh.configurar']))
     AND (created_by = (SELECT auth.uid()) OR (SELECT public.tiene_permiso('hh.configurar'))));
+-- Las líneas se ven con su cálculo; se escriben si se puede cambiar el cálculo.
+DROP POLICY IF EXISTS hh_lineas_ver ON public.hh_calculo_lineas;
+CREATE POLICY hh_lineas_ver ON public.hh_calculo_lineas FOR SELECT TO authenticated
+  USING (EXISTS (SELECT 1 FROM public.hh_calculos c WHERE c.id = calculo_id));
 DROP POLICY IF EXISTS hh_lineas_escribir ON public.hh_calculo_lineas;
 CREATE POLICY hh_lineas_escribir ON public.hh_calculo_lineas FOR ALL TO authenticated
   USING (EXISTS (SELECT 1 FROM public.hh_calculos c WHERE c.id = calculo_id
@@ -386,6 +510,10 @@ CREATE POLICY hh_lineas_escribir ON public.hh_calculo_lineas FOR ALL TO authenti
 
 -- ─── 10. Semillas (del Excel «InnVolt – Tarifas HH») ─────────────────────────
 -- ON CONFLICT DO NOTHING: volver a correr el archivo no pisa lo cambiado desde la pantalla.
+-- Si se corrió la versión que lo renombró a «(domótica)», el cargo vuelve a su nombre: InnVolt
+-- también hace pantallas.
+UPDATE public.hh_cargos SET nombre = 'Técnico integración (domótica / pantallas)'
+ WHERE nombre = 'Técnico integración (domótica)' AND NOT EXISTS (SELECT 1 FROM public.hh_cargos WHERE nombre = 'Técnico integración (domótica / pantallas)');
 INSERT INTO public.hh_cargos (orden, nombre, moneda_base, tarifa_base, mercado_min, mercado_max, sueldo_mercado_clp, notas) VALUES
   (1,  'Ayudante eléctrico', 'UF', 0.3, 0.1, 0.3, 650000, 'Va siempre junto a un maestro; no se cobra solo.'),
   (2,  'Maestro electricista', 'UF', 0.5, 0.3, 1.0, 800000, 'Para trabajos de varios días. En visitas cortas cobra como mínimo una «primera hora» de ~1 UF (precio medio en Chile ~$40.000/h según Cronoshare).'),
@@ -462,5 +590,8 @@ JOIN public.hh_cargos p ON p.nombre = v.principal
 LEFT JOIN public.hh_cargos a ON a.nombre = NULLIF(v.apoyo, '')
 ON CONFLICT (categoria, nombre) DO NOTHING;
 
--- César y Joaquín, sin cargos: se asignan (y se vinculan a su usuario) desde «Equipo HH».
+-- César y Joaquín, sin cargos: se asignan (y se vinculan a su usuario) desde «Equipo».
 INSERT INTO public.hh_personas (nombre) VALUES ('César'), ('Joaquín') ON CONFLICT (nombre) DO NOTHING;
+-- Joaquín queda a cargo de César (si todavía no está a cargo de nadie).
+UPDATE public.hh_personas j SET jefe_id = c.id FROM public.hh_personas c
+ WHERE j.nombre = 'Joaquín' AND c.nombre = 'César' AND j.jefe_id IS NULL AND c.jefe_id IS DISTINCT FROM j.id;

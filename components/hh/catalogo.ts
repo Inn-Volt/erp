@@ -1,12 +1,13 @@
 /**
- * Calculadora HH (fase 23): consultas al catálogo cargado (cargos, personas, tipos de tarea,
- * trabajos tipo) y los cambios de una línea al elegir persona, cargo, trabajo tipo, tipo de tarea
- * o apoyo. Sin React: funciones puras sobre los datos.
+ * Calculadora HH (fase 23): consultas al catálogo cargado (cargos, equipo, tipos de tarea,
+ * trabajos tipo) y los cambios de una línea al elegir trabajo, persona, cargo, tipo de tarea o
+ * apoyo. Sin React: funciones puras sobre los datos. Sin hh.configurar, el catálogo ya trae solo la
+ * persona del usuario y su equipo hacia abajo (lo filtra la base).
  */
 
-import { dec2, tarifaEfectiva } from '@/lib/hh/calculo';
+import { tarifaEfectiva } from '@/lib/hh/calculo';
 import type { LineaHH } from '@/lib/hh/lineas';
-import type { CatalogoHH, PersonaCargoHH } from '@/services/hh';
+import type { CatalogoHH, PersonaCargoHH, PersonaHH } from '@/services/hh';
 
 export function ayudasCatalogo(cat: CatalogoHH, miId: string | null) {
   const cargo = new Map(cat.cargos.map(c => [c.id, c]));
@@ -18,15 +19,40 @@ export function ayudasCatalogo(cat: CatalogoHH, miId: string | null) {
     cat.personaCargos.filter(pc => pc.persona_id === personaId && pc.activo && cargo.get(pc.cargo_id)?.activo);
   const asignacion = (personaId: string | null, cargoId: string) =>
     (personaId ? cat.personaCargos.find(pc => pc.persona_id === personaId && pc.cargo_id === cargoId) : undefined);
-  const personasActivas = cat.personas.filter(p => p.activo);
+  const miPersona = miId ? cat.personas.find(p => p.profile_id === miId && p.activo) ?? null : null;
+
+  // El equipo en orden de jerarquía (cada uno seguido de las personas a su cargo).
+  const hijos = new Map<string | null, PersonaHH[]>();
+  for (const p of cat.personas) {
+    const jefe = p.jefe_id && persona.has(p.jefe_id) ? p.jefe_id : null;
+    hijos.set(jefe, [...(hijos.get(jefe) || []), p]);
+  }
+  const arbol: { p: PersonaHH; nivel: number }[] = [];
+  const visitados = new Set<string>();
+  const recorrer = (jefe: string | null, nivel: number) => {
+    const grupo = (hijos.get(jefe) || []).slice().sort((a, b) => (a.id === miPersona?.id ? -1 : b.id === miPersona?.id ? 1 : a.nombre.localeCompare(b.nombre, 'es')));
+    for (const p of grupo) {
+      if (visitados.has(p.id)) continue;
+      visitados.add(p.id);
+      arbol.push({ p, nivel });
+      recorrer(p.id, nivel + 1);
+    }
+  };
+  recorrer(null, 0);
+  const personasActivas = arbol.map(x => x.p).filter(p => p.activo);
   const personasCon = (cargoId: string) => personasActivas.filter(p => asignaciones(p.id).some(a => a.cargo_id === cargoId));
-  const miPersona = miId ? cat.personas.find(p => p.profile_id === miId) ?? null : null;
   /** La tarifa base de esa persona en ese cargo (la propia o la del cargo). */
   const tarifaBase = (personaId: string | null, cargoId: string) => {
     const c = cargo.get(cargoId);
     return c ? tarifaEfectiva(c, asignacion(personaId, cargoId)?.tarifa_base_propia) : 0;
   };
-  return { cargo, tipo, persona, trabajo, asignaciones, asignacion, personasActivas, personasCon, miPersona, tarifaBase };
+  /** El cargo con que se preselecciona a una persona: el pedido si lo tiene, si no su predeterminado. */
+  const cargoDe = (personaId: string, preferido?: string | null) => {
+    const suyos = asignaciones(personaId);
+    if (preferido && suyos.some(a => a.cargo_id === preferido)) return preferido;
+    return (suyos.find(a => a.predeterminado) ?? suyos[0])?.cargo_id ?? null;
+  };
+  return { cargo, tipo, persona, trabajo, asignaciones, asignacion, personasActivas, personasCon, miPersona, tarifaBase, cargoDe, arbol };
 }
 
 export type Ayudas = ReturnType<typeof ayudasCatalogo>;
@@ -45,10 +71,7 @@ export function conCargo(l: LineaHH, cargoId: string, ay: Ayudas): LineaHH {
 export function conPersona(l: LineaHH, personaId: string | null, ay: Ayudas): LineaHH {
   const p = personaId ? ay.persona.get(personaId) : undefined;
   const base: LineaHH = { ...l, persona_id: p?.id ?? null, persona_nombre: p?.nombre ?? null };
-  if (!p) return l.cargo_id ? conCargo(base, l.cargo_id, ay) : base;
-  const suyos = ay.asignaciones(p.id);
-  const cargoId = suyos.some(a => a.cargo_id === l.cargo_id) ? l.cargo_id
-    : (suyos.find(a => a.predeterminado) ?? suyos[0])?.cargo_id ?? l.cargo_id;
+  const cargoId = p ? ay.cargoDe(p.id, l.cargo_id) ?? l.cargo_id : l.cargo_id;
   return cargoId ? conCargo(base, cargoId, ay) : base;
 }
 
@@ -75,27 +98,30 @@ export function conApoyo(l: LineaHH, cargoId: string | null, ay: Ayudas, horas?:
 }
 
 /**
- * Partir de un trabajo tipo: precarga el entregable, la unidad, las HH de referencia, el tipo de
- * tarea, el cargo principal y el apoyo. Lo hace quien tenga ese cargo (yo primero); si nadie lo
- * tiene, queda con la tarifa general del cargo.
+ * Las horas reales por unidad que equivalen a la referencia de mercado: con multiplicador 1 son las
+ * mismas; donde la IA acelera (multiplicador 3) te toma un tercio y se cobran las de mercado.
  */
-export function conTrabajo(l: LineaHH, trabajoId: string | null, ay: Ayudas): LineaHH {
+export const horasDeReferencia = (l: Pick<LineaHH, 'hh_referencia' | 'multiplicador'>) =>
+  (l.hh_referencia && l.multiplicador > 0 ? Math.round((l.hh_referencia / l.multiplicador) * 1e6) / 1e6 : null);
+
+/**
+ * Partir de un trabajo tipo: precarga el entregable, la unidad, las horas (las de la referencia de
+ * mercado), el tipo de tarea, el cargo y el apoyo. Lo hace quien tenga ese cargo (yo primero); si
+ * nadie lo tiene, queda con la tarifa general del cargo.
+ */
+export function conTrabajo(l: LineaHH, trabajoId: string | null, ay: Ayudas, personaId?: string | null): LineaHH {
   const t = trabajoId ? ay.trabajo.get(trabajoId) : undefined;
   if (!t) return { ...l, trabajo_tipo_id: null, hh_referencia: null };
-  const anterior = l.trabajo_tipo_id ? ay.trabajo.get(l.trabajo_tipo_id) : undefined;
-  const descripcion = !l.descripcion.trim() || l.descripcion === anterior?.nombre ? t.nombre : l.descripcion;
   const con = ay.personasCon(t.cargo_principal_id);
-  const quien = con.find(p => p.id === ay.miPersona?.id) ?? con[0] ?? null;
-  let r: LineaHH = { ...l, trabajo_tipo_id: t.id, hh_referencia: t.hh_referencia || null, descripcion, unidad: t.unidad || l.unidad };
+  const quien = (personaId !== undefined ? (personaId ? ay.persona.get(personaId) : null)
+    : con.find(p => p.id === ay.miPersona?.id) ?? con[0]) ?? null;
+  let r: LineaHH = { ...l, trabajo_tipo_id: t.id, hh_referencia: t.hh_referencia || null, descripcion: t.nombre, unidad: t.unidad || '' };
   r = conTipo(r, t.tipo_tarea_clave, ay);
   r = { ...r, persona_id: quien?.id ?? null, persona_nombre: quien?.nombre ?? null };
-  r = conCargo(r, t.cargo_principal_id, ay);
-  return conApoyo(r, t.cargo_apoyo_id, ay, t.hh_apoyo);
+  r = conCargo(r, quien ? ay.cargoDe(quien.id, t.cargo_principal_id) ?? t.cargo_principal_id : t.cargo_principal_id, ay);
+  r = conApoyo(r, t.cargo_apoyo_id, ay, t.hh_apoyo);
+  return { ...r, horas_reales: horasDeReferencia(r) };
 }
-
-/** Las horas reales que equivalen a la referencia de mercado con ese multiplicador. */
-export const horasDeReferencia = (l: LineaHH) =>
-  (l.hh_referencia && l.multiplicador > 0 ? dec2(l.hh_referencia / l.multiplicador) : null);
 
 /** Lleva la línea a las tarifas de hoy (si el cargo sigue existiendo); si no, queda con su foto. */
 export function conTarifasDeHoy(l: LineaHH, ay: Ayudas): LineaHH {
@@ -104,3 +130,7 @@ export function conTarifasDeHoy(l: LineaHH, ay: Ayudas): LineaHH {
   if (l.cargo_apoyo_id && ay.cargo.get(l.cargo_apoyo_id)) r = conApoyo(r, l.cargo_apoyo_id, ay);
   return r;
 }
+
+/** Iniciales para el avatar: «Joaquín Pérez» → «JP». */
+export const iniciales = (nombre: string) =>
+  nombre.trim().split(/\s+/).filter(x => /^[\p{L}]/u.test(x)).slice(0, 2).map(x => x[0]!.toUpperCase()).join('') || '?';

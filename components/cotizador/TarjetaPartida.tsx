@@ -186,7 +186,7 @@ export default function TarjetaPartida(props: {
               <button type="button" style={opcionMenu} onClick={() => { cerrar(); acciones.onAgregarDebajo('venta'); }}>Agregar partida de venta debajo</button>
               <button type="button" style={opcionMenu} onClick={() => { cerrar(); acciones.onAgregarDebajo('cargo'); }}>Agregar cargo operacional debajo</button>
               {acciones.onDuplicar && <button type="button" style={opcionMenu} onClick={() => { cerrar(); acciones.onDuplicar!(); }}>Duplicar la partida (con sus líneas)</button>}
-              {acciones.onTraslado && <button type="button" style={{ ...opcionMenu, borderTop: '1px solid var(--border2)' }} onClick={() => { cerrar(); acciones.onTraslado!(); }}>Agregar traslado (por comuna o km)</button>}
+              {acciones.onTraslado && <button type="button" style={{ ...opcionMenu, borderTop: '1px solid var(--border2)' }} onClick={() => { cerrar(); acciones.onTraslado!(); }}>Agregar traslado (por km)</button>}
               {acciones.onCuadrilla && !esCargo && <button type="button" style={opcionMenu} onClick={() => { cerrar(); acciones.onCuadrilla!(); }}>Mano de obra por cuadrilla</button>}
               <button type="button" style={{ ...opcionMenu, borderTop: '1px solid var(--border2)' }} disabled={indice === 0} onClick={() => { cerrar(); acciones.onMover(-1); }}>↑ Subir</button>
               <button type="button" style={opcionMenu} disabled={indice === total - 1} onClick={() => { cerrar(); acciones.onMover(1); }}>↓ Bajar</button>
@@ -243,7 +243,7 @@ export default function TarjetaPartida(props: {
                 <button key={c} type="button" className="btn btn-ghost btn-xs" onClick={() => acciones.onCargo?.(c)}><Plus size={12} /> {c}</button>
               ))}
               {acciones.onTraslado && <button type="button" className="btn btn-ghost btn-xs" onClick={acciones.onTraslado}
-                title="Por la comuna (la tabla de traslados) o por kilómetros, peajes y horas de viaje"><Plus size={12} /> Traslado (comuna o km)</button>}
+                title="Por kilómetros, peajes y horas de viaje"><Plus size={12} /> Traslado (por km)</button>}
             </div>
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, alignItems: 'center' }}>
               <span>O calcularlo como</span>
