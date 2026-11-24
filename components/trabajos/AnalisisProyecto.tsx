@@ -39,6 +39,8 @@ import { pct, Queda } from '@/components/trabajos/analisis/comun';
 import type { EdicionPresupuesto } from '@/components/trabajos/analisis/tipos';
 import { descargarExcel } from '@/lib/excel';
 import type { HitoCobro } from '@/lib/cotizador/tipos';
+import { enMonedaExtranjera } from '@/lib/cotizador/planCobro';
+import { indicadoresDelDia } from '@/hooks/useValoresDia';
 import { useToast } from '@/hooks/useToast';
 import { fechaLocal, formatCLP } from '@/utils';
 
@@ -190,7 +192,9 @@ export default function AnalisisProyecto({ cotId, folio, plan, resultado, versio
   const exportar = async () => {
     if (!base || !a || !datos) return;
     try {
-      const flujo = flujoSemanal({ plan: base.planFlujo, presupuesto: base.p, planCobro: plan, totalCotizacion: base.total, cobros: datos.cobros, movimientos: base.movs, ejecucion: base.ejec });
+      const ind = plan.some(enMonedaExtranjera) ? await indicadoresDelDia() : null;
+      const flujo = flujoSemanal({ plan: base.planFlujo, presupuesto: base.p, planCobro: plan, totalCotizacion: base.total, cobros: datos.cobros, movimientos: base.movs, ejecucion: base.ejec,
+        valores: ind ? { uf: ind.uf.valor, usd: ind.usd.valor } : undefined });
       const etiqueta = (id: string | null) => { const p = base.partidas.find(x => x.id === id); return p ? `${p.numero}. ${p.nombre}` : 'Sin partida'; };
       await descargarExcel([
         ...hojasAnalisis(a, etiqueta),

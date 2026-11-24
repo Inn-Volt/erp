@@ -20,6 +20,9 @@ const MARCAS: Record<number, () => Promise<boolean>> = {
   20: async () => !(await supabase.from('cotizaciones').select('flujo_plan', { head: true }).limit(1)).error,
   // Las fases 21 y 22 (presupuesto de ejecución, detalle de boletas y análisis de proyecto) son
   // requisito: no tienen marca, la app nueva no funciona sin ellas.
+  // Fase 24 (supabase_fase24_forma_pago.sql): cobros en $, UF, dólares o «el resto». Sin ella la base
+  // solo crea los cobros en %: la forma de pago no ofrece lo demás.
+  24: async () => !(await supabase.from('por_facturar').select('moneda', { head: true }).limit(1)).error,
 };
 
 const cache = new Map<number, Promise<boolean>>();

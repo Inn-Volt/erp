@@ -1303,7 +1303,8 @@ export default function EditorCotizacion({ id, clonarDe, clienteInicial, solicit
               {ajustes && 'plan_cobro' in ajustes && (
                 <div style={{ gridColumn: '1 / -1' }}>
                   <span style={etiqueta}>Forma de pago (cobros por hitos: cada uno cae en «Por facturar» cuando corresponde)</span>
-                  <PlanCobro plan={planDe(d)} editable={editable} onCambiar={p => set({ plan_cobro: p })} />
+                  <PlanCobro plan={planDe(d)} editable={editable} onCambiar={p => set({ plan_cobro: p })}
+                    total={d.moneda === 'UF' ? calc.totales.totalClp ?? undefined : calc.totales.total} valorUF={d.valor_uf} />
                 </div>
               )}
             </fieldset>

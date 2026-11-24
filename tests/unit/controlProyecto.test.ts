@@ -4,10 +4,11 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
   ajustarSemanas, control, costoCompra, cuadre, distribucionInvalida, estadoControl, flujoSemanal, hojasControl, inicioPorDefecto,
-  kpis, montosHitos, movimientos, nombreArchivoControl, normalizarPlan, opcionesDePartida, partidaValida, planPorDefecto, presupuesto, presupuestoPorPartida,
+  kpis, movimientos, nombreArchivoControl, normalizarPlan, opcionesDePartida, partidaValida, planPorDefecto, presupuesto, presupuestoPorPartida,
   repartirEntero, repartoParejo, semanaDe, SIN_PARTIDA, UMBRAL_ALERTA, type CompraCP, type GastoCP, type HoraCP, type ManoObraCP,
 } from '../../lib/controlProyecto.ts';
 import { calcular } from '../../lib/cotizador/calculo.ts';
+import { montosHitos } from '../../lib/cotizador/planCobro.ts';
 import type { Linea, PartidaCot } from '../../lib/cotizador/tipos.ts';
 import { COSTO_IV0080, IV0080, PLAN_COBRO_IV0080, TOTAL_IV0080, VENTA_POR_PARTIDA } from './fixture_iv0080.ts';
 

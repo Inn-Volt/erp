@@ -7,7 +7,8 @@
  * (nombre, RUT, logo, giro, banco) siguen en Configuración → Empresas.
  */
 
-import PlanCobro, { sumaPlan } from '@/components/cotizador/PlanCobro';
+import PlanCobro from '@/components/cotizador/PlanCobro';
+import { revisarPlan } from '@/lib/cotizador/planCobro';
 import { PLAN_COBRO_BASE } from '@/lib/cotizador/tipos';
 import EditorFormato from '@/components/EditorFormato';
 import { useEffect, useState } from 'react';
@@ -38,7 +39,8 @@ export default function AjustesCotPage() {
   if (!a) return <div className="skeleton" style={{ height: 300 }} />;
 
   const guardar = async () => {
-    if (a.plan_cobro && sumaPlan(a.plan_cobro) !== 100) { toastError('Los cobros de la forma de pago tienen que sumar 100 %.'); return; }
+    const problemaPlan = a.plan_cobro && a.plan_cobro.length ? revisarPlan(a.plan_cobro) : null;
+    if (problemaPlan) { toastError(`Forma de pago: ${problemaPlan}`); return; }
     setGuardando(true);
     try {
       await ajustesService.guardar({

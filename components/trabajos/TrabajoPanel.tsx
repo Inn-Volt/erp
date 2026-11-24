@@ -24,6 +24,8 @@ import { useFase } from '@/lib/fases';
 import { anticiposService, type Anticipo } from '@/services/fase5';
 import { CATEGORIAS_GASTO, ETAPAS_COBRO, type Gasto, type PorFacturar } from '@/services/operacion';
 import { cobroPagado } from '@/lib/cobros';
+import { detalleHito, enMonedaExtranjera, hitoActivo } from '@/lib/cotizador/planCobro';
+import { indicadoresDelDia } from '@/hooks/useValoresDia';
 import { CUANDO_COBRO, estadoTrabajo, type EstadoTrabajo, type HitoCobro } from '@/lib/cotizador/tipos';
 import { usePermisos } from '@/hooks/usePermisos';
 import { useToast } from '@/hooks/useToast';
@@ -95,13 +97,14 @@ export default function TrabajoPanel({ cot, plan, onCambio, cliente, responsable
   const mover = async (e: EstadoTrabajo) => {
     if (e === 'terminado' && !confirm('¿Marcar el trabajo como terminado? Los cobros «al terminar» pasan a Por facturar.')) return;
     setOcupado(true);
+    if (e === 'terminado' && plan.some(h => h.cuando === 'terminar' && enMonedaExtranjera(h))) await indicadoresDelDia(true);
     try { await trabajosService.cambiarEstado(cot.id, e); success(`Trabajo: ${estadoTrabajo(e).nombre.toLowerCase()}`); onCambio(); cargar(); }
     catch (err) { toastError(err instanceof Error ? err.message : 'No se pudo'); }
     finally { setOcupado(false); }
   };
 
   // Hitos del plan que aún no caen en «Por facturar» (los «al terminar» antes de terminar).
-  const pendientes = plan.filter(h => h.porcentaje > 0 && !cobros.some(c => c.hito === h.nombre));
+  const pendientes = plan.filter(h => hitoActivo(h) && !cobros.some(c => c.hito === h.nombre));
   const cobrado = cobros.reduce((s, c) => s + Number(c.monto_pagado || 0), 0);
   const gastado = gastos.filter(g => g.estado !== 'rechazado').reduce((s, g) => s + Number(g.monto || 0), 0);
 
@@ -138,7 +141,7 @@ export default function TrabajoPanel({ cot, plan, onCambio, cliente, responsable
             const pagado = cobroPagado(c);
             return (
               <div key={c.id} style={{ display: 'flex', gap: 8, alignItems: 'center', fontSize: '0.86rem', padding: '0.35rem 0', borderBottom: '1px solid var(--border2)', color: 'var(--text)' }}>
-                <span style={{ flex: 1 }}>{c.hito || 'Cobro'}{c.porcentaje ? ` · ${String(c.porcentaje).replace('.', ',')} %` : ''}{c.numero_factura ? <span style={{ color: 'var(--muted)' }}> · fact. {c.numero_factura}</span> : null}</span>
+                <span style={{ flex: 1 }}>{c.hito || 'Cobro'}{c.moneda && c.monto_moneda ? ` · ${detalleHito({ nombre: '', porcentaje: 0, cuando: 'aprobar', tipo: c.moneda, valor: Number(c.monto_moneda) })}` : c.porcentaje ? ` · ${String(c.porcentaje).replace('.', ',')} %` : ''}{c.numero_factura ? <span style={{ color: 'var(--muted)' }}> · fact. {c.numero_factura}</span> : null}</span>
                 <b style={{ fontVariantNumeric: 'tabular-nums' }}>{formatCLP(Number(c.monto))}</b>
                 <span className="badge" style={{ background: (pagado ? '#16a34a' : e?.color || '#64748b') + '1f', color: pagado ? '#16a34a' : e?.color, fontSize: '0.7rem' }}>{pagado ? 'Pagado' : e?.nombre}</span>
               </div>
@@ -146,7 +149,7 @@ export default function TrabajoPanel({ cot, plan, onCambio, cliente, responsable
           })}
           {pendientes.map(h => (
             <div key={h.nombre} style={{ display: 'flex', gap: 8, fontSize: '0.84rem', padding: '0.35rem 0', borderBottom: '1px dashed var(--border2)', color: 'var(--muted)' }}>
-              <span style={{ flex: 1 }}>{h.nombre} · {String(h.porcentaje).replace('.', ',')} %</span><span>{CUANDO_COBRO[h.cuando]}</span>
+              <span style={{ flex: 1 }}>{h.nombre} · {detalleHito(h)}</span><span>{CUANDO_COBRO[h.cuando]}</span>
             </div>
           ))}
           {puede('facturacion.ver') && <Link href="/facturacion" style={{ fontSize: '0.8rem' }}>Ir a facturación y cobranza</Link>}

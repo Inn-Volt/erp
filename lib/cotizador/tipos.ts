@@ -49,17 +49,27 @@ export const UNIDADES_PARTIDA = ['global', 'un', 'local', 'm²', 'depto', 'piso'
 export const TITULO_VALORIZACION = 'VALORIZACIÓN';
 export const IVA = 19;
 
-/** Un cobro del plan: «Anticipo 50 % al aprobar», «Saldo 50 % al terminar». */
-export interface HitoCobro { nombre: string; porcentaje: number; cuando: 'aprobar' | 'terminar' }
+/** Cómo se fija un cobro: un % del total, un monto fijo en pesos, UF o dólares, o «el resto» del total. */
+export type TipoHito = 'pct' | 'CLP' | 'UF' | 'USD' | 'resto';
+/**
+ * Un cobro del plan: «Anticipo 50 % al aprobar», «Anticipo 10 UF al aprobar», «Saldo (el resto) al
+ * terminar». La lógica (montos, palabras, revisión) está en lib/cotizador/planCobro.ts.
+ */
+export interface HitoCobro {
+  nombre: string;
+  /** % del total (tipo «pct»). */
+  porcentaje: number;
+  cuando: 'aprobar' | 'terminar';
+  /** Sin tipo es «pct» (los planes de antes). */
+  tipo?: TipoHito;
+  /** El monto fijo en su moneda (tipos CLP, UF y USD). */
+  valor?: number | null;
+}
 export const PLAN_COBRO_BASE: HitoCobro[] = [
   { nombre: 'Anticipo', porcentaje: 50, cuando: 'aprobar' },
   { nombre: 'Saldo', porcentaje: 50, cuando: 'terminar' },
 ];
 export const CUANDO_COBRO: Record<HitoCobro['cuando'], string> = { aprobar: 'al aprobar', terminar: 'al terminar el trabajo' };
-/** «50 % al aprobar y 50 % al terminar el trabajo». */
-export const planEnPalabras = (plan: HitoCobro[]) =>
-  plan.filter(h => h.porcentaje > 0).map(h => `${String(h.porcentaje).replace('.', ',')} % ${CUANDO_COBRO[h.cuando]}`)
-    .join(', ').replace(/, ([^,]*)$/, ' y $1');
 
 export type EstadoTrabajo = 'por_iniciar' | 'en_ejecucion' | 'terminado';
 export const ESTADOS_TRABAJO: { clave: EstadoTrabajo; nombre: string; color: string }[] = [

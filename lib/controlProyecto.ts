@@ -26,6 +26,7 @@
 
 import { calcular } from '@/lib/cotizador/calculo';
 import type { HitoCobro, Linea, Moneda, PartidaCot } from '@/lib/cotizador/tipos';
+import { hitoActivo, montosHitos, redondearPct as redondear, type ValoresMoneda } from '@/lib/cotizador/planCobro';
 import type { CategoriaItem } from '@/types';
 
 // ── Tipos de costo y estados ────────────────────────────────────────────────
@@ -475,7 +476,7 @@ export function planPorDefecto(o: { inicio: string; presupuesto: Presupuesto; pl
   }
   if (o.presupuesto.sinPartida.costo) distribucion[SIN_PARTIDA] = repartoParejo(semanas);
   const hitos: Record<string, number> = {};
-  for (const h of o.planCobro) if (n(h.porcentaje) > 0) hitos[h.nombre] = semanaHito(h, semanas);
+  for (const h of o.planCobro) if (hitoActivo(h)) hitos[h.nombre] = semanaHito(h, semanas);
   return { inicio: o.inicio, semanas, distribucion, hitos };
 }
 
@@ -546,19 +547,6 @@ export function semanaDe(fecha: string, inicio: string, semanas: number): number
   return s > semanas ? 0 : s;
 }
 
-/** Monto de cada cobro del plan, como _cot_generar_cobros: round(total × acumulado %) − round(total × anterior %). */
-export function montosHitos(total: number, plan: HitoCobro[]): (HitoCobro & { monto: number })[] {
-  let acum = 0;
-  return plan.map(h => {
-    const antes = acum;
-    acum += n(h.porcentaje);
-    const monto = n(h.porcentaje) > 0 ? redondear(total, acum) - redondear(total, antes) : 0;
-    return { ...h, monto };
-  });
-}
-// round(total × % / 100) como la base (numeric): el % va con toda su precisión (un primer pago en $
-// deja un % con muchos decimales) y el medio peso sube aunque el decimal binario quede apenas debajo.
-const redondear = (total: number, porcentaje: number) => Math.round((n(total) * n(porcentaje)) / 100 + 1e-6);
 
 /** Reparte un monto por semana según los % (redondeo por acumulado: la suma da exacta). */
 function repartoSemanal(monto: number, pcts: number[]): number[] {
@@ -583,6 +571,8 @@ interface SemanaFlujo {
 
 export function flujoSemanal(o: {
   plan: FlujoPlan; presupuesto: Presupuesto; planCobro: HitoCobro[]; totalCotizacion: number;
+  /** La UF y el dólar del día, para los cobros fijados en esas monedas. */
+  valores?: ValoresMoneda;
   cobros: CobroCP[]; movimientos: Movimiento[];
   /** El anteproyecto: el egreso plan sale de él (sin él, de lo cotizado). */
   ejecucion?: PresupuestoEjecucion | null;
@@ -597,7 +587,7 @@ export function flujoSemanal(o: {
   ].map(f => ({ ...f, ingresoPlan: 0, egresoPlan: 0, netoPlan: 0, acumPlan: 0, ingresoReal: 0, egresoReal: 0, netoReal: 0, acumReal: 0, desvEgreso: 0 }));
   const idx = (s: number) => (s === 0 ? k : s - 1);
 
-  for (const h of montosHitos(o.totalCotizacion, o.planCobro)) {
+  for (const h of montosHitos(o.totalCotizacion, o.planCobro, o.valores)) {
     if (!h.monto) continue;
     const s = acotar(Math.round(n(plan.hitos[h.nombre])) || semanaHito(h, k), 1, k);
     filas[idx(s)].ingresoPlan += h.monto;
