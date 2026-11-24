@@ -20,7 +20,8 @@ INSERT INTO public.usuario_roles (usuario_id, rol_id) SELECT :'JOAQUIN', id FROM
 INSERT INTO r (ok, txt) SELECT count(*) = 11 AND count(*) FILTER (WHERE moneda_base = 'USD') = 3, '11 cargos HH (3 en USD)' FROM public.hh_cargos;
 INSERT INTO r (ok, txt) SELECT count(*) = 5 AND bool_and(multiplicador = CASE clave WHEN 'interfaz' THEN 3 WHEN 'logica' THEN 2 WHEN 'integracion' THEN 1.3 ELSE 1 END),
   '5 tipos de tarea con su multiplicador' FROM public.hh_tipos_tarea;
-INSERT INTO r (ok, txt) SELECT count(*) = 41 AND bool_and(tipo_tarea_clave IS NOT NULL), '41 trabajos tipo, todos con su tipo de tarea' FROM public.hh_trabajos_tipo;
+INSERT INTO r (ok, txt) SELECT count(*) = 38 AND bool_and(tipo_tarea_clave IS NOT NULL) AND count(*) FILTER (WHERE categoria = 'Pantallas LED' OR nombre ILIKE '%pantalla%') = 0,
+  '38 trabajos tipo con su tipo de tarea (sin pantallas LED)' FROM public.hh_trabajos_tipo;
 INSERT INTO r (ok, txt) SELECT count(*) = 4 AND bool_and(t.tipo_tarea_clave = v.tipo), 'Visita y NVR son coordinación; landing es interfaz; MVP es lógica'
   FROM public.hh_trabajos_tipo t JOIN (VALUES ('Visita técnica / diagnóstico', 'coordinacion'), ('Configuración NVR + app + usuarios', 'coordinacion'),
     ('Landing page (1 página)', 'interfaz'), ('App web a medida (MVP)', 'logica')) AS v(nombre, tipo) ON v.nombre = t.nombre;
@@ -28,8 +29,8 @@ INSERT INTO r (ok, txt) SELECT count(*) = 1 AND bool_and(c.nombre = 'Instalador 
   'El cambio de tablero va con instalador SEC y 6 HH de ayudante'
   FROM public.hh_trabajos_tipo t JOIN public.hh_cargos c ON c.id = t.cargo_principal_id JOIN public.hh_cargos a ON a.id = t.cargo_apoyo_id
   WHERE t.nombre = 'Cambio tablero domiciliario (hasta 12 circuitos)';
-INSERT INTO r (ok, txt) SELECT count(*) = 1 AND bool_and(horas_facturables_mes = 140 AND factor_costo_empresa = 1.35 AND uf_respaldo = 41350.42 AND redondeo_total = 1000 AND validez_dias = 15),
-  'Una sola fila de parámetros con los valores del Excel' FROM public.hh_parametros;
+INSERT INTO r (ok, txt) SELECT count(*) = 1 AND bool_and(horas_facturables_mes = 140 AND factor_costo_empresa = 1.35 AND uf_respaldo = 41350.42 AND redondeo_total = 1000 AND validez_dias = 15 AND gestion_proyecto = 0.10),
+  'Una sola fila de parámetros con los valores del Excel (y gestión 10 %)' FROM public.hh_parametros;
 INSERT INTO r (ok, txt) SELECT count(*) = 2, 'César y Joaquín en el equipo HH, sin cargos' FROM public.hh_personas p
   WHERE nombre IN ('César', 'Joaquín') AND NOT EXISTS (SELECT 1 FROM public.hh_persona_cargos pc WHERE pc.persona_id = p.id);
 
@@ -37,7 +38,7 @@ INSERT INTO r (ok, txt) SELECT count(*) = 2, 'César y Joaquín en el equipo HH,
 UPDATE public.hh_cargos SET tarifa_base = 0.8 WHERE nombre = 'Instalador eléctrico SEC (declara TE1/TE4)';
 \i /tmp/supabase_fase23_calculo_hh.sql
 SELECT set_config('request.jwt.claim.sub', '', false);
-INSERT INTO r (ok, txt) SELECT (SELECT count(*) FROM public.hh_cargos) = 11 AND (SELECT count(*) FROM public.hh_trabajos_tipo) = 41
+INSERT INTO r (ok, txt) SELECT (SELECT count(*) FROM public.hh_cargos) = 11 AND (SELECT count(*) FROM public.hh_trabajos_tipo) = 38
   AND (SELECT tarifa_base FROM public.hh_cargos WHERE nombre = 'Instalador eléctrico SEC (declara TE1/TE4)') = 0.8,
   'Idempotente: no duplica semillas ni pisa la tarifa cambiada';
 
@@ -168,8 +169,13 @@ INSERT INTO r (ok, txt) SELECT count(*) = 1 AND bool_and(c.created_by = '2222222
 
 SELECT pg_temp.como(:'CESAR');
 SET ROLE authenticated;
-INSERT INTO ids SELECT 'cesar', public.hh_guardar_calculo(jsonb_build_object('nombre', 'Landing', 'uf_usada', 41400, 'usd_usada', 950), '[]'::JSONB);
+INSERT INTO ids SELECT 'cesar', public.hh_guardar_calculo(jsonb_build_object('nombre', 'Landing', 'uf_usada', 41400, 'usd_usada', 950,
+  'materiales_clp', 100000, 'margen_materiales', 0.25, 'materiales_venta_clp', 120000, 'gestion_pct', 0.12,
+  'operacion', jsonb_build_array(jsonb_build_object('descripcion', 'Traslado', 'monto', 25000))), '[]'::JSONB);
 RESET ROLE;
+INSERT INTO r (ok, txt) SELECT count(*) = 1 AND bool_and(materiales_venta_clp = 120000 AND gestion_pct = 0.12 AND operacion->0->>'descripcion' = 'Traslado'
+  AND (operacion->0->>'monto')::NUMERIC = 25000), 'Se guardan el precio de los materiales, la operación y la gestión'
+  FROM public.hh_calculos WHERE id = (SELECT id FROM ids WHERE quien = 'cesar');
 
 SELECT pg_temp.como(:'JOAQUIN');
 SET ROLE authenticated;

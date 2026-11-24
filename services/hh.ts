@@ -10,7 +10,9 @@
 
 import { supabase } from '@/lib/supabase';
 import { fetchConSesion } from '@/lib/fetchConSesion';
-import { PARAMETROS_INICIALES, type CargoHH, type MonedaHH, type ParametrosHH } from '@/lib/hh/calculo';
+import { PARAMETROS_INICIALES, UTILIDAD_MATERIALES_POR_OMISION, precioConUtilidad, type CargoHH, type GastoOperacion, type MonedaHH, type ParametrosHH } from '@/lib/hh/calculo';
+import { cotizacionDesdeCalculo } from '@/lib/hh/aCotizacion';
+import { utilidadesDe } from '@/lib/cotizador/utilidad';
 import type { FuenteIndicador, IndicadoresDia } from '@/lib/hh/indicadores';
 import type { FilaLineaHH } from '@/lib/hh/lineas';
 import type { EmpresaInfo } from '@/types';
@@ -34,6 +36,8 @@ export interface CatalogoHH {
   trabajos: TrabajoTipoHH[];
   personas: PersonaHH[];
   personaCargos: PersonaCargoHH[];
+  /** La utilidad de los materiales del cotizador (fracción, sobre el precio): con ella entran los materiales. */
+  utilidadMateriales: number;
 }
 export interface IndicadorGuardado { fecha: string; uf: number; usd: number; fuente: FuenteIndicador; created_at: string }
 
@@ -43,6 +47,10 @@ export interface CalculoHHBD {
   uf_usada: number; usd_usada: number; uf_fecha: string | null; uf_fuente: string | null; usd_fecha: string | null; usd_fuente: string | null;
   parametros: Partial<ParametrosHH>; urgencia: boolean; traslado_uf: number; materiales_clp: number; margen_materiales: number;
   validez_dias: number; neto_clp: number; neto_uf: number; iva_clp: number; total_clp: number;
+  /** Precio de venta de los materiales fijado a mano (vacío = sale del costo y la utilidad). */
+  materiales_venta_clp: number | null;
+  operacion: GastoOperacion[];
+  gestion_pct: number;
   created_by: string | null; created_at: string; updated_at: string;
 }
 export type CalculoNuevo = Omit<CalculoHHBD, 'id' | 'created_by' | 'created_at' | 'updated_at'> & { id?: string };
@@ -81,17 +89,21 @@ const calculo = (c: Record<string, unknown>): CalculoHHBD => ({
   materiales_clp: numero(c.materiales_clp), margen_materiales: numero(c.margen_materiales), neto_clp: numero(c.neto_clp),
   neto_uf: numero(c.neto_uf), iva_clp: numero(c.iva_clp), total_clp: numero(c.total_clp), validez_dias: numero(c.validez_dias, 15),
   parametros: (c.parametros as Partial<ParametrosHH>) || {},
+  materiales_venta_clp: num(c.materiales_venta_clp), gestion_pct: numero(c.gestion_pct),
+  operacion: (Array.isArray(c.operacion) ? c.operacion as GastoOperacion[] : []).map(g => ({ descripcion: String(g.descripcion || ''), monto: numero(g.monto) })),
 });
 
 export const hhService = {
   async catalogo(): Promise<CatalogoHH> {
-    const [p, c, t, tr, pe, pc] = await Promise.all([
+    const [p, c, t, tr, pe, pc, aj] = await Promise.all([
       supabase.from('hh_parametros').select('*').eq('id', 1).maybeSingle(),
       supabase.from('hh_cargos').select('*').order('orden').order('nombre'),
       supabase.from('hh_tipos_tarea').select('*').order('orden').order('nombre'),
       supabase.from('hh_trabajos_tipo').select('*').order('categoria').order('orden').order('nombre'),
       supabase.from('hh_personas').select('id, nombre, profile_id, jefe_id, activo').order('nombre'),
       supabase.from('hh_persona_cargos').select('id, persona_id, cargo_id, tarifa_base_propia, predeterminado, activo'),
+      // La utilidad de los materiales del cotizador (solo lectura; sin acceso, la de siempre).
+      supabase.from('ajustes_cotizacion').select('utilidad_por_tipo').eq('id', 1).maybeSingle(),
     ]);
     for (const r of [p, c, t, tr, pe, pc]) lanzar(r.error);
     return {
@@ -101,6 +113,8 @@ export const hhService = {
       trabajos: ((tr.data || []) as TrabajoTipoHH[]).map(x => ({ ...x, hh_referencia: numero(x.hh_referencia), hh_apoyo: numero(x.hh_apoyo) })),
       personas: (pe.data || []) as PersonaHH[],
       personaCargos: ((pc.data || []) as PersonaCargoHH[]).map(x => ({ ...x, tarifa_base_propia: num(x.tarifa_base_propia) })),
+      utilidadMateriales: aj.error || !aj.data ? UTILIDAD_MATERIALES_POR_OMISION
+        : utilidadesDe((aj.data as { utilidad_por_tipo?: Record<string, number> | null }).utilidad_por_tipo).material / 100,
     };
   },
 
@@ -203,6 +217,34 @@ export const hhService = {
     const { data, error } = await supabase.from('hh_calculos').delete().eq('id', id).select('id');
     lanzar(error);
     if (!data?.length) throw new Error('Solo puedes eliminar tus propios cálculos.');
+  },
+
+  /**
+   * Del anteproyecto (un cálculo guardado) a una cotización en borrador: sus partidas y líneas, con
+   * el costo real de cada trabajo (lib/hh/aCotizacion.ts).
+   */
+  async paraCotizar(id: string) {
+    const [{ cabecera: c, lineas }, cargos] = await Promise.all([
+      this.calculo(id),
+      supabase.from('hh_cargos').select('id, sueldo_mercado_clp').then(r => { lanzar(r.error); return (r.data || []) as { id: string; sueldo_mercado_clp: number | null }[]; }),
+    ]);
+    const sueldo = new Map(cargos.map(x => [x.id, num(x.sueldo_mercado_clp)]));
+    const p = { ...PARAMETROS_INICIALES, ...c.parametros };
+    // Los cálculos de antes guardaban el traslado en UF: pasa a la operación.
+    const operacion = [...c.operacion];
+    if (c.traslado_uf > 0) operacion.push({ descripcion: 'Traslado', monto: Math.round(c.traslado_uf * c.uf_usada) });
+    const ventaMat = c.materiales_venta_clp ?? precioConUtilidad(c.materiales_clp, c.margen_materiales);
+    const manoObra = lineas.reduce((t, l) => t + numero(l.subtotal_clp), 0) * (c.urgencia ? 1 + p.recargo_urgencia : 1);
+    const cot = cotizacionDesdeCalculo({
+      nombre: c.nombre, fecha: c.fecha, urgencia: c.urgencia, parametros: p,
+      materiales_costo: c.materiales_clp, materiales_venta: ventaMat, operacion, gestion_pct: c.gestion_pct,
+      gestion_monto: Math.round((manoObra + ventaMat) * c.gestion_pct),
+      lineas: lineas.map(l => ({
+        descripcion: l.descripcion, unidad: l.unidad, cantidad: numero(l.cantidad, 1), horas_reales: numero(l.horas_reales),
+        horas_apoyo: numero(l.horas_apoyo), cargo_id: l.cargo_id, cargo_apoyo_id: l.cargo_apoyo_id, subtotal: numero(l.subtotal_clp),
+      })),
+    }, cargoId => sueldo.get(cargoId) ?? null);
+    return { ...cot, cliente: c.cliente_texto?.trim() || '' };
   },
 
   /** La empresa emisora para el PDF (la del usuario o la primera). Solo lectura. */

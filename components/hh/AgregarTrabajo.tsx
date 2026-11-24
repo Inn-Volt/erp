@@ -20,7 +20,7 @@ import { Campo, Cantidad, Hoja, Interruptor } from './comun';
 import { conApoyo, conCargo, conMultiplicador, conPersona, conTipo, conTrabajo, horasDeReferencia, iniciales, type Ayudas } from './catalogo';
 import s from './hh.module.css';
 
-const SIN_EXTRAS = { urgencia: false, materiales_clp: 0, margen_materiales: 0, traslado_uf: 0 };
+const SIN_EXTRAS = { urgencia: false, materiales_clp: 0, margen_materiales: 0, operacion: [], gestion_pct: 0 };
 
 export default function AgregarTrabajo({ ay, trabajos, inicial, ind, p, onGuardar, onCerrar }: {
   ay: Ayudas; trabajos: TrabajoTipoHH[]; inicial: LineaHH | null; ind: Indicadores; p: ParametrosHH;

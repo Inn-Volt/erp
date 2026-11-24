@@ -1,29 +1,33 @@
 'use client';
 
 /**
- * La calculadora: los trabajos del cálculo (cada uno en una tarjeta), el resumen (urgencia,
- * materiales, traslado, neto en pesos y en UF, IVA), guardar, abrir y duplicar cálculos, exportar a
- * Excel y la cotización en PDF para el cliente. En el celular, el total va siempre abajo.
+ * La calculadora (el anteproyecto): los trabajos del cálculo (cada uno en una tarjeta), el resumen
+ * (urgencia, gestión de proyecto, materiales con la utilidad del cotizador, operación, neto en pesos
+ * y en UF, IVA), guardar, abrir y duplicar cálculos, exportar a Excel, el PDF para el cliente y
+ * «Pasar al cotizador» (arma la cotización en borrador sin haber cotizado antes). En el celular, el
+ * total va siempre abajo.
  * Un cálculo nuevo usa la UF y los parámetros de hoy; uno guardado usa su foto (no cambia aunque
  * cambien la UF o las tarifas), salvo que se pida pasarlo a los valores de hoy.
  */
 
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { CopyPlus, Download, FileDown, FilePlus2, FolderOpen, Loader2, Plus, RefreshCw, Save, StickyNote } from 'lucide-react';
+import { useRouter } from 'next/navigation';
+import { ArrowRight, CopyPlus, Download, FileDown, FilePlus2, FolderOpen, Loader2, Plus, RefreshCw, Save, StickyNote } from 'lucide-react';
 import NumeroInput from '@/components/NumeroInput';
 import { useToast } from '@/hooks/useToast';
 import { descargarExcel } from '@/lib/excel';
 import { logoDocumento } from '@/lib/logoMarca';
 import { formatCLP, nombreArchivo } from '@/utils';
-import { PARAMETROS_INICIALES, entregablesCliente, estadoTarifa, formatoHoras, formatoIndicador, formatoUF, type ParametrosHH } from '@/lib/hh/calculo';
+import { PARAMETROS_INICIALES, entregablesCliente, estadoTarifa, formatoHoras, formatoIndicador, formatoUF, type GastoOperacion, type ParametrosHH } from '@/lib/hh/calculo';
 import { hoyEnChile, type FuenteIndicador, type IndicadoresDia } from '@/lib/hh/indicadores';
 import { faltaEnLinea, filaLinea, hojasCalculo, lineaDesdeFila, totalesDe, type LineaHH } from '@/lib/hh/lineas';
-import { hhService, mensajeHH, type CalculoHHBD, type CalculoNuevo } from '@/services/hh';
+import { hhService, mensajeHH, type CalculoHHBD, type CalculoNuevo, type CatalogoHH } from '@/services/hh';
 import { Campo, Hoja, Interruptor, Vacio, fechaCL, pctCL, type PropsPestana } from './comun';
 import { ayudasCatalogo, conTarifasDeHoy } from './catalogo';
 import AgregarTrabajo from './AgregarTrabajo';
 import TarjetaLinea from './TarjetaLinea';
 import CalculosGuardados from './CalculosGuardados';
+import { Materiales, Operacion } from './Extras';
 import type { DatosCotizacionHH } from './CotizacionHHPDF';
 import s from './hh.module.css';
 
@@ -35,17 +39,24 @@ interface Borrador {
   notas: string;
   validez: number;
   urgencia: boolean;
+  /** Costo neto de los materiales. */
   materiales: number;
-  /** Fracción: 0,2 = 20 %. */
+  /** Utilidad de los materiales (fracción, sobre el precio, como el cotizador): 0,25 = 25 %. */
   margen: number;
-  traslado: number;
+  /** Precio de venta fijado a mano (null = sale del costo y la utilidad). */
+  ventaMateriales: number | null;
+  operacion: GastoOperacion[];
+  /** Gestión de proyecto (fracción); 0 = no se suma. */
+  gestion: number;
   /** La foto de un cálculo guardado; null = la UF, el dólar y los parámetros de hoy. */
   foto: { dia: IndicadoresDia; parametros: ParametrosHH } | null;
   lineas: LineaHH[];
 }
 
-const nuevo = (validez: number): Borrador => ({
-  id: null, autor: null, nombre: '', cliente: '', notas: '', validez, urgencia: false, materiales: 0, margen: 0, traslado: 0, foto: null, lineas: [],
+const nuevo = (cat: CatalogoHH): Borrador => ({
+  id: null, autor: null, nombre: '', cliente: '', notas: '', validez: cat.parametros.validez_dias, urgencia: false,
+  materiales: 0, margen: cat.utilidadMateriales, ventaMateriales: null, operacion: [], gestion: cat.parametros.gestion_proyecto,
+  foto: null, lineas: [],
 });
 
 const fotoDe = (c: CalculoHHBD): Borrador['foto'] => ({
@@ -58,10 +69,11 @@ const fotoDe = (c: CalculoHHBD): Borrador['foto'] => ({
 
 let copias = 0;
 
-export default function Calculadora({ cat, dia: diaHoy, configura, miId }: PropsPestana & { configura: boolean; miId: string | null }) {
+export default function Calculadora({ cat, dia: diaHoy, configura, puedeCotizar, miId }: PropsPestana & { configura: boolean; puedeCotizar: boolean; miId: string | null }) {
+  const router = useRouter();
   const { success, error: toastError, warning } = useToast();
   const ay = useMemo(() => ayudasCatalogo(cat, miId), [cat, miId]);
-  const [b, setB] = useState<Borrador>(() => nuevo(cat.parametros.validez_dias));
+  const [b, setB] = useState<Borrador>(() => nuevo(cat));
   const [sucio, setSucio] = useState(false);
   const [guardando, setGuardando] = useState(false);
   const [lista, setLista] = useState<CalculoHHBD[] | null>(null);
@@ -74,7 +86,10 @@ export default function Calculadora({ cat, dia: diaHoy, configura, miId }: Props
   const dia = b.foto?.dia ?? diaHoy;
   const ind = { uf: dia.uf.valor, usd: dia.usd.valor };
   const p = b.foto?.parametros ?? cat.parametros;
-  const cab = { urgencia: b.urgencia, materiales_clp: b.materiales, margen_materiales: b.margen, traslado_uf: b.traslado };
+  const cab = {
+    urgencia: b.urgencia, materiales_clp: b.materiales, margen_materiales: b.margen, materiales_venta_clp: b.ventaMateriales,
+    operacion: b.operacion, gestion_pct: b.gestion,
+  };
   const t = totalesDe(b.lineas, cab, ind, p);
   const trabajosActivos = cat.trabajos.filter(x => x.activo);
   const puedeActualizar = !!b.id && (b.autor === miId || configura);
@@ -114,7 +129,7 @@ export default function Calculadora({ cat, dia: diaHoy, configura, miId }: Props
   };
 
   const descartar = () => !sucio || confirm('Hay cambios sin guardar en este cálculo. ¿Descartarlos?');
-  const empezarNuevo = () => { if (!descartar()) return; setB(nuevo(cat.parametros.validez_dias)); setSucio(false); };
+  const empezarNuevo = () => { if (!descartar()) return; setB(nuevo(cat)); setSucio(false); };
   const cargarLista = async () => {
     try { setLista(await hhService.calculos()); }
     catch (e) { toastError(mensajeHH(e, 'No se pudieron cargar los cálculos guardados.')); }
@@ -127,7 +142,10 @@ export default function Calculadora({ cat, dia: diaHoy, configura, miId }: Props
       setB({
         id: duplicar ? null : c.id, autor: duplicar ? null : c.created_by,
         nombre: duplicar ? `Copia de ${c.nombre}` : c.nombre, cliente: c.cliente_texto || '', notas: c.notas || '',
-        validez: c.validez_dias, urgencia: c.urgencia, materiales: c.materiales_clp, margen: c.margen_materiales, traslado: c.traslado_uf,
+        validez: c.validez_dias, urgencia: c.urgencia, materiales: c.materiales_clp, margen: c.margen_materiales,
+        ventaMateriales: c.materiales_venta_clp, gestion: c.gestion_pct,
+        // Los cálculos de antes guardaban el traslado en UF: pasa a la operación.
+        operacion: c.traslado_uf > 0 ? [...c.operacion, { descripcion: 'Traslado', monto: Math.round(c.traslado_uf * c.uf_usada) }] : c.operacion,
         // Duplicar es partir uno nuevo: con la UF, los parámetros y las tarifas de hoy.
         foto: duplicar ? null : fotoDe(c),
         lineas: duplicar ? ls.map(l => conTarifasDeHoy(l, ay)) : ls,
@@ -143,11 +161,11 @@ export default function Calculadora({ cat, dia: diaHoy, configura, miId }: Props
     success('Ahora usa la UF, el dólar, los parámetros y las tarifas de hoy.');
   };
 
-  const guardar = async (comoNuevo: boolean) => {
-    if (!b.nombre.trim()) { warning('Ponle un nombre al cálculo (arriba).'); return; }
-    if (!b.lineas.length) { warning('Agrega al menos un trabajo.'); return; }
+  const guardar = async (comoNuevo: boolean): Promise<string | null> => {
+    if (!b.nombre.trim()) { warning('Ponle un nombre al cálculo (arriba).'); return null; }
+    if (!b.lineas.length) { warning('Agrega al menos un trabajo.'); return null; }
     const falta = faltas.findIndex(f => f !== null);
-    if (falta >= 0) { warning(`Trabajo ${falta + 1}: ${faltas[falta]}.`); return; }
+    if (falta >= 0) { warning(`Trabajo ${falta + 1}: ${faltas[falta]}.`); return null; }
     setGuardando(true);
     try {
       const actualizar = puedeActualizar && !comoNuevo;
@@ -155,8 +173,9 @@ export default function Calculadora({ cat, dia: diaHoy, configura, miId }: Props
         ...(actualizar ? { id: b.id! } : {}),
         nombre: b.nombre.trim(), cliente_texto: b.cliente.trim() || null, notas: b.notas.trim() || null, fecha: hoyEnChile(),
         uf_usada: dia.uf.valor, usd_usada: dia.usd.valor, uf_fecha: dia.uf.fecha, uf_fuente: dia.uf.fuente,
-        usd_fecha: dia.usd.fecha, usd_fuente: dia.usd.fuente, parametros: p, urgencia: b.urgencia, traslado_uf: b.traslado,
-        materiales_clp: b.materiales, margen_materiales: b.margen, validez_dias: b.validez,
+        usd_fecha: dia.usd.fecha, usd_fuente: dia.usd.fuente, parametros: p, urgencia: b.urgencia, traslado_uf: 0,
+        materiales_clp: b.materiales, margen_materiales: b.margen, materiales_venta_clp: b.ventaMateriales,
+        operacion: b.operacion.filter(g => g.descripcion.trim() || g.monto > 0), gestion_pct: b.gestion, validez_dias: b.validez,
         neto_clp: t.neto, neto_uf: t.netoUF, iva_clp: t.iva, total_clp: t.total,
       };
       const id = await hhService.guardarCalculo(cabecera, b.lineas.map((l, i) => filaLinea(l, t.lineas[i], ind, p, i)));
@@ -164,8 +183,16 @@ export default function Calculadora({ cat, dia: diaHoy, configura, miId }: Props
       setSucio(false);
       success(actualizar ? 'Cálculo actualizado.' : 'Cálculo guardado.');
       if (lista) cargarLista();
-    } catch (e) { toastError(mensajeHH(e)); }
+      return id;
+    } catch (e) { toastError(mensajeHH(e)); return null; }
     finally { setGuardando(false); }
+  };
+
+  /** El anteproyecto pasa al cotizador: se guarda (si hace falta) y se abre la cotización nueva en borrador. */
+  const pasarAlCotizador = async () => {
+    const id = !sucio && b.id ? b.id : await guardar(!puedeActualizar && !!b.id);
+    if (!id) return;
+    router.push(`/cotizador?hh=${id}`);
   };
 
   const nombreTipo = (clave: string | null) => (clave ? ay.tipo.get(clave)?.nombre ?? clave : 'Sin tipo');
@@ -178,7 +205,6 @@ export default function Calculadora({ cat, dia: diaHoy, configura, miId }: Props
   };
 
   const estado = b.id ? (puedeActualizar ? 'Cálculo guardado' : 'Cálculo de tu equipo') : 'Cálculo nuevo';
-  const extrasAbiertos = b.materiales > 0 || b.traslado > 0;
 
   return (
     <div className={s.pagina}>
@@ -201,7 +227,7 @@ export default function Calculadora({ cat, dia: diaHoy, configura, miId }: Props
       {pdfAbierto && (
         <PdfCliente onCerrar={() => setPdfAbierto(false)} validezInicial={b.validez} datos={{
           titulo: b.nombre.trim() || 'Cotización', cliente: b.cliente, fecha: hoyEnChile(), validezDias: b.validez,
-          entregables: entregablesCliente(b.lineas.map(l => ({ descripcion: l.descripcion.trim(), cantidad: l.cantidad, unidad: l.unidad.trim() })), t, ind),
+          entregables: entregablesCliente(b.lineas.map(l => ({ descripcion: l.descripcion.trim(), cantidad: l.cantidad, unidad: l.unidad.trim() })), t, ind, b.operacion),
           netoCLP: t.neto, netoUF: t.netoUF, iva: t.iva, ivaPct: p.iva, total: t.total, uf: ind.uf, ufFecha: dia.uf.fecha, urgencia: b.urgencia,
         }} onValidez={v => cambiar({ validez: v })} />
       )}
@@ -257,21 +283,35 @@ export default function Calculadora({ cat, dia: diaHoy, configura, miId }: Props
             <Interruptor activo={b.urgencia} onChange={() => cambiar({ urgencia: !b.urgencia })} etiqueta="Urgencia o fin de semana" />
             <span>Urgencia o fin de semana <span style={{ color: 'var(--muted)' }}>(+{pctCL(p.recargo_urgencia)})</span></span>
           </label>
-          <details className={s.avanzado} open={extrasAbiertos || undefined}>
-            <summary>Materiales y traslado</summary>
+          <div style={{ display: 'flex', gap: 10, alignItems: 'center', fontSize: '0.88rem', color: 'var(--text)', flexWrap: 'wrap' }}>
+            <Interruptor activo={b.gestion > 0} etiqueta="Gestión de proyecto"
+              onChange={() => cambiar({ gestion: b.gestion > 0 ? 0 : (cat.parametros.gestion_proyecto || 0.1) })} />
+            <span style={{ flex: 1, minWidth: 140 }}>Gestión de proyecto <span style={{ color: 'var(--muted)' }}>(coordinación, trámites)</span></span>
+            {b.gestion > 0 && (
+              <NumeroInput className="input input-sm" envoltura={{ width: 86 }} sufijo="%" value={Math.round(b.gestion * 1000) / 10} decimales={1}
+                onChange={v => cambiar({ gestion: Math.min(Math.max(v, 0), 50) / 100 })} ariaLabel="Gestión de proyecto (%)" />
+            )}
+          </div>
+          <details className={s.avanzado} open={b.materiales > 0 || b.ventaMateriales !== null || undefined}>
+            <summary>Materiales{t.materialesVenta > 0 ? ` · ${formatCLP(t.materialesVenta)}` : ''}</summary>
             <div className={s.avanzadoCuerpo}>
-              <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0,3fr) minmax(0,2fr)', gap: 8 }}>
-                <Campo etiqueta="Materiales (costo)"><NumeroInput className="input input-sm" prefijo="$" value={b.materiales} decimales={0} onChange={v => cambiar({ materiales: v })} ariaLabel="Materiales" /></Campo>
-                <Campo etiqueta="Margen"><NumeroInput className="input input-sm" sufijo="%" value={Math.round(b.margen * 1000) / 10} decimales={1} onChange={v => cambiar({ margen: v / 100 })} ariaLabel="Margen de materiales" /></Campo>
-              </div>
-              <Campo etiqueta="Traslado (en UF)"><NumeroInput className="input input-sm" value={b.traslado} decimales={2} sufijo="UF" onChange={v => cambiar({ traslado: v })} ariaLabel="Traslado en UF" /></Campo>
+              <Materiales costo={b.materiales} utilidad={b.margen} venta={b.ventaMateriales} utilidadCotizador={cat.utilidadMateriales}
+                onCambio={c => cambiar({ ...(c.materiales !== undefined ? { materiales: c.materiales } : {}), ...(c.margen !== undefined ? { margen: c.margen } : {}),
+                  ...(c.ventaMateriales !== undefined ? { ventaMateriales: c.ventaMateriales } : {}) })} />
+            </div>
+          </details>
+          <details className={s.avanzado} open={b.operacion.length > 0 || undefined}>
+            <summary>Operación (traslado, peajes…){t.operacion > 0 ? ` · ${formatCLP(t.operacion)}` : ''}</summary>
+            <div className={s.avanzadoCuerpo}>
+              <Operacion gastos={b.operacion} onCambio={g => cambiar({ operacion: g })} />
             </div>
           </details>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
             <div className={s.fila}><span>Mano de obra</span><span>{formatCLP(t.subtotalLineas)}</span></div>
             {b.urgencia && <div className={s.fila}><span>Recargo urgencia</span><span>{formatCLP(t.recargoUrgencia)}</span></div>}
-            {t.materialesVenta > 0 && <div className={s.fila}><span>Materiales (+{pctCL(b.margen)})</span><span>{formatCLP(t.materialesVenta)}</span></div>}
-            {t.trasladoCLP > 0 && <div className={s.fila}><span>Traslado ({formatoUF(b.traslado)})</span><span>{formatCLP(t.trasladoCLP)}</span></div>}
+            {t.materialesVenta > 0 && <div className={s.fila}><span>Materiales{t.utilidadMateriales !== null ? ` (utilidad ${pctCL(t.utilidadMateriales)})` : ''}</span><span>{formatCLP(t.materialesVenta)}</span></div>}
+            {t.operacion > 0 && <div className={s.fila}><span>Operación</span><span>{formatCLP(t.operacion)}</span></div>}
+            {t.gestion > 0 && <div className={s.fila}><span>Gestión de proyecto ({pctCL(b.gestion)})</span><span>{formatCLP(t.gestion)}</span></div>}
           </div>
           <div className={s.neto}>
             <span className="label-muted">Neto (sin IVA)</span>
@@ -302,6 +342,12 @@ export default function Calculadora({ cat, dia: diaHoy, configura, miId }: Props
             </button>
             <button className="btn btn-ghost btn-sm" onClick={exportar}><Download size={13} /> Excel</button>
           </div>
+          {puedeCotizar && (
+            <button className="btn btn-ghost" disabled={!listo || guardando} onClick={pasarAlCotizador}
+              title={listo ? 'Arma la cotización en borrador con estos trabajos' : 'Agrega trabajos completos primero'}>
+              <ArrowRight size={14} /> Pasar al cotizador
+            </button>
+          )}
         </aside>
       </div>
 

@@ -42,6 +42,8 @@ CREATE TABLE IF NOT EXISTS public.hh_parametros (
   updated_at            TIMESTAMPTZ   NOT NULL DEFAULT NOW(),
   updated_by            UUID REFERENCES public.profiles(id) ON DELETE SET NULL
 );
+ALTER TABLE public.hh_parametros ADD COLUMN IF NOT EXISTS gestion_proyecto NUMERIC(5,3) NOT NULL DEFAULT 0.10
+  CHECK (gestion_proyecto >= 0 AND gestion_proyecto <= 0.5);   -- gestión de proyecto y coordinación (0,10 = 10 %)
 INSERT INTO public.hh_parametros (id) VALUES (1) ON CONFLICT (id) DO NOTHING;
 
 CREATE OR REPLACE FUNCTION public.hh_parametros_cambio()
@@ -266,6 +268,13 @@ CREATE TABLE IF NOT EXISTS public.hh_calculos (
   created_at        TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at        TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
+-- Materiales: margen_materiales es la utilidad sobre el precio (como el cotizador); si se fija el
+-- precio de venta, va en materiales_venta_clp y la utilidad real sale de él. La operación (traslado,
+-- peajes, estacionamiento…) va como lista de gastos que se cobran tal cual; traslado_uf queda solo
+-- para los cálculos de antes. gestion_pct: gestión de proyecto (0 = no se suma).
+ALTER TABLE public.hh_calculos ADD COLUMN IF NOT EXISTS materiales_venta_clp NUMERIC(14,0) CHECK (materiales_venta_clp >= 0);
+ALTER TABLE public.hh_calculos ADD COLUMN IF NOT EXISTS operacion JSONB NOT NULL DEFAULT '[]'::JSONB;
+ALTER TABLE public.hh_calculos ADD COLUMN IF NOT EXISTS gestion_pct NUMERIC(5,3) NOT NULL DEFAULT 0 CHECK (gestion_pct >= 0 AND gestion_pct <= 0.5);
 CREATE INDEX IF NOT EXISTS idx_hh_calculos_fecha ON public.hh_calculos(created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_hh_calculos_autor ON public.hh_calculos(created_by);
 
@@ -318,11 +327,12 @@ BEGIN
   IF v_id IS NULL THEN
     INSERT INTO public.hh_calculos (nombre, cliente_texto, notas, fecha, uf_usada, usd_usada, uf_fecha, uf_fuente,
       usd_fecha, usd_fuente, parametros, urgencia, traslado_uf, materiales_clp, margen_materiales, validez_dias,
-      neto_clp, neto_uf, iva_clp, total_clp, created_by)
+      neto_clp, neto_uf, iva_clp, total_clp, materiales_venta_clp, operacion, gestion_pct, created_by)
     VALUES (c.nombre, c.cliente_texto, c.notas, COALESCE(c.fecha, CURRENT_DATE), c.uf_usada, c.usd_usada, c.uf_fecha, c.uf_fuente,
       c.usd_fecha, c.usd_fuente, COALESCE(c.parametros, '{}'::JSONB), COALESCE(c.urgencia, FALSE), COALESCE(c.traslado_uf, 0),
       COALESCE(c.materiales_clp, 0), COALESCE(c.margen_materiales, 0), COALESCE(c.validez_dias, 15),
-      COALESCE(c.neto_clp, 0), COALESCE(c.neto_uf, 0), COALESCE(c.iva_clp, 0), COALESCE(c.total_clp, 0), auth.uid())
+      COALESCE(c.neto_clp, 0), COALESCE(c.neto_uf, 0), COALESCE(c.iva_clp, 0), COALESCE(c.total_clp, 0),
+      c.materiales_venta_clp, COALESCE(c.operacion, '[]'::JSONB), COALESCE(c.gestion_pct, 0), auth.uid())
     RETURNING id INTO v_id;
   ELSE
     UPDATE public.hh_calculos SET nombre = c.nombre, cliente_texto = c.cliente_texto, notas = c.notas,
@@ -332,7 +342,8 @@ BEGIN
       traslado_uf = COALESCE(c.traslado_uf, 0), materiales_clp = COALESCE(c.materiales_clp, 0),
       margen_materiales = COALESCE(c.margen_materiales, 0), validez_dias = COALESCE(c.validez_dias, 15),
       neto_clp = COALESCE(c.neto_clp, 0), neto_uf = COALESCE(c.neto_uf, 0), iva_clp = COALESCE(c.iva_clp, 0),
-      total_clp = COALESCE(c.total_clp, 0), updated_at = NOW()
+      total_clp = COALESCE(c.total_clp, 0), materiales_venta_clp = c.materiales_venta_clp,
+      operacion = COALESCE(c.operacion, '[]'::JSONB), gestion_pct = COALESCE(c.gestion_pct, 0), updated_at = NOW()
     WHERE id = v_id;
     IF NOT FOUND THEN
       RAISE EXCEPTION 'No puedes cambiar ese cálculo: es de otra persona (puedes duplicarlo).' USING ERRCODE = '42501';
@@ -499,6 +510,9 @@ CREATE POLICY hh_lineas_escribir ON public.hh_calculo_lineas FOR ALL TO authenti
 
 -- ─── 10. Semillas (del Excel «InnVolt – Tarifas HH») ─────────────────────────
 -- ON CONFLICT DO NOTHING: volver a correr el archivo no pisa lo cambiado desde la pantalla.
+-- Las pantallas no son de InnVolt: el técnico de integración queda solo para domótica.
+UPDATE public.hh_cargos SET nombre = 'Técnico integración (domótica)'
+ WHERE nombre = 'Técnico integración (domótica / pantallas)' AND NOT EXISTS (SELECT 1 FROM public.hh_cargos WHERE nombre = 'Técnico integración (domótica)');
 INSERT INTO public.hh_cargos (orden, nombre, moneda_base, tarifa_base, mercado_min, mercado_max, sueldo_mercado_clp, notas) VALUES
   (1,  'Ayudante eléctrico', 'UF', 0.3, 0.1, 0.3, 650000, 'Va siempre junto a un maestro; no se cobra solo.'),
   (2,  'Maestro electricista', 'UF', 0.5, 0.3, 1.0, 800000, 'Para trabajos de varios días. En visitas cortas cobra como mínimo una «primera hora» de ~1 UF (precio medio en Chile ~$40.000/h según Cronoshare).'),
@@ -506,7 +520,7 @@ INSERT INTO public.hh_cargos (orden, nombre, moneda_base, tarifa_base, mercado_m
   (4,  'Técnico instalador solar FV', 'UF', 0.5, 0.44, 0.97, 1000000, 'Trabajo en altura y especializado.'),
   (5,  'Técnico CCTV / control de acceso', 'UF', 0.5, 0.36, 0.85, 850000, 'La configuración (NVR, app, usuarios) se cobra aparte del montaje.'),
   (6,  'Técnico redes y cableado estructurado', 'UF', 0.5, 0.36, 0.85, 850000, 'Mejor cotizar por punto de red que por hora.'),
-  (7,  'Técnico integración (domótica / pantallas)', 'UF', 0.5, 0.44, 0.97, 850000, 'Combina electricidad + configuración de software.'),
+  (7,  'Técnico integración (domótica)', 'UF', 0.5, 0.44, 0.97, 850000, 'Combina electricidad + configuración de software.'),
   (8,  'Desarrollador full stack', 'USD', 35.0, 27.0, 48.0, 2000000, 'Mediana senior US$35/h; nivel medio US$27/h; senior fuerte US$48/h (lemon.io, Q3 2026).'),
   (9,  'Integración de sistemas / arquitectura', 'USD', 45.0, 35.0, 60.0, 2500000, 'APIs de terceros + hardware + software (ej. VSX). Lo más especializado que haces. Rango estimado sobre la base de lemon.io.'),
   (10, 'Diseño UI / UX (dashboards, web)', 'USD', 30.0, 20.0, 45.0, 1600000, 'Rango estimado.'),
@@ -557,10 +571,8 @@ FROM (VALUES
   (26, 'Redes', 'Rack / gabinete + patch panel + ordenamiento', 'rack', 6.0, 'Técnico redes y cableado estructurado', '', 0.0, 'terreno', '', '1 técnico', ''),
   (27, 'Redes', 'Access point WiFi instalado y configurado', 'unidad', 1.5, 'Técnico redes y cableado estructurado', '', 0.0, 'terreno', '', '1 técnico', ''),
   (28, 'Redes', 'Configuración router / switch / VLAN pyme', 'servicio', 4.0, 'Técnico redes y cableado estructurado', '', 0.0, 'terreno', '', '1 técnico', ''),
-  (29, 'Domótica', 'Interruptor / enchufe inteligente', 'unidad', 0.75, 'Técnico integración (domótica / pantallas)', '', 0.0, 'terreno', '', '1 técnico', ''),
-  (30, 'Domótica', 'Configuración app, escenas y automatizaciones', 'casa', 4.0, 'Técnico integración (domótica / pantallas)', '', 0.0, 'terreno', '', '1 técnico', ''),
-  (31, 'Pantallas LED', 'Montaje pantalla LED / TV comercial', 'unidad', 4.0, 'Técnico integración (domótica / pantallas)', '', 0.0, 'terreno', '', '2 personas', ''),
-  (32, 'Pantallas LED', 'Configuración software de contenidos', 'pantalla', 3.0, 'Integración de sistemas / arquitectura', '', 0.0, 'integracion', '', 'Remoto', ''),
+  (29, 'Domótica', 'Interruptor / enchufe inteligente', 'unidad', 0.75, 'Técnico integración (domótica)', '', 0.0, 'terreno', '', '1 técnico', ''),
+  (30, 'Domótica', 'Configuración app, escenas y automatizaciones', 'casa', 4.0, 'Técnico integración (domótica)', '', 0.0, 'terreno', '', '1 técnico', ''),
   (33, 'Software', 'Landing page (1 página)', 'proyecto', 25.0, 'Desarrollador full stack', '', 0.0, 'interfaz', '', '1–2 semanas', 'Horas equivalentes sin IA.'),
   (34, 'Software', 'Sitio corporativo 5–7 páginas', 'proyecto', 60.0, 'Desarrollador full stack', '', 0.0, 'interfaz', '', '3–4 semanas', 'Horas equivalentes sin IA.'),
   (35, 'Software', 'Diseño UI de dashboard', 'proyecto', 30.0, 'Diseño UI / UX (dashboards, web)', '', 0.0, 'interfaz', '', '1–2 semanas', ''),
@@ -568,12 +580,17 @@ FROM (VALUES
   (37, 'Software', 'Integración con API externa', 'integración', 40.0, 'Integración de sistemas / arquitectura', '', 0.0, 'integracion', '', '2–3 semanas', 'Depende de qué tan bien documentada esté la API.'),
   (38, 'Software', 'App web a medida (MVP)', 'proyecto', 220.0, 'Desarrollador full stack', '', 0.0, 'logica', '', '2–4 meses', 'Horas equivalentes sin IA.'),
   (39, 'Software', 'Soporte y mantención mensual', 'mes', 8.0, 'Desarrollador full stack', '', 0.0, 'logica', '', 'Mensual', 'Ingreso recurrente: cóbralo como plan mensual en UF.'),
-  (40, 'Gestión', 'Levantamiento técnico + cotización compleja', 'proyecto', 4.0, 'Gestión de proyecto / administración', 'Ayudante eléctrico', 4.0, 'coordinacion', '', '1 persona', 'En proyectos grandes, cóbralo o inclúyelo explícitamente en la propuesta.'),
-  (41, 'Software', 'Integración audio pantallas', 'proyecto', 4.0, 'Técnico integración (domótica / pantallas)', '', 0.0, 'integracion', '', '', '')
+  (40, 'Gestión', 'Levantamiento técnico + cotización compleja', 'proyecto', 4.0, 'Gestión de proyecto / administración', 'Ayudante eléctrico', 4.0, 'coordinacion', '', '1 persona', 'En proyectos grandes, cóbralo o inclúyelo explícitamente en la propuesta.')
 ) AS v(orden, categoria, nombre, unidad, hh, principal, apoyo, hh_apoyo, tipo, ref, dur, nota)
 JOIN public.hh_cargos p ON p.nombre = v.principal
 LEFT JOIN public.hh_cargos a ON a.nombre = NULLIF(v.apoyo, '')
 ON CONFLICT (categoria, nombre) DO NOTHING;
+-- Las pantallas LED no son trabajo de InnVolt: fuera las que traía la primera versión (los cálculos
+-- guardados que las usaban no cambian: guardan su foto).
+DELETE FROM public.hh_trabajos_tipo
+ WHERE (categoria, nombre) IN (('Pantallas LED', 'Montaje pantalla LED / TV comercial'),
+                               ('Pantallas LED', 'Configuración software de contenidos'),
+                               ('Software', 'Integración audio pantallas'));
 
 -- César y Joaquín, sin cargos: se asignan (y se vinculan a su usuario) desde «Equipo».
 INSERT INTO public.hh_personas (nombre) VALUES ('César'), ('Joaquín') ON CONFLICT (nombre) DO NOTHING;

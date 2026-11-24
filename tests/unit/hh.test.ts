@@ -4,9 +4,11 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  PARAMETROS_INICIALES, calcularLinea, calcularTotales, entregablesCliente, enUF, estadoTarifa, formatoUF, pisoCLP,
-  posicionMercado, redondear, repartirResiduo, tarifaEfectiva, tarifaHoyCLP, type CargoHH,
+  PARAMETROS_INICIALES, calcularLinea, calcularTotales, costoHoraCLP, entregablesCliente, enUF, estadoTarifa, formatoUF, pisoCLP,
+  posicionMercado, precioConUtilidad, redondear, repartirResiduo, tarifaEfectiva, tarifaHoyCLP, utilidadDe, type CargoHH,
 } from '../../lib/hh/calculo.ts';
+import { cotizacionDesdeCalculo } from '../../lib/hh/aCotizacion.ts';
+import { calcularLinea as calcularLineaCot } from '../../lib/cotizador/calculo.ts';
 import { elegirIndicadores, hoyEnChile, valorMindicador, valorSano } from '../../lib/hh/indicadores.ts';
 import { faltaEnLinea, filaLinea, hojasCalculo, lineaDesdeFila, lineaVacia, tarifasDeLinea, totalesDe, type LineaHH } from '../../lib/hh/lineas.ts';
 import { ayudasCatalogo, conPersona, conTrabajo, iniciales } from '../../components/hh/catalogo.ts';
@@ -80,44 +82,78 @@ test('Línea: el multiplicador va en las horas cobradas, el apoyo no (es terreno
   assert.equal(calcularLinea({ ...base, horas_reales: null, tarifa_apoyo_clp: null }).subtotal, 0);
 });
 
-test('Totales: urgencia sobre la mano de obra, materiales con margen, traslado en UF y el neto redondeado', () => {
+test('Totales: urgencia, materiales con la utilidad del cotizador, operación, gestión de proyecto y el neto redondeado', () => {
   const lineas = [
     { cantidad: 8, horas_reales: 1.25, multiplicador: 1, tarifa_clp: 20700, horas_apoyo: 1.25, tarifa_apoyo_clp: 12400 },
     { cantidad: 1, horas_reales: 8.5, multiplicador: 3, tarifa_clp: 33300, hh_referencia: 25 },   // landing page con IA
   ];
-  const cab = { lineas, urgencia: true, materiales_clp: 100000, margen_materiales: 0.2, traslado_uf: 1 };
+  const cab = { lineas, urgencia: true, materiales_clp: 100000, margen_materiales: 0.25, operacion: [{ descripcion: 'Traslado', monto: 41350 }], gestion_pct: 0.1 };
   const t = calcularTotales(cab, IND, P);
   assert.equal(t.lineas[1].diferenciaReferencia, 849150 - 832500);
   assert.equal(t.subtotalLineas, 1180150);
   assert.equal(t.manoObra, 1770225);                            // × 1,5 por urgencia
   assert.equal(t.recargoUrgencia, 590075);
-  assert.equal(t.materialesVenta, 120000);
-  assert.equal(t.trasladoCLP, 41350);
-  assert.equal(t.neto, 1932000);                                // 1.931.575 → 1.932.000
-  assert.equal(t.netoUF, 46.72);
-  assert.equal(t.iva, 367080);
-  assert.equal(t.total, 2299080);
+  assert.equal(t.materialesVenta, 133333);                      // 100.000 ÷ (1 − 25 %), como el cotizador
+  assert.equal(Math.round(t.utilidadMateriales! * 100), 25);
+  assert.equal(t.operacion, 41350);
+  assert.equal(t.gestion, 190356);                              // 10 % de (mano de obra + materiales)
+  assert.equal(t.neto, 2135000);                                // 2.135.264 → 2.135.000
+  assert.equal(t.netoUF, 51.63);
+  assert.equal(t.iva, 405650);
+  assert.equal(t.total, 2540650);
   assert.equal(t.horasReales, 28.5);                            // 10 + 10 de apoyo + 8,5
   assert.equal(t.valorHoraReal, 62113);
-  const sinUrgencia = calcularTotales({ ...cab, urgencia: false }, IND, P);
-  assert.equal(sinUrgencia.manoObra, 1180150);
-  assert.equal(sinUrgencia.neto, 1342000);
-  assert.equal(calcularTotales({ lineas: [], urgencia: false, materiales_clp: 0, margen_materiales: 0, traslado_uf: 0 }, IND, P).valorHoraReal, null);
+  const simple = calcularTotales({ ...cab, urgencia: false, gestion_pct: 0 }, IND, P);
+  assert.deepEqual([simple.manoObra, simple.gestion, simple.neto], [1180150, 0, 1355000]);
+  // Con el precio de los materiales fijo, si salen más caros la utilidad real baja.
+  const fijo = calcularTotales({ ...cab, materiales_clp: 110000, materiales_venta_clp: 125000 }, IND, P);
+  assert.deepEqual([fijo.materialesVenta, fijo.utilidadMateriales], [125000, 0.12]);
+  assert.equal(precioConUtilidad(60000, 0.3), 85714);
+  assert.equal(utilidadDe(100000, 125000), 0.2);
+  assert.equal(calcularTotales({ lineas: [], urgencia: false, materiales_clp: 0, margen_materiales: 0.25, operacion: [], gestion_pct: 0 }, IND, P).valorHoraReal, null);
+  assert.equal(costoHoraCLP(1200000, P), 11571);                // 1.200.000 × 1,35 ÷ 140
 });
 
-test('Lo que ve el cliente: entregables con su precio (con urgencia) que suman exacto el neto', () => {
+test('Lo que ve el cliente: entregables con su precio (con urgencia), materiales, operación y gestión que suman exacto el neto', () => {
   const lineas = [
     { cantidad: 8, horas_reales: 1.25, multiplicador: 1, tarifa_clp: 20700, horas_apoyo: 1.25, tarifa_apoyo_clp: 12400 },
     { cantidad: 1, horas_reales: 8.5, multiplicador: 3, tarifa_clp: 33300 },
   ];
-  const t = calcularTotales({ lineas, urgencia: true, materiales_clp: 100000, margen_materiales: 0.2, traslado_uf: 1 }, IND, P);
-  const e = entregablesCliente([{ descripcion: 'Puntos de red', cantidad: 8, unidad: 'punto' }, { descripcion: 'Landing page', cantidad: 1 }], t, IND);
-  assert.deepEqual(e.map(x => x.descripcion), ['Puntos de red', 'Landing page', 'Materiales', 'Traslado']);
-  assert.deepEqual(e.map(x => x.clp), [496500, 1274150, 120000, 41350]);   // los $425 del redondeo, al más grande
+  const operacion = [{ descripcion: 'Traslado', monto: 41350 }, { descripcion: 'Peajes', monto: 6000 }];
+  const t = calcularTotales({ lineas, urgencia: true, materiales_clp: 100000, margen_materiales: 0.25, operacion, gestion_pct: 0.1 }, IND, P);
+  const e = entregablesCliente([{ descripcion: 'Puntos de red', cantidad: 8, unidad: 'punto' }, { descripcion: 'Landing page', cantidad: 1 }], t, IND, operacion);
+  assert.deepEqual(e.map(x => x.descripcion), ['Puntos de red', 'Landing page', 'Materiales', 'Traslado', 'Peajes', 'Gestión de proyecto y coordinación']);
+  assert.deepEqual(e.map(x => x.clp), [496500, 1273461, 133333, 41350, 6000, 190356]);   // los −$264 del redondeo, al más grande
   assert.equal(e.reduce((s, x) => s + x.clp, 0), t.neto);
   assert.equal(Math.round(e.reduce((s, x) => s + x.uf, 0) * 100), Math.round(t.netoUF * 100));
   assert.deepEqual(repartirResiduo([10, 20, 30], 61), [10, 20, 31]);
   assert.deepEqual(repartirResiduo([100, 300], 0), [0, 0]);              // nunca bajo 0
+});
+
+test('Del anteproyecto al cotizador: cada trabajo con su costo real y su precio exacto; materiales, operación y gestión', () => {
+  const sueldo: Record<string, number> = { sec: 1200000, ay: 650000 };
+  const base = {
+    nombre: 'Tablero local', fecha: '2026-11-23', urgencia: false, parametros: P, materiales_costo: 100000, materiales_venta: 133333,
+    operacion: [{ descripcion: 'Traslado', monto: 25000 }, { descripcion: 'Vacío', monto: 0 }], gestion_pct: 0.1, gestion_monto: 43893,
+    lineas: [{ descripcion: 'Cambio de tablero', unidad: 'tablero', cantidad: 1, horas_reales: 8, horas_apoyo: 6, cargo_id: 'sec', cargo_apoyo_id: 'ay', subtotal: 305600 }],
+  };
+  const c = cotizacionDesdeCalculo(base, id => sueldo[id] ?? null);
+  assert.equal(c.titulo, 'Tablero local');
+  assert.match(c.descripcion_general, /anteproyecto «Tablero local» \(Calculadora HH, 23-11-2026\)/);
+  assert.deepEqual(c.partidas.map(x => [x.nombre, x.tipo]), [['Tablero local', 'instalacion'], ['Cargos operacionales', 'cargo']]);
+  const [obra, mat, traslado, gestion] = c.items;
+  // Costo real: 8 h × $11.571 + 6 h de ayudante × $6.268 = $130.176; el cotizador da el mismo precio del cálculo.
+  assert.deepEqual([obra.categoria, obra.costo, calcularLineaCot(obra, 'CLP').precio], ['mano_obra', 130176, 305600]);
+  assert.equal(Math.round(calcularLineaCot(obra, 'CLP').margenReal!), 57);
+  assert.deepEqual([mat.categoria, mat.costo, calcularLineaCot(mat, 'CLP').precio], ['material', 100000, 133333]);
+  assert.deepEqual([traslado.categoria, traslado.costo, traslado.ganancia, calcularLineaCot(traslado, 'CLP').precio], ['operacion', 25000, 0, 25000]);
+  assert.deepEqual([gestion.descripcion, gestion.cargo], ['Gestión de proyecto y coordinación', { pct: 10, base: 'total' }]);
+  assert.equal(c.items.length, 4);                                // el gasto en $0 no entra
+  assert.ok(c.items.every(l => l.partidaId === (l.categoria === 'operacion' ? c.partidas[1].id : c.partidas[0].id)));
+  // Con urgencia el precio sube; sin sueldo de mercado, entra a precio fijo (costo = precio).
+  const urgente = cotizacionDesdeCalculo({ ...base, urgencia: true, operacion: [], gestion_pct: 0 }, () => null);
+  assert.equal(urgente.partidas.length, 1);
+  assert.deepEqual([urgente.items[0].costo, calcularLineaCot(urgente.items[0], 'CLP').precio], [458400, 458400]);
 });
 
 test('La UF del día: mindicador, lo guardado hoy (manda), el último guardado o el respaldo si se cae', () => {
@@ -158,7 +194,7 @@ test('Una línea guardada vuelve igual (con la foto de la tarifa) y el Excel tra
     cargo_apoyo_tarifa_base: 0.3, horas_apoyo: 6, hh_referencia: 8, trabajo_tipo_id: 't1',
   };
   assert.deepEqual(tarifasDeLinea(l, IND, P), { principal: 24800, apoyo: 12400 });
-  const cab = { urgencia: false, materiales_clp: 0, margen_materiales: 0, traslado_uf: 0 };
+  const cab = { urgencia: false, materiales_clp: 0, margen_materiales: 0.25, operacion: [], gestion_pct: 0 };
   const t = totalesDe([l], cab, IND, P);
   assert.equal(t.lineas[0].subtotal, 8 * 24800 + 6 * 12400);
   const fila = filaLinea(l, t.lineas[0], IND, P, 0);
@@ -210,7 +246,7 @@ test('Un trabajo tipo trae las horas de mercado ya listas: en terreno las mismas
   assert.equal(punto.descripcion, 'Punto de red Cat6');
   const landing = conTrabajo(lineaVacia(), 'landing', ay);
   assert.deepEqual([landing.horas_reales, landing.multiplicador], [8.333333, 3]);
-  assert.equal(totalesDe([landing], { urgencia: false, materiales_clp: 0, margen_materiales: 0, traslado_uf: 0 }, IND, P).lineas[0].horasCobradas, 25);   // se cobran las 25 de mercado, exactas
+  assert.equal(totalesDe([landing], { urgencia: false, materiales_clp: 0, margen_materiales: 0.25, operacion: [], gestion_pct: 0 }, IND, P).lineas[0].horasCobradas, 25);   // se cobran las 25 de mercado, exactas
   // El tablero lo hace quien tiene el cargo (Joaquín, el usuario conectado, primero).
   const tablero = conTrabajo(lineaVacia(), 'tablero', ay);
   assert.deepEqual([tablero.persona_id, tablero.cargo_id, tablero.horas_reales, tablero.horas_apoyo], ['joaquin', 'sec', 8, 6]);

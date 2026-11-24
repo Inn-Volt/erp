@@ -17,7 +17,7 @@ import { Campo, Interruptor, fechaCL, type PropsPestana } from './comun';
 import s from './hh.module.css';
 
 /** Los que se editan como porcentaje (0,25 ↔ 25 %). */
-const PORCENTAJES: (keyof Parametros)[] = ['gastos_generales', 'utilidad_minima', 'recargo_urgencia', 'iva'];
+const PORCENTAJES: (keyof Parametros)[] = ['gastos_generales', 'utilidad_minima', 'recargo_urgencia', 'iva', 'gestion_proyecto'];
 const CAMPOS: [keyof Parametros, string, string?][] = [
   ['horas_facturables_mes', 'Horas facturables al mes', 'Las que de verdad se cobran en un mes'],
   ['factor_costo_empresa', 'Factor costo empresa', 'Leyes sociales, seguros, EPP (1,35 = +35 %)'],
@@ -25,6 +25,7 @@ const CAMPOS: [keyof Parametros, string, string?][] = [
   ['utilidad_minima', 'Utilidad mínima'],
   ['recargo_urgencia', 'Recargo por urgencia', 'Urgencia o fin de semana'],
   ['iva', 'IVA'],
+  ['gestion_proyecto', 'Gestión de proyecto', 'Lo que se suma por coordinación y trámites (10 a 15 %)'],
   ['uf_respaldo', 'UF de respaldo', 'Si mindicador no responde y no hay nada guardado'],
   ['usd_respaldo', 'Dólar de respaldo'],
   ['redondeo_tarifa', 'Redondear tarifas a', 'Ej.: 100 → $28.945 queda en $28.900'],

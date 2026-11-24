@@ -11,8 +11,12 @@
  *   Línea                 = horas cobradas × tarifa + cantidad × horas de apoyo × tarifa del apoyo
  *                           horas cobradas = cantidad × horas reales × multiplicador (el apoyo no
  *                           lleva multiplicador: es terreno)
- *   Neto                  = redondear(mano de obra (× urgencia) + materiales × (1 + margen)
- *                                     + traslado en UF × UF, redondeo_total)
+ *   Materiales (venta)    = costo ÷ (1 − utilidad): la misma utilidad que el cotizador (sobre lo que
+ *                           paga el cliente). Si se fija el precio de venta, la utilidad real sale de
+ *                           él: si el material sale más caro, la utilidad baja y se ve.
+ *   Gestión de proyecto   = % sobre la mano de obra y los materiales (no sobre la operación)
+ *   Neto                  = redondear(mano de obra (× urgencia) + materiales + operación + gestión,
+ *                                     redondeo_total)
  */
 
 export type MonedaHH = 'UF' | 'USD';
@@ -29,13 +33,17 @@ export interface ParametrosHH {
   redondeo_tarifa: number;
   redondeo_total: number;
   validez_dias: number;           // validez de la cotización para el cliente
+  gestion_proyecto: number;       // gestión de proyecto y coordinación por omisión (0,10 = 10 %)
 }
 
 export const PARAMETROS_INICIALES: ParametrosHH = {
   horas_facturables_mes: 140, factor_costo_empresa: 1.35, gastos_generales: 0.25, utilidad_minima: 0.3,
   recargo_urgencia: 0.5, iva: 0.19, uf_respaldo: 41350.42, usd_respaldo: 1000, redondeo_tarifa: 100,
-  redondeo_total: 1000, validez_dias: 15,
+  redondeo_total: 1000, validez_dias: 15, gestion_proyecto: 0.1,
 };
+
+/** La utilidad de los materiales si no se puede leer la del cotizador (la de siempre: 25 %). */
+export const UTILIDAD_MATERIALES_POR_OMISION = 0.25;
 
 export interface Indicadores { uf: number; usd: number }
 
@@ -166,12 +174,21 @@ export function calcularLinea(l: LineaCalculo): ResultadoLinea {
   };
 }
 
+/** Un gasto de operación (traslado, peajes, estacionamiento…): se cobra tal cual. */
+export interface GastoOperacion { descripcion: string; monto: number }
+
 export interface EntradaTotales {
   lineas: LineaCalculo[];
   urgencia: boolean;
+  /** Costo neto de los materiales. */
   materiales_clp: number;
+  /** Utilidad de los materiales (fracción, sobre el precio): 0,25 = 25 %. */
   margen_materiales: number;
-  traslado_uf: number;
+  /** Precio de venta fijado a mano (vacío = sale del costo y la utilidad). */
+  materiales_venta_clp?: number | null;
+  operacion: GastoOperacion[];
+  /** Gestión de proyecto (fracción); 0 = no se suma. */
+  gestion_pct: number;
 }
 
 export interface Totales {
@@ -180,7 +197,10 @@ export interface Totales {
   recargoUrgencia: number;
   manoObra: number;
   materialesVenta: number;
-  trasladoCLP: number;
+  /** Lo que de verdad queda de los materiales, sobre su precio (null = sin materiales). */
+  utilidadMateriales: number | null;
+  operacion: number;
+  gestion: number;
   neto: number;
   netoUF: number;
   iva: number;
@@ -191,20 +211,36 @@ export interface Totales {
   valorHoraReal: number | null;
 }
 
+/** Precio de venta con una utilidad sobre el precio (como el cotizador): 100.000 con 25 % → 133.333. */
+export const precioConUtilidad = (costo: number, utilidad: number) =>
+  Math.round(Math.max(0, n(costo)) / (1 - Math.min(Math.max(n(utilidad), 0), 0.95)));
+/** La utilidad que deja un precio (fracción, sobre el precio). */
+export const utilidadDe = (costo: number, venta: number) => (n(venta) > 0 ? (n(venta) - n(costo)) / n(venta) : 0);
+
 export function calcularTotales(e: EntradaTotales, ind: Indicadores, p: ParametrosHH): Totales {
   const lineas = e.lineas.map(calcularLinea);
   const subtotalLineas = lineas.reduce((t, l) => t + l.subtotal, 0);
   const manoObra = Math.round(subtotalLineas * (e.urgencia ? 1 + n(p.recargo_urgencia) : 1));
-  const materialesVenta = Math.round(Math.max(0, n(e.materiales_clp)) * (1 + Math.max(0, n(e.margen_materiales))));
-  const trasladoCLP = Math.round(Math.max(0, n(e.traslado_uf)) * n(ind.uf));
-  const neto = redondear(manoObra + materialesVenta + trasladoCLP, p.redondeo_total);
+  const costoMat = Math.max(0, n(e.materiales_clp));
+  const ventaFija = e.materiales_venta_clp !== null && e.materiales_venta_clp !== undefined && n(e.materiales_venta_clp) > 0;
+  const materialesVenta = ventaFija ? Math.round(n(e.materiales_venta_clp)) : precioConUtilidad(costoMat, e.margen_materiales);
+  const operacion = Math.round(e.operacion.reduce((t, g) => t + Math.max(0, n(g.monto)), 0));
+  const gestion = Math.round((manoObra + materialesVenta) * Math.max(0, n(e.gestion_pct)));
+  const neto = redondear(manoObra + materialesVenta + operacion + gestion, p.redondeo_total);
   const iva = Math.round(neto * n(p.iva));
   const horasReales = dec2(lineas.reduce((t, l) => t + l.horasReales + l.horasApoyo, 0));
   return {
-    lineas, subtotalLineas, recargoUrgencia: manoObra - subtotalLineas, manoObra, materialesVenta, trasladoCLP,
-    neto, netoUF: enUF(neto, ind.uf), iva, total: neto + iva, horasReales,
+    lineas, subtotalLineas, recargoUrgencia: manoObra - subtotalLineas, manoObra, materialesVenta,
+    utilidadMateriales: materialesVenta > 0 || costoMat > 0 ? utilidadDe(costoMat, materialesVenta) : null,
+    operacion, gestion, neto, netoUF: enUF(neto, ind.uf), iva, total: neto + iva, horasReales,
     valorHoraReal: horasReales > 0 ? Math.round(manoObra / horasReales) : null,
   };
+}
+
+/** Lo que cuesta de verdad una hora del cargo (sueldo de mercado × costo empresa ÷ horas facturables). */
+export function costoHoraCLP(sueldoMercado: number | null | undefined, p: Pick<ParametrosHH, 'factor_costo_empresa' | 'horas_facturables_mes'>): number | null {
+  const s_ = n(sueldoMercado);
+  return s_ > 0 && n(p.horas_facturables_mes) > 0 ? Math.round(s_ * n(p.factor_costo_empresa) / n(p.horas_facturables_mes)) : null;
 }
 
 // ─── Lo que ve el cliente ────────────────────────────────────────────────────
@@ -230,18 +266,19 @@ export interface Entregable { descripcion: string; cantidad: number; unidad: str
 
 /**
  * Las líneas como entregables para el cliente: cada una con su precio (ya con el recargo de
- * urgencia), más los materiales y el traslado si los hay. Sin horas, multiplicadores ni personas.
- * Los precios suman exacto el neto (en pesos y en UF).
+ * urgencia), más los materiales, cada gasto de operación y la gestión de proyecto. Sin horas,
+ * multiplicadores ni personas. Los precios suman exacto el neto (en pesos y en UF).
  */
 export function entregablesCliente(
-  lineas: { descripcion: string; cantidad: number; unidad?: string | null }[], t: Totales, ind: Indicadores,
+  lineas: { descripcion: string; cantidad: number; unidad?: string | null }[], t: Totales, ind: Indicadores, operacion: GastoOperacion[] = [],
 ): Entregable[] {
   const factor = t.subtotalLineas > 0 ? t.manoObra / t.subtotalLineas : 0;
   const items: { descripcion: string; cantidad: number; unidad: string | null; clp: number }[] = lineas.map((l, i) => ({
     descripcion: l.descripcion, cantidad: n(l.cantidad), unidad: l.unidad || null, clp: (t.lineas[i]?.subtotal || 0) * factor,
   }));
   if (t.materialesVenta > 0) items.push({ descripcion: 'Materiales', cantidad: 1, unidad: 'gl', clp: t.materialesVenta });
-  if (t.trasladoCLP > 0) items.push({ descripcion: 'Traslado', cantidad: 1, unidad: 'gl', clp: t.trasladoCLP });
+  for (const g of operacion) if (n(g.monto) > 0) items.push({ descripcion: g.descripcion.trim() || 'Gasto operacional', cantidad: 1, unidad: 'gl', clp: Math.round(n(g.monto)) });
+  if (t.gestion > 0) items.push({ descripcion: 'Gestión de proyecto y coordinación', cantidad: 1, unidad: 'gl', clp: t.gestion });
   const clp = repartirResiduo(items.map(x => x.clp), t.neto);
   const centavosUF = repartirResiduo(clp.map(v => (n(ind.uf) > 0 ? (v / n(ind.uf)) * 100 : 0)), Math.round(t.netoUF * 100));
   return items.map((x, i) => ({ ...x, clp: clp[i], uf: centavosUF[i] / 100 }));

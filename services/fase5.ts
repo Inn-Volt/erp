@@ -2,7 +2,7 @@
 
 /**
  * Fase 5 (TecApp): visitas y bitácora de la OT, plantillas de informe, anticipos,
- * pedidos de material, catastro, avances de tareas, proyectos, personas y traslados.
+ * pedidos de material, catastro, avances de tareas, proyectos y personas.
  * Tablas en supabase_fase5_tecapp_operacion.sql.
  */
 
@@ -216,40 +216,4 @@ export const personasService = {
     const { error } = await supabase.from('profiles').update(patch).eq('id', id);
     lanzar(error);
   },
-};
-
-// ── Traslados ──
-export interface BaseSalida { id: string; nombre: string; comuna: string | null; zona_km: number; casa_matriz: boolean; activo: boolean }
-export interface Traslado { id: string; comuna: string; region: string | null; base_id: string; km: number; valor_propio: number | null; activo: boolean }
-export interface Tarifa { valor_por_km: number; tipo_recargo: 'porcentaje' | 'monto'; recargo_otra_base: number }
-export interface CotizacionTraslado {
-  comuna: string; base_habitual: string; sale_desde: string; desde_otra_base: boolean; km: number; dentro_de_la_zona: boolean;
-  detalle: string; traslado: number; recargo: number; total: number;
-}
-export const trasladosService = {
-  async todo(): Promise<{ bases: BaseSalida[]; traslados: Traslado[]; tarifa: Tarifa | null }> {
-    const [b, t, f] = await Promise.all([
-      supabase.from('bases_salida').select('*').order('casa_matriz', { ascending: false }).order('nombre'),
-      supabase.from('traslados').select('*').order('comuna').order('km'),
-      supabase.from('tarifa_traslado').select('*').eq('id', 1).maybeSingle(),
-    ]);
-    if (b.error) throw b.error;
-    if (t.error) throw t.error;
-    return { bases: (b.data || []) as BaseSalida[], traslados: (t.data || []) as Traslado[], tarifa: (f.data || null) as Tarifa | null };
-  },
-  async cotizar(comuna: string, baseId?: string | null): Promise<CotizacionTraslado> {
-    const { data, error } = await supabase.rpc('cotizar_traslado', { p_comuna: comuna, p_base: baseId || null });
-    lanzar(error);
-    return data as CotizacionTraslado;
-  },
-  async guardarTraslado(t: Partial<Traslado>) {
-    const { error } = t.id ? await supabase.from('traslados').update(t).eq('id', t.id) : await supabase.from('traslados').insert(t);
-    lanzar(error);
-  },
-  async eliminarTraslado(id: string) { const { error } = await supabase.from('traslados').delete().eq('id', id); lanzar(error); },
-  async guardarBase(b: Partial<BaseSalida>) {
-    const { error } = b.id ? await supabase.from('bases_salida').update(b).eq('id', b.id) : await supabase.from('bases_salida').insert(b);
-    lanzar(error);
-  },
-  async guardarTarifa(t: Partial<Tarifa>) { const { error } = await supabase.from('tarifa_traslado').update(t).eq('id', 1); lanzar(error); },
 };

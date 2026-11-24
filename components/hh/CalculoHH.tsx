@@ -109,7 +109,7 @@ export default function CalculoHH() {
         ))}
       </div>
 
-      <div hidden={pestana !== 'calcular'}><Calculadora {...props} configura={configura} miId={miId} /></div>
+      <div hidden={pestana !== 'calcular'}><Calculadora {...props} configura={configura} puedeCotizar={puede('cotizaciones.crear')} miId={miId} /></div>
       {pestana === 'equipo' && <EquipoHH {...props} configura={configura} miId={miId} />}
       {pestana === 'cargos' && configura && <CargosHH {...props} />}
       {pestana === 'trabajos' && configura && <TrabajosTipoHH {...props} />}
