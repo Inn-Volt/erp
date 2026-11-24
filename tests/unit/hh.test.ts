@@ -1,6 +1,6 @@
 // Calculadora HH (fase 23): tarifas en UF y USD, la tarifa propia de la persona, el piso según
 // costos, las líneas con apoyo y multiplicador, la urgencia, los redondeos, lo que ve el cliente y
-// la UF del día (con el respaldo si mindicador se cae). Correr: npm test
+// la UF del día (mindicador o boostr, con el respaldo si las dos se caen). Correr: npm test
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
@@ -9,7 +9,7 @@ import {
 } from '../../lib/hh/calculo.ts';
 import { cotizacionDesdeCalculo } from '../../lib/hh/aCotizacion.ts';
 import { calcularLinea as calcularLineaCot } from '../../lib/cotizador/calculo.ts';
-import { elegirIndicadores, hoyEnChile, valorMindicador, valorSano } from '../../lib/hh/indicadores.ts';
+import { elegirIndicadores, fechaReciente, hoyEnChile, valorBoostr, valorMindicador, valorSano } from '../../lib/hh/indicadores.ts';
 import { faltaEnLinea, filaLinea, hojasCalculo, lineaDesdeFila, lineaVacia, tarifasDeLinea, totalesDe, type LineaHH } from '../../lib/hh/lineas.ts';
 import { ayudasCatalogo, conPersona, conTrabajo, iniciales } from '../../components/hh/catalogo.ts';
 import type { CatalogoHH } from '../../services/hh.ts';
@@ -156,31 +156,48 @@ test('Del anteproyecto al cotizador: cada trabajo con su costo real y su precio 
   assert.deepEqual([urgente.items[0].costo, calcularLineaCot(urgente.items[0], 'CLP').precio], [458400, 458400]);
 });
 
-test('La UF del día: mindicador, lo guardado hoy (manda), el último guardado o el respaldo si se cae', () => {
+test('La UF del día: internet (mindicador o boostr), lo guardado hoy (manda), el último guardado o el respaldo', () => {
   const respaldo = { uf: 41350.42, usd: 1000, fecha: '2026-11-01' };
   const hoy = '2026-11-23';
   assert.equal(valorMindicador('uf', { serie: [{ valor: 41402.1 }, { valor: 41390 }] }), 41402.1);
   assert.equal(valorMindicador('uf', { serie: [{ valor: 0 }] }), null);
   assert.equal(valorMindicador('usd', { serie: [{ valor: 3000 }] }), null);   // fuera de rango
   assert.equal(valorMindicador('uf', {}), null);
+  assert.equal(valorMindicador('uf', { serie: [{ valor: 41402.1, fecha: '2026-11-23T03:00:00.000Z' }] }, hoy), 41402.1);
+  assert.equal(valorMindicador('uf', { serie: [{ valor: 41000, fecha: '2026-10-01T03:00:00.000Z' }] }, hoy), null);   // vieja
+  const boostr = { status: 'success', data: { uf: { date: '2026-11-23', value: 41398.57 }, dolar: { date: '2026-11-21', value: 1017.66 } } };
+  assert.equal(valorBoostr('uf', boostr, hoy), 41398.57);
+  assert.equal(valorBoostr('usd', boostr, hoy), 1017.66);                     // el dólar del viernes sirve el lunes
+  assert.equal(valorBoostr('uf', { status: 'error' }, hoy), null);
   assert.equal(valorSano('usd', '948.5'), 948.5);
+  assert.deepEqual([fechaReciente('2026-11-16', hoy), fechaReciente('2026-11-15', hoy), fechaReciente(undefined, hoy)], [true, false, true]);
 
-  const ok = elegirIndicadores({ hoy, deHoy: null, consultado: { uf: 41402.1, usd: 948.5 }, ultimo: null, respaldo });
+  const ok = elegirIndicadores({ hoy, deHoy: null, consultado: [{ fuente: 'mindicador', uf: 41402.1, usd: 948.5 }], ultimo: null, respaldo });
   assert.deepEqual([ok.uf.valor, ok.uf.fuente, ok.usd.valor, ok.guardar], [41402.1, 'mindicador', 948.5, true]);
 
-  const manual = elegirIndicadores({ hoy, deHoy: { fecha: hoy, uf: 41000, usd: 900, fuente: 'manual' }, consultado: null, ultimo: null, respaldo });
+  // mindicador caído: lo da boostr y se guarda.
+  const otra = elegirIndicadores({ hoy, deHoy: null, consultado: [{ fuente: 'boostr', uf: 41398.57, usd: 1017.66 }], ultimo: null, respaldo });
+  assert.deepEqual([otra.uf.valor, otra.uf.fuente, otra.usd.fuente, otra.uf.anterior, otra.guardar], [41398.57, 'boostr', 'boostr', false, true]);
+
+  // Cada fuente dio un valor distinto: se usan los dos, pero no se guarda (vuelve a consultar).
+  const mezcla = elegirIndicadores({ hoy, deHoy: null, ultimo: null, respaldo,
+    consultado: [{ fuente: 'mindicador', uf: 41402.1, usd: null }, { fuente: 'boostr', uf: null, usd: 1017.66 }] });
+  assert.deepEqual([mezcla.uf.fuente, mezcla.usd.fuente, mezcla.usd.valor, mezcla.guardar], ['mindicador', 'boostr', 1017.66, false]);
+
+  const manual = elegirIndicadores({ hoy, deHoy: { fecha: hoy, uf: 41000, usd: 900, fuente: 'manual' }, consultado: [], ultimo: null, respaldo });
   assert.deepEqual([manual.uf.valor, manual.uf.fuente, manual.guardar], [41000, 'manual', false]);
 
-  // UF caída sin nada guardado: el respaldo (y no se guarda, para volver a consultar).
-  const caida = elegirIndicadores({ hoy, deHoy: null, consultado: { uf: null, usd: 948.5 }, ultimo: null, respaldo });
+  // UF caída en las dos fuentes sin nada guardado: el respaldo (y no se guarda, para volver a consultar).
+  const caida = elegirIndicadores({ hoy, deHoy: null, ultimo: null, respaldo,
+    consultado: [{ fuente: 'mindicador', uf: null, usd: 948.5 }, { fuente: 'boostr', uf: null, usd: null }] });
   assert.deepEqual([caida.uf.valor, caida.uf.fuente, caida.uf.fecha, caida.uf.anterior], [41350.42, 'respaldo', '2026-11-01', true]);
   assert.equal(caida.usd.fuente, 'mindicador');
   assert.equal(caida.guardar, false);
 
-  // UF caída con un valor guardado antes: ese valor, con su fecha.
-  const ultimo = { fecha: '2026-11-20', uf: 41380, usd: 951, fuente: 'mindicador' as const };
-  const conUltimo = elegirIndicadores({ hoy, deHoy: null, consultado: null, ultimo, respaldo });
-  assert.deepEqual([conUltimo.uf.valor, conUltimo.uf.fecha, conUltimo.usd.valor, conUltimo.guardar], [41380, '2026-11-20', 951, false]);
+  // Nada en internet con un valor guardado antes: ese valor, con su fecha.
+  const ultimo = { fecha: '2026-11-20', uf: 41380, usd: 951, fuente: 'boostr' as const };
+  const conUltimo = elegirIndicadores({ hoy, deHoy: null, consultado: [], ultimo, respaldo });
+  assert.deepEqual([conUltimo.uf.valor, conUltimo.uf.fecha, conUltimo.uf.fuente, conUltimo.usd.valor, conUltimo.guardar], [41380, '2026-11-20', 'boostr', 951, false]);
 
   // En Chile todavía es el 23 aunque en UTC ya sea el 24.
   assert.equal(hoyEnChile(new Date('2026-11-24T02:00:00Z')), '2026-11-23');

@@ -176,7 +176,7 @@ export const hhService = {
     return (data || []) as { id: string; nombre: string; email: string | null }[];
   },
 
-  /** La UF y el dólar del día (mindicador, guardado o respaldo), con su fuente y fecha. */
+  /** La UF y el dólar del día (internet, guardado o respaldo), con su fuente y fecha. */
   async indicadores(): Promise<IndicadoresDia> {
     const r = await fetchConSesion('/api/hh/indicadores', { cache: 'no-store' });
     const j = await r.json().catch(() => ({}));

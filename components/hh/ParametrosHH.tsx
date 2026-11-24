@@ -26,7 +26,7 @@ const CAMPOS: [keyof Parametros, string, string?][] = [
   ['recargo_urgencia', 'Recargo por urgencia', 'Urgencia o fin de semana'],
   ['iva', 'IVA'],
   ['gestion_proyecto', 'Gestión de proyecto', 'Lo que se suma por coordinación y trámites (10 a 15 %)'],
-  ['uf_respaldo', 'UF de respaldo', 'Si mindicador no responde y no hay nada guardado'],
+  ['uf_respaldo', 'UF de respaldo', 'Si internet (mindicador.cl y boostr.cl) no responde y no hay nada guardado'],
   ['usd_respaldo', 'Dólar de respaldo'],
   ['redondeo_tarifa', 'Redondear tarifas a', 'Ej.: 100 → $28.945 queda en $28.900'],
   ['redondeo_total', 'Redondear el total a'],
@@ -167,7 +167,7 @@ function IndicadorManual({ onIndicadores }: { onIndicadores: () => void }) {
   return (
     <div className={`panel-y ${s.tarjeta}`}>
       <p className="section-label" style={{ margin: 0 }}>Fijar la UF y el dólar a mano</p>
-      <p className={s.ayuda}>Para un día en que mindicador falle o dé un valor raro. El valor fijado manda ese día.</p>
+      <p className={s.ayuda}>Para un día en que internet (mindicador.cl y boostr.cl) falle o dé un valor raro. El valor fijado manda ese día.</p>
       <div className={s.rejilla}>
         <Campo etiqueta="Día"><input className="input input-sm" type="date" value={f.fecha} onChange={e => setF({ ...f, fecha: e.target.value })} /></Campo>
         <Campo etiqueta="UF"><NumeroInput className="input input-sm" prefijo="$" decimales={2} value={f.uf} onChange={v => setF({ ...f, uf: v })} ariaLabel="UF" /></Campo>

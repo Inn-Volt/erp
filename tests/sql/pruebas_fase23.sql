@@ -153,6 +153,15 @@ EXCEPTION WHEN OTHERS THEN INSERT INTO r (ok, txt) VALUES (TRUE, 'Una UF fuera d
 END $$;
 RESET ROLE;
 INSERT INTO r (ok, txt) SELECT count(*) = 1 AND bool_and(fuente = 'manual'), 'Quien configura fija la UF a mano' FROM public.hh_indicadores WHERE fecha = '2026-11-23';
+-- El servidor (service role) guarda lo de internet: mindicador.cl o boostr.cl, nada inventado.
+INSERT INTO public.hh_indicadores (fecha, uf, usd, fuente) VALUES ('2026-11-22', 41390, 1015, 'boostr');
+DO $$ BEGIN
+  INSERT INTO public.hh_indicadores (fecha, uf, usd, fuente) VALUES ('2026-11-21', 41380, 1010, 'otra');
+  INSERT INTO r (ok, txt) VALUES (FALSE, 'La UF del día viene de mindicador, boostr, el respaldo o a mano');
+EXCEPTION WHEN check_violation THEN INSERT INTO r (ok, txt) VALUES (
+  (SELECT count(*) = 1 FROM public.hh_indicadores WHERE fecha = '2026-11-22' AND fuente = 'boostr'),
+  'La UF del día viene de mindicador, boostr, el respaldo o a mano');
+END $$;
 
 CREATE TEMP TABLE ids (quien TEXT, id UUID);
 GRANT ALL ON ids TO authenticated;

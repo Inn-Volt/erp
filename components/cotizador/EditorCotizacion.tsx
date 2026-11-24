@@ -897,12 +897,11 @@ export default function EditorCotizacion({ id, clonarDe, clienteInicial, solicit
   const traerUF = async () => {
     setTrayendoUF(true);
     try {
-      const res = await fetch('https://mindicador.cl/api/uf');
-      const data = await res.json();
-      const v = Number(data?.serie?.[0]?.valor || 0);
-      if (v > 0) set({ valor_uf: Math.round(v * 100) / 100, fecha_valor_uf: fechaLocal() });
-      else warning('No se pudo obtener la UF; escríbela a mano.');
-    } catch { warning('No se pudo obtener la UF; escríbela a mano.'); }
+      // El servidor la consulta en mindicador.cl y boostr.cl (la primera que responda); solo sirve la de hoy.
+      const { uf } = await hhService.indicadores();
+      if (uf.valor > 0 && !uf.anterior) set({ valor_uf: Math.round(uf.valor * 100) / 100, fecha_valor_uf: fechaLocal() });
+      else warning('No se pudo obtener la UF de hoy; escríbela a mano.');
+    } catch { warning('No se pudo obtener la UF de hoy; escríbela a mano.'); }
     finally { setTrayendoUF(false); }
   };
   const convertir = (a: Moneda) => {
