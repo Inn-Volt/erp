@@ -3,7 +3,7 @@
 // operación; el resumen partida × tipo y «Para mirar». Caso: la forma de IV-0080. Correr: npm test
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { analizar, costoRegistro, diasDeLinea, hojasAnalisis, semaforo, valorDeLinea, type LineaEntrada } from '../../lib/analisisProyecto.ts';
+import { analizar, costoRegistro, diasDeLinea, hojasAnalisis, saldoAFavor, semaforo, valorDeLinea, type LineaEntrada } from '../../lib/analisisProyecto.ts';
 import { lineasDesdeCotizacion } from '../../lib/anteproyecto.ts';
 import {
   movimientos, presupuesto, SIN_PARTIDA, type CompraCP, type DocumentoLineaCP, type GastoCP, type HoraCP, type ManoObraCP,
@@ -160,4 +160,14 @@ test('El valor de una línea y el costo de un registro: lo mismo que calcula la 
   assert.equal(costoRegistro({ modalidad: 'interno', clase: 'servicio', cantidad: 4.5, valor: 0, honorarios: false }, ficha, 15.25), 23978);
   assert.equal(costoRegistro({ modalidad: 'externo', clase: 'servicio', cantidad: 4, valor: 20000, honorarios: true }, null, 15.25), 94395);
   assert.equal(costoRegistro({ modalidad: 'liquido', clase: 'mano_obra', cantidad: 3, valor: 50000, honorarios: true }, null, 15.25), 150000);
+});
+
+test('Queda = saldo a favor: lo abonado sin IVA menos lo gastado', () => {
+  // Cotización de $1.190.000 (neto $1.000.000): el cliente abonó $595.000 y se han gastado $300.000.
+  assert.deepEqual(saldoAFavor({ abonado: 595000, venta: 1000000, total: 1190000, gastado: 300000 }), { abonado: 595000, sinIva: 500000, saldo: 200000 });
+  // Se gastó más de lo que entró: negativo.
+  assert.equal(saldoAFavor({ abonado: 595000, venta: 1000000, total: 1190000, gastado: 682990 }).saldo, -182990);
+  // Sin abonos, todo lo gastado va en contra; exenta (venta = total), sin descontar IVA.
+  assert.equal(saldoAFavor({ abonado: 0, venta: 1000000, total: 1190000, gastado: 50000 }).saldo, -50000);
+  assert.deepEqual(saldoAFavor({ abonado: 400000, venta: 800000, total: 800000, gastado: 100000 }), { abonado: 400000, sinIva: 400000, saldo: 300000 });
 });
