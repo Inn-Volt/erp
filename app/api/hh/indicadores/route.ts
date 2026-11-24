@@ -3,7 +3,7 @@
 // la primera que dé los dos valores sanos y recientes; guarda el valor del día en hh_indicadores y lo
 // reutiliza ese día. Si ninguna responde, usa el último guardado y, si no hay ninguno, el respaldo de
 // los parámetros. Siempre dice la fuente y la fecha de cada valor.
-// Requiere sesión con algún permiso de la calculadora HH o del cotizador.
+// Requiere sesión con algún permiso de la calculadora HH, del cotizador o de facturación (cobros en UF o dólares).
 // La caché la escribe el servidor con la service role: así nadie puede inventar «la UF de internet»
 // desde el navegador (a mano la fija quien configura, en la pantalla de parámetros).
 
@@ -54,7 +54,7 @@ export async function GET(req: Request) {
   const ses = await sesionConPermisos(req);
   if (!ses) return noAutorizado();
   const p = ses.permisos;
-  if (p !== null && !p.some(x => x === '*' || x.startsWith('hh.') || x.startsWith('cotizaciones.'))) return sinPermiso();
+  if (p !== null && !p.some(x => x === '*' || x.startsWith('hh.') || x.startsWith('cotizaciones.') || x.startsWith('facturacion.'))) return sinPermiso();
 
   // Quien solo cotiza no lee las tablas hh_ (RLS): para él no hay guardado ni respaldo propio,
   // y el cotizador solo usa un valor de hoy.

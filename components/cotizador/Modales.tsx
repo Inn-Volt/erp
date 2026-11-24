@@ -9,7 +9,9 @@ import NumeroInput from '@/components/NumeroInput';
 import type { Aviso } from '@/lib/cotizador/revision';
 import { CUANDO_COBRO, MOTIVOS_RECHAZO, type CotizacionDoc, type EventoCot, type HitoCobro } from '@/lib/cotizador/tipos';
 import { anticipoDelPlan, desgloseAnticipo, planConAnticipo } from '@/lib/anticipo';
-import { montosHitos, presupuesto } from '@/lib/controlProyecto';
+import { presupuesto } from '@/lib/controlProyecto';
+import { detalleHito, enMonedaExtranjera, montosHitos, type ValoresMoneda } from '@/lib/cotizador/planCobro';
+import { useValoresDia } from '@/hooks/useValoresDia';
 import { useFase } from '@/lib/fases';
 import { cotizadorService } from '@/services/cotizador';
 import { anteproyectoService } from '@/services/anteproyecto';
@@ -112,12 +114,16 @@ function AvisoFila({ a, onIrA }: { a: Aviso; onIrA: (id: string) => void }) {
  * Con la fase 20 se fija el primer pago (en % o en $) y se ve qué es esa plata: cuánto es IVA (va al
  * SII) y cómo se reparte el neto según lo cotizado (materiales, mano de obra, operación, utilidad).
  */
-function PrimerPago({ cot, plan, monto, onMonto }: { cot: CotizacionDoc; plan: HitoCobro[]; monto: number; onMonto: (v: number) => void }) {
+function PrimerPago({ cot, plan, monto, valores, onMonto }: {
+  cot: CotizacionDoc; plan: HitoCobro[]; monto: number; valores: ValoresMoneda; onMonto: (v: number) => void;
+}) {
   const [enPct, setEnPct] = useState(true);
   const total = Number(cot.total_clp ?? cot.total ?? 0);
   const pres = useMemo(() => presupuesto(cot), [cot]);
   const d = desgloseAnticipo({ monto, total, ivaRatio: Number(cot.total) ? Number(cot.iva || 0) / Number(cot.total) : 0, presupuesto: pres });
-  const resto = montosHitos(total, planConAnticipo(plan, total, monto)).filter(h => h.cuando !== 'aprobar' && h.monto);
+  const resto = montosHitos(total, planConAnticipo(plan, total, monto), valores).filter(h => h.cuando !== 'aprobar' && h.monto);
+  // El anticipo del plan en UF o dólares: se dice en su moneda (en pesos, al valor de hoy).
+  const enMoneda = plan.find(h => h.cuando === 'aprobar' && enMonedaExtranjera(h));
   const pct = (v: number) => `${(Math.round(v * 10) / 10).toString().replace('.', ',')} %`;
   const linea = (t: string, v: number) => v ? <span style={{ display: 'flex', justifyContent: 'space-between', gap: 8 }}><span>{t}</span><b style={{ fontVariantNumeric: 'tabular-nums' }}>{formatCLP(v)}</b></span> : null;
   return (
@@ -138,7 +144,7 @@ function PrimerPago({ cot, plan, monto, onMonto }: { cot: CotizacionDoc; plan: H
         </div>
       </div>
       <span style={{ fontSize: '0.82rem', color: 'var(--text)' }}>
-        <b>{formatCLP(d.monto)}</b> ({pct(d.pct)} de {formatCLP(total)}){resto.length ? ' · después: ' + resto.map(h => `${h.nombre} ${formatCLP(h.monto)} ${CUANDO_COBRO[h.cuando]}`).join(', ') : ''}
+        <b>{formatCLP(d.monto)}</b>{enMoneda ? ` (${detalleHito(enMoneda)} al valor de hoy)` : ''} ({pct(d.pct)} de {formatCLP(total)}){resto.length ? ' · después: ' + resto.map(h => `${h.nombre} ${formatCLP(h.monto)} ${CUANDO_COBRO[h.cuando]}`).join(', ') : ''}
       </span>
       {d.monto > 0 && (
         <div style={{ fontSize: '0.8rem', color: 'var(--text)', display: 'flex', flexDirection: 'column', gap: 2 }}>
@@ -173,13 +179,18 @@ export function AprobarModal({ cot, vencida, plan, onCerrar, onListo }: {
   const [error, setError] = useState('');
   const fase20 = useFase(20);
   const total = Number(cot.total_clp ?? cot.total ?? 0);
-  const anticipoPlan = anticipoDelPlan(plan, total);
-  const [anticipo, setAnticipo] = useState(anticipoPlan);
+  // La UF y el dólar de hoy para un anticipo fijado en esas monedas (y así la base ya los tiene guardados).
+  const hoy = useValoresDia(plan.some(enMonedaExtranjera));
+  const valores: ValoresMoneda = { uf: hoy?.uf ?? (Number(cot.valor_uf) || null), usd: hoy?.usd ?? null };
+  const anticipoPlan = anticipoDelPlan(plan, total, valores);
+  // null = el del plan; cambia solo si se escribe otro.
+  const [cambiado, setAnticipo] = useState<number | null>(null);
+  const anticipo = cambiado ?? anticipoPlan;
   const aprobar = async () => {
     setOcupado(true); setError('');
     try {
       const doc = archivo ? await cotizadorService.subirArchivo(cot.id, archivo) : null;
-      await cotizadorService.aprobar(cot.id, como.trim(), doc, motivo.trim() || null, fase20 && anticipo !== anticipoPlan ? anticipo : null);
+      await cotizadorService.aprobar(cot.id, como.trim(), doc, motivo.trim() || null, fase20 && cambiado !== null && cambiado !== anticipoPlan ? cambiado : null);
       // Nace su presupuesto de ejecución, copiando la cotización (si falla, se arma al abrir el análisis).
       await anteproyectoService.asegurar(cot.id).catch(() => {});
       onListo();
@@ -201,7 +212,7 @@ export function AprobarModal({ cot, vencida, plan, onCerrar, onListo }: {
       </label>
       {vencida && <div><label className="label-muted" style={{ display: 'block', marginBottom: 4 }}>Está vencida: motivo para aprobarla igual *</label>
         <input className="input" value={motivo} onChange={e => setMotivo(e.target.value)} /></div>}
-      {fase20 && total > 0 && <PrimerPago cot={cot} plan={plan} monto={anticipo} onMonto={setAnticipo} />}
+      {fase20 && total > 0 && <PrimerPago cot={cot} plan={plan} monto={anticipo} valores={valores} onMonto={setAnticipo} />}
       {error && <p style={{ margin: 0, color: 'var(--danger)', fontSize: '0.84rem' }}>{error}</p>}
     </Modal>
   );

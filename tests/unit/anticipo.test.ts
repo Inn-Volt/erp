@@ -2,7 +2,8 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { anticipoDelPlan, desgloseAnticipo, planConAnticipo } from '../../lib/anticipo.ts';
-import { montosHitos, presupuesto } from '../../lib/controlProyecto.ts';
+import { presupuesto } from '../../lib/controlProyecto.ts';
+import { montosHitos } from '../../lib/cotizador/planCobro.ts';
 import type { HitoCobro } from '../../lib/cotizador/tipos.ts';
 import { IV0080, PLAN_COBRO_IV0080, TOTAL_IV0080 } from './fixture_iv0080.ts';
 

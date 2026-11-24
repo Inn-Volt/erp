@@ -23,7 +23,8 @@ import { Document, Page, Text, View, StyleSheet, Image } from '@react-pdf/render
 import type { Cliente, Vendedor } from '@/types';
 import type { EmpresaInfo } from '@/types';
 import type { CotizacionDoc, Linea, PartidaCot, Seccion } from '@/lib/cotizador/tipos';
-import { datoEncabezadoVisible, planEnPalabras, TITULO_VALORIZACION, type DatoEncabezado, type HitoCobro } from '@/lib/cotizador/tipos';
+import { datoEncabezadoVisible, TITULO_VALORIZACION, type DatoEncabezado, type HitoCobro } from '@/lib/cotizador/tipos';
+import { planActivo, planEnPalabras } from '@/lib/cotizador/planCobro';
 export { DATOS_ENCABEZADO, type DatoEncabezado } from '@/lib/cotizador/tipos';
 import { calcular, cantidadLegible, filasDelCliente, formatMonto, type Resultado } from '@/lib/cotizador/calculo';
 import { formatDate } from '@/utils';
@@ -366,7 +367,7 @@ export default function CotizacionPDF(p: CotizacionPDFProps) {
           <Text style={s.invK}>Neto</Text><Text style={[s.invV, { marginBottom: 0 }]}>{fmt(r.totales.neto)}</Text>
         </View>
       </View>
-      {ver('mostrar_forma_pago') && (p.planCobro || []).some(h => h.porcentaje > 0) ? (
+      {ver('mostrar_forma_pago') && planActivo(p.planCobro) ? (
         <View style={[s.importante, { marginBottom: 4 }]} wrap={false}>
           <Text style={s.rotulo}>FORMA DE PAGO</Text>
           <Text style={{ ...s.texto, fontSize: 7.8 }}>{planEnPalabras(p.planCobro || [])[0].toUpperCase() + planEnPalabras(p.planCobro || []).slice(1)}.</Text>

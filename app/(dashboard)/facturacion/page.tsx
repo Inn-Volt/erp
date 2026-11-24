@@ -10,7 +10,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
-import { CheckCircle2, Copy, Landmark, Loader2, Mail, MessageCircle, Save, Search, Wallet, X } from 'lucide-react';
+import { CheckCircle2, Copy, Landmark, Loader2, Mail, MessageCircle, RefreshCw, Save, Search, Wallet, X } from 'lucide-react';
 import Conciliacion from '@/components/facturacion/Conciliacion';
 import { EmitirDTE } from '@/components/facturacion/FacturaElectronica';
 import type { EmpresaInfo } from '@/types';
@@ -25,6 +25,7 @@ import { usePermisos } from '@/hooks/usePermisos';
 import { useToast } from '@/hooks/useToast';
 import { fechaLocal, formatCLP, formatDate } from '@/utils';
 import { cobroAbierto, cobroAbonado, cobroPagado, saldoCobro as saldo } from '@/lib/cobros';
+import { indicadoresDelDia } from '@/hooks/useValoresDia';
 
 const etapa = (e: EtapaCobro) => ETAPAS_COBRO.find(x => x.clave === e) || ETAPAS_COBRO[0];
 const vencida = (p: PorFacturar) => p.etapa === 'facturado' && saldo(p) > 0 && !!p.vencimiento && p.vencimiento < fechaLocal();
@@ -82,6 +83,38 @@ function Recordatorio({ p, empresa }: { p: PorFacturar; empresa: EmpresaInfo | n
   );
 }
 
+/**
+ * Un cobro fijado en UF o dólares («10 UF»): de qué día es el valor con que se pasó a pesos, y
+ * «Actualizar a la UF de hoy» para facturarlo (o cobrarlo) con la de ese día.
+ */
+function EnMoneda({ d, puedeActualizar, onValor }: { d: PorFacturar; puedeActualizar: boolean; onValor: (valor: number, fecha: string) => void }) {
+  const { warning } = useToast();
+  const [leyendo, setLeyendo] = useState(false);
+  const uf = d.moneda === 'UF';
+  const cantidad = new Intl.NumberFormat('es-CL', { maximumFractionDigits: 2 }).format(Number(d.monto_moneda));
+  const valor = (v: number) => `$${new Intl.NumberFormat('es-CL', { maximumFractionDigits: 2 }).format(v)}`;
+  const actualizar = async () => {
+    setLeyendo(true);
+    const ind = await indicadoresDelDia(true);
+    setLeyendo(false);
+    const v = ind ? (uf ? ind.uf : ind.usd) : null;
+    if (!v || v.anterior) { warning(`No se pudo obtener ${uf ? 'la UF' : 'el dólar'} de hoy; inténtalo más rato.`); return; }
+    onValor(v.valor, v.fecha);
+  };
+  return (
+    <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap', fontSize: '0.82rem', color: 'var(--text)' }}>
+      <span style={{ flex: 1, minWidth: 200 }}>
+        Este cobro es de <b>{uf ? `${cantidad} UF` : `US$ ${cantidad}`}</b>
+        {d.valor_moneda ? <span style={{ color: 'var(--muted)' }}> · en pesos con {uf ? 'la UF' : 'el dólar'} {d.fecha_valor ? `del ${formatDate(d.fecha_valor)}` : ''} ({valor(Number(d.valor_moneda))})</span> : null}
+      </span>
+      {puedeActualizar && (
+        <button type="button" className="btn btn-ghost btn-sm" disabled={leyendo} onClick={actualizar}>
+          {leyendo ? <Loader2 size={13} className="iv-spin" /> : <RefreshCw size={13} />} Actualizar a {uf ? 'la UF' : 'el dólar'} de hoy</button>
+      )}
+    </div>
+  );
+}
+
 function Ficha({ p, puedeEditar, empresa, onClose, onGuardado }: { p: PorFacturar; puedeEditar: boolean; empresa: EmpresaInfo | null; onClose: () => void; onGuardado: () => void }) {
   const { success, error: toastError } = useToast();
   const [d, setD] = useState<PorFacturar>(p);
@@ -98,6 +131,7 @@ function Ficha({ p, puedeEditar, empresa, onClose, onGuardado }: { p: PorFactura
         numero_oc: d.numero_oc || null, numero_hes: d.numero_hes || null, numero_factura: d.numero_factura || null,
         fecha_factura: d.fecha_factura || null, vencimiento: d.vencimiento || null,
         monto_pagado: d.monto_pagado || 0, fecha_pago: d.fecha_pago || null, notas: d.notas || null,
+        ...(d.moneda ? { valor_moneda: d.valor_moneda ?? null, fecha_valor: d.fecha_valor ?? null } : {}),
       });
       success('Guardado'); onGuardado();
     } catch (e) {
@@ -134,6 +168,10 @@ function Ficha({ p, puedeEditar, empresa, onClose, onGuardado }: { p: PorFactura
             <div><label className="label-muted" style={lbl}>Fecha factura</label><input className="input" type="date" value={d.fecha_factura || ''} onChange={e => set({ fecha_factura: e.target.value })} /></div>
             <div><label className="label-muted" style={lbl}>Vencimiento</label><input className="input" type="date" value={d.vencimiento || ''} onChange={e => set({ vencimiento: e.target.value })} /></div>
           </div>
+          {d.moneda && Number(d.monto_moneda) > 0 && (
+            <EnMoneda d={d} puedeActualizar={puedeEditar && d.etapa !== 'facturado' && !cobroPagado(d)}
+              onValor={(valor, fecha) => set({ monto: Math.round(Number(d.monto_moneda) * valor), valor_moneda: valor, fecha_valor: fecha })} />
+          )}
           {d.etapa !== 'sin_cobro' && (
             <div style={{ background: 'var(--bg3)', borderRadius: 8, padding: '0.7rem', display: 'flex', flexDirection: 'column', gap: 8 }}>
               <span className="label-muted">Pago del cliente</span>

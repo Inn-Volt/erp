@@ -16,10 +16,12 @@ import { useEffect, useMemo, useState } from 'react';
 import { CartesianGrid, Legend, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import { Loader2, RotateCcw, Save } from 'lucide-react';
 import {
-  ajustarSemanas, distribucionInvalida, etiquetaPartida, flujoSemanal, montosHitos, presupuestoPorPartida, sumaPct, SEMANAS_MAX, SIN_PARTIDA,
+  ajustarSemanas, distribucionInvalida, etiquetaPartida, flujoSemanal, presupuestoPorPartida, sumaPct, SEMANAS_MAX, SIN_PARTIDA,
   type CobroCP, type FlujoPlan, type Movimiento, type Presupuesto, type PresupuestoEjecucion,
 } from '@/lib/controlProyecto';
 import type { HitoCobro } from '@/lib/cotizador/tipos';
+import { enMonedaExtranjera, montosHitos } from '@/lib/cotizador/planCobro';
+import { useValoresDia } from '@/hooks/useValoresDia';
 import { useToast } from '@/hooks/useToast';
 import { formatCLP, formatDate } from '@/utils';
 
@@ -53,13 +55,15 @@ export default function FlujoCaja({ plan, planPorOmision, guardado, presupuesto,
   const [guardando, setGuardando] = useState(false);
   const cambiado = JSON.stringify(borrador) !== JSON.stringify(plan);
 
-  const filas = useMemo(() => flujoSemanal({ plan: borrador, presupuesto, planCobro, totalCotizacion, cobros, movimientos, ejecucion }),
-    [borrador, presupuesto, planCobro, totalCotizacion, cobros, movimientos, ejecucion]);
+  // Los cobros fijados en UF o dólares se proyectan con el valor de hoy.
+  const valores = useValoresDia(planCobro.some(enMonedaExtranjera)) ?? undefined;
+  const filas = useMemo(() => flujoSemanal({ plan: borrador, presupuesto, planCobro, totalCotizacion, cobros, movimientos, ejecucion, valores }),
+    [borrador, presupuesto, planCobro, totalCotizacion, cobros, movimientos, ejecucion, valores]);
   // Las partidas con algo presupuestado: cada una debe repartir el 100 % en las semanas.
   const costos = useMemo(() => presupuestoPorPartida(presupuesto, ejecucion), [presupuesto, ejecucion]);
   const conCosto = [...presupuesto.partidas, presupuesto.sinPartida].map(p => ({ ...p, costo: costos.get(p.id) || 0 })).filter(p => p.costo > 0);
   const invalidas = new Set(distribucionInvalida(borrador, costos).map(x => x.id));
-  const hitos = montosHitos(totalCotizacion, planCobro).filter(h => h.monto);
+  const hitos = montosHitos(totalCotizacion, planCobro, valores).filter(h => h.monto);
   const semanas = Array.from({ length: borrador.semanas }, (_, i) => i + 1);
 
   const ponPct = (id: string, i: number, v: string) => {

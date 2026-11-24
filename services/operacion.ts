@@ -73,6 +73,8 @@ export interface PorFacturar {
   monto_pagado: number; fecha_pago: string | null; notas: string | null; created_at: string;
   /** Fase 7: el hito del plan de cobro («Anticipo», «Saldo») y su porcentaje. */
   hito?: string | null; porcentaje?: number | null;
+  /** Fase 24: un cobro fijado en UF o dólares («10 UF»): el monto en pesos salió de `valor_moneda` del día `fecha_valor`. */
+  moneda?: 'UF' | 'USD' | null; monto_moneda?: number | null; valor_moneda?: number | null; fecha_valor?: string | null;
   /** Fase 15: la factura electrónica emitida (OpenFactura). */
   dte_tipo?: number | null; dte_folio?: string | null; dte_estado?: string | null; dte_pdf?: string | null; dte_emitido_at?: string | null;
   cotizaciones?: { folio: number; titulo: string | null } | null;

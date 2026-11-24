@@ -8,7 +8,7 @@
  * Diseño fijo en claro (como el PDF), independiente del tema del ERP.
  */
 
-import { planEnPalabras } from '@/lib/cotizador/tipos';
+import { planActivo, planEnPalabras } from '@/lib/cotizador/planCobro';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useParams } from 'next/navigation';
 import { CheckCircle2, Download, XCircle, Loader2, Clock, AlertTriangle, MessageCircle, Mail, ChevronDown, ChevronUp, FileText } from 'lucide-react';
@@ -278,7 +278,7 @@ export default function CotizacionClientePage() {
           </Tarjeta>
         )}
 
-        {(cot.plan_cobro || []).some(h => h.porcentaje > 0) && (
+        {planActivo(cot.plan_cobro) && (
           <Tarjeta titulo="Forma de pago">
             <p style={{ fontSize: 14, color: '#333', margin: 0 }}>{(() => { const t = planEnPalabras(cot.plan_cobro || []); return t[0].toUpperCase() + t.slice(1) + '.'; })()}</p>
           </Tarjeta>

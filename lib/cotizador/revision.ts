@@ -6,6 +6,7 @@
 import type { Cliente } from '@/types';
 import type { CotizacionDoc } from './tipos';
 import type { Resultado } from './calculo';
+import { revisarPlan } from './planCobro';
 
 /** `confirmar`: rojo que se puede enviar igual si se confirma (p. ej. vender con pérdida a sabiendas). */
 export interface Aviso { nivel: 'rojo' | 'ambar'; texto: string; ir?: string; confirmar?: 'perdida' }
@@ -26,6 +27,8 @@ export function revisar(doc: CotizacionDoc, r: Resultado, cliente: Cliente | nul
   if (!cliente) a.push({ nivel: 'rojo', texto: 'Falta el cliente.', ir: 'cot-bloque-cliente' });
   if (cliente?.estado_pago === 'bloqueado') a.push({ nivel: 'rojo', texto: `El cliente está bloqueado por pagos pendientes${cliente.nota_pago ? `: ${cliente.nota_pago}` : ''}. Habla con Facturación.`, ir: 'cot-bloque-cliente' });
   if (cliente?.estado_pago === 'atrasado') a.push({ nivel: 'ambar', texto: `El cliente no está al día con sus pagos${cliente.nota_pago ? `: ${cliente.nota_pago}` : ''}.`, ir: 'cot-bloque-cliente' });
+  const problemaPlan = doc.plan_cobro && doc.plan_cobro.length ? revisarPlan(doc.plan_cobro) : null;
+  if (problemaPlan) a.push({ nivel: 'rojo', texto: `Forma de pago: ${problemaPlan}`, ir: 'cot-bloque-cotizacion' });
 
   // El descuento propio de cada partida (un cargo no lleva): cuenta para ver si algo queda bajo el costo.
   const pctPartida = new Map((doc.partidas || []).map(p => [p.id, p.tipo === 'cargo' ? 0 : Math.min(Math.max(Number(p.descuento) || 0, 0), 100)]));

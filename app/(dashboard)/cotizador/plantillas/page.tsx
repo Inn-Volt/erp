@@ -21,7 +21,8 @@ import { ajustesService, faltaFase4, plantillasCotService } from '@/services/cot
 import { useToast } from '@/hooks/useToast';
 import { usePermisos } from '@/hooks/usePermisos';
 import { PLAN_COBRO_BASE, QUE_VE, TITULO_VALORIZACION, type Plantilla, type Seccion } from '@/lib/cotizador/tipos';
-import PlanCobro, { sumaPlan } from '@/components/cotizador/PlanCobro';
+import PlanCobro from '@/components/cotizador/PlanCobro';
+import { revisarPlan } from '@/lib/cotizador/planCobro';
 import { nuevoId } from '@/lib/cotizador/calculo';
 
 const VACIA: Plantilla = { id: '', nombre: '', para_que: '', descripcion: '', aclaraciones: '', que_ve_cliente: 'partidas', titulo_valorizacion: '', secciones: [], es_la_de_siempre: false, activa: true, version: 1 };
@@ -46,7 +47,8 @@ export default function PlantillasPage() {
   const conPlan = lista.some(p => 'plan_cobro' in p);
   const guardar = async () => {
     if (!sel?.nombre.trim()) { toastError('Ponle nombre a la plantilla'); return; }
-    if (sel.plan_cobro && sel.plan_cobro.length && sumaPlan(sel.plan_cobro) !== 100) { toastError('La forma de pago tiene que sumar 100 %.'); return; }
+    const problemaPlan = sel.plan_cobro && sel.plan_cobro.length ? revisarPlan(sel.plan_cobro) : null;
+    if (problemaPlan) { toastError(`Forma de pago: ${problemaPlan}`); return; }
     setGuardando(true);
     try {
       const id = await plantillasCotService.guardar({
