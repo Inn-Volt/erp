@@ -71,7 +71,7 @@ const MENU: { grupo: string; icono: React.ElementType; items: Item[] }[] = [
     { href: '/bodega', label: 'Bodega', permisos: ['bodega.ver', 'bodega.mover'], modulo: 'bodega' },
   ] },
   { grupo: 'Finanzas', icono: Wallet, items: [
-    { href: '/facturacion', label: 'Facturación y cobranza', permisos: ['facturacion.ver', 'facturacion.gestionar'] },
+    { href: '/facturacion', label: 'Cobranza', permisos: ['facturacion.ver', 'facturacion.gestionar'] },
     { href: '/gastos', label: 'Gastos y anticipos', permisos: ['gastos.crear', 'gastos.ver_todos', 'gastos.aprobar'] },
     { href: '/compras', label: 'Compras a proveedores', permisos: ['compras.ver', 'compras.gestionar'] },
     { href: '/equipo', label: 'Equipo y costos', permisos: ['gastos.aprobar', 'configuracion.gestionar'] },

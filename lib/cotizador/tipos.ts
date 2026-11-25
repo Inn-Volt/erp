@@ -246,6 +246,10 @@ export interface AjustesCot {
   mensaje_whatsapp: string | null;
   /** Fase 7: el plan de cobro por omisión de las cotizaciones nuevas. */
   plan_cobro?: HitoCobro[] | null;
+  /** Fase 25: con la facturación apagada solo hay cobranza con abonos (sin «Por facturar»). */
+  facturacion_activa?: boolean;
+  /** Fase 25: PPM en % de lo abonado sin IVA (lo define el contador; 0 = no se descuenta). */
+  ppm_pct?: number;
   /** Fase 8: el diseño del PDF (color, título, pie y bloques que se muestran). */
   pdf_diseno?: import('@/components/pdf/CotizacionPDF').DisenoPDF | null;
   /** Fase 13: gastos fijos, ventas del mes y ganancia deseada (calculadora de utilidad). */

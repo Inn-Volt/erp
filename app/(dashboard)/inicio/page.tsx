@@ -23,6 +23,8 @@ import { faseAplicada } from '@/lib/fases';
 import type { Cuentas } from '@/lib/fondos';
 import type { Tarea } from '@/services/operacion';
 import { usePermisos } from '@/hooks/usePermisos';
+import { cuentaTrabajo } from '@/lib/cobranza';
+import { cobranzaService, ivaRatio, planDeTrabajo, totalPesos } from '@/services/cobranza';
 import { fechaLocal, formatCLP, formatDate, sumarDias } from '@/utils';
 import { vendedoresService } from '@/services/vendedores';
 import { ESTADO_SOLICITUD_META, type EstadoSolicitud } from '@/types/solicitud';
@@ -55,6 +57,9 @@ export default function MiDiaPage() {
   const [esperando, setEsperando] = useState<CotEsp[]>([]);
   const [trabajos, setTrabajos] = useState<TrabajoFila[]>([]);
   const [cobros, setCobros] = useState<Cobro[]>([]);
+  // Fase 25: los trabajos con lo que el plan ya esperaba y no ha llegado, y lo por cobrar en total.
+  const [atrasados, setAtrasados] = useState<{ id: string; folio: number; titulo: string | null; cliente: string | null; atrasado: number }[] | null>(null);
+  const [porCobrar, setPorCobrar] = useState(0);
   const [tareas, setTareas] = useState<Tarea[]>([]);
   const [anticipos, setAnticipos] = useState<Anticipo[]>([]);
   // Fase 19: el fondo de la persona reemplaza a los anticipos sueltos.
@@ -95,9 +100,25 @@ export default function MiDiaPage() {
         .then(({ data, error }) => { if (!error) setTrabajos((data || []) as unknown as TrabajoFila[]); });
     }
     if (puede('facturacion.ver') || puede('facturacion.gestionar')) {
-      supabase.from('por_facturar').select('id, descripcion, monto, monto_pagado, etapa, vencimiento')
-        .neq('etapa', 'sin_cobro').order('created_at').limit(50)
-        .then(({ data }) => setCobros(((data || []) as Cobro[]).filter(c => Number(c.monto_pagado) < Number(c.monto))));
+      faseAplicada(25).then(async conAbonos => {
+        if (!conAbonos) {
+          const { data } = await supabase.from('por_facturar').select('id, descripcion, monto, monto_pagado, etapa, vencimiento')
+            .neq('etapa', 'sin_cobro').order('created_at').limit(50);
+          setCobros(((data || []) as Cobro[]).filter(c => Number(c.monto_pagado) < Number(c.monto)));
+          return;
+        }
+        try {
+          const [ts, abonos, aj] = await Promise.all([cobranzaService.trabajos(), cobranzaService.abonos(), cobranzaService.ajustes()]);
+          // Sin la UF del día (los cobros en UF o dólares cuentan en 0): es un resumen; el detalle está en Cobranza.
+          const cuentas = ts.map(t => ({ t, c: cuentaTrabajo({
+            total: totalPesos(t), ivaRatio: ivaRatio(t), plan: planDeTrabajo(t, aj.plan), terminado: t.trabajo_estado === 'terminado',
+            abonos: abonos.filter(a => a.cotizacion_id === t.id),
+          }) }));
+          setPorCobrar(cuentas.reduce((s, x) => s + x.c.saldo, 0));
+          setAtrasados(cuentas.filter(x => x.c.atrasado > 0).sort((a, b) => b.c.atrasado - a.c.atrasado)
+            .map(({ t, c }) => ({ id: t.id, folio: t.folio, titulo: t.titulo, cliente: t.clientes?.nombre_cliente || null, atrasado: c.atrasado })));
+        } catch { setAtrasados([]); }
+      });
     }
     supabase.from('tareas').select('*').eq('asignado_id', uid).in('estado', ['pendiente', 'en_progreso']).order('fecha_limite', { ascending: true, nullsFirst: false })
       .then(({ data }) => setTareas((data || []) as Tarea[]));
@@ -197,8 +218,15 @@ export default function MiDiaPage() {
         </>}
 
         {(puede('facturacion.ver') || puede('facturacion.gestionar')) && (
-          <Caja titulo="Cobranza" icono={<Wallet size={15} />} href="/facturacion" vacio={!porFacturar.length && !vencidos.length}>
-            {porFacturar.length > 0 && <p style={{ margin: 0, fontSize: '0.84rem' }}><b>{porFacturar.length}</b> por facturar · {formatCLP(porFacturar.reduce((s, c) => s + Number(c.monto), 0))}</p>}
+          <Caja titulo="Cobranza" icono={<Wallet size={15} />} href="/facturacion" vacio={atrasados ? !porCobrar && !atrasados.length : !porFacturar.length && !vencidos.length}>
+            {atrasados && porCobrar > 0 && <p style={{ margin: 0, fontSize: '0.84rem' }}>Por cobrar <b>{formatCLP(porCobrar)}</b></p>}
+            {atrasados?.slice(0, 5).map(x => (
+              <Link key={x.id} href="/facturacion" style={fila}>
+                <span style={{ flex: 1 }}>IV-{String(x.folio).padStart(4, '0')} · {x.titulo || 'Trabajo'}<span style={{ ...sub, color: 'var(--danger)' }}>{x.cliente ? `${x.cliente} · ` : ''}el plan ya lo esperaba</span></span>
+                <b>{formatCLP(x.atrasado)}</b>
+              </Link>
+            ))}
+            {!atrasados && porFacturar.length > 0 && <p style={{ margin: 0, fontSize: '0.84rem' }}><b>{porFacturar.length}</b> por facturar · {formatCLP(porFacturar.reduce((s, c) => s + Number(c.monto), 0))}</p>}
             {vencidos.map(c => (
               <Link key={c.id} href="/facturacion" style={fila}>
                 <span style={{ flex: 1 }}>{c.descripcion || 'Cobro'}<span style={{ ...sub, color: 'var(--danger)' }}>vencida el {formatDate(c.vencimiento)}</span></span>

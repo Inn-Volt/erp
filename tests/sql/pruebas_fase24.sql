@@ -13,6 +13,8 @@ CREATE OR REPLACE FUNCTION pg_temp.como(uid TEXT) RETURNS VOID LANGUAGE sql AS $
 \set PCT 'f2400000-0000-0000-0000-000000000003'
 -- Las pruebas de fases anteriores vuelven a correr sus archivos: se deja esta fase al día.
 \i /tmp/supabase_fase24_forma_pago.sql
+-- Con la facturación activa (fase 25): aprobar crea los cobros en «Por facturar».
+UPDATE public.ajustes_cotizacion SET facturacion_activa = TRUE WHERE id = 1;
 SELECT set_config('request.jwt.claim.sub', '', false);
 INSERT INTO public.usuario_roles (usuario_id, rol_id) SELECT :'CESAR', id FROM public.roles WHERE clave = 'admin' ON CONFLICT DO NOTHING;
 -- La UF y el dólar de hoy (los guarda /api/hh/indicadores).

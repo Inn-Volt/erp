@@ -2,9 +2,9 @@
 
 /**
  * Conciliación bancaria (fase 15): se sube la cartola del banco (CSV o Excel), se guardan sus
- * movimientos (una vez cada uno, aunque se suba de nuevo) y cada abono se cruza con un cobro que
- * falte pagar (tenga o no factura: un anticipo se paga antes) y cada cargo con una compra impaga.
- * Confirmar marca el cobro (o la compra) pagado.
+ * movimientos (una vez cada uno, aunque se suba de nuevo) y cada cargo se cruza con una compra impaga.
+ * Cada abono del banco: con la cobranza (fase 25, `cuentas`) se asigna a un trabajo con saldo y queda
+ * como un abono suyo; sin ella (`cobros`), se cruza con un cobro de «Por facturar» que falte pagar.
  */
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
@@ -12,6 +12,7 @@ import { Check, EyeOff, Landmark, Loader2, Upload, X } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { parsearCartola, sugerirCobro, sugerirCompra, type CobroAbierto, type CompraAbierta } from '@/lib/cartola';
 import { cobroAbierto, saldoCobro as saldo } from '@/lib/cobros';
+import { cobranzaService } from '@/services/cobranza';
 import type { PorFacturar } from '@/services/operacion';
 import { usePermisos } from '@/hooks/usePermisos';
 import { useToast } from '@/hooks/useToast';
@@ -19,7 +20,12 @@ import { formatCLP, formatDate } from '@/utils';
 
 interface MovBanco { id: string; fecha: string; descripcion: string | null; monto: number; referencia: string | null }
 
-export default function Conciliacion({ cobros, onClose, onCambio }: { cobros: PorFacturar[]; onClose: () => void; onCambio: () => void }) {
+export default function Conciliacion({ cobros = [], cuentas, onClose, onCambio }: {
+  cobros?: PorFacturar[];
+  /** Fase 25: los trabajos con saldo (`numero_factura` = su folio). El abono del banco queda como abono del trabajo. */
+  cuentas?: CobroAbierto[];
+  onClose: () => void; onCambio: () => void;
+}) {
   const { perfil, puede } = usePermisos();
   const { success, error: toastError } = useToast();
   const [movs, setMovs] = useState<MovBanco[] | null>(null);
@@ -29,8 +35,8 @@ export default function Conciliacion({ cobros, onClose, onCambio }: { cobros: Po
   const [ocupado, setOcupado] = useState<string | null>(null);
   const [verCargos, setVerCargos] = useState(false);
 
-  const abiertos: CobroAbierto[] = useMemo(() => cobros.filter(cobroAbierto)
-    .map(p => ({ id: p.id, saldo: saldo(p), numero_factura: p.numero_factura, cliente: p.clientes?.nombre_cliente || null })), [cobros]);
+  const abiertos: CobroAbierto[] = useMemo(() => cuentas ?? cobros.filter(cobroAbierto)
+    .map(p => ({ id: p.id, saldo: saldo(p), numero_factura: p.numero_factura, cliente: p.clientes?.nombre_cliente || null })), [cobros, cuentas]);
 
   const cargar = useCallback(async () => {
     const [m, k] = await Promise.all([
@@ -85,10 +91,16 @@ export default function Conciliacion({ cobros, onClose, onCambio }: { cobros: Po
 
   const conciliar = async (m: MovBanco) => {
     const destino = eleccion[m.id] ?? sugerencias[m.id]?.id ?? '';
-    if (!destino) { toastError(m.monto > 0 ? 'Elige a qué cobro corresponde' : 'Elige a qué compra corresponde'); return; }
+    if (!destino) { toastError(m.monto > 0 ? (cuentas ? 'Elige a qué trabajo corresponde' : 'Elige a qué cobro corresponde') : 'Elige a qué compra corresponde'); return; }
     setOcupado(m.id);
     try {
-      if (m.monto > 0) {
+      let abonoId: string | null = null;
+      if (m.monto > 0 && cuentas) {
+        abonoId = await cobranzaService.guardarAbono({
+          cotizacion_id: destino, fecha: m.fecha, monto: Math.round(Number(m.monto)), medio: 'transferencia',
+          referencia: m.referencia, nota: m.descripcion ? m.descripcion.slice(0, 300) : null, comprobante_path: null, movimiento_banco_id: m.id,
+        });
+      } else if (m.monto > 0) {
         const p = cobros.find(x => x.id === destino);
         if (!p) throw new Error('El cobro ya no está');
         const pagado = Math.min(Number(p.monto), Number(p.monto_pagado || 0) + Number(m.monto));
@@ -99,10 +111,11 @@ export default function Conciliacion({ cobros, onClose, onCambio }: { cobros: Po
         if (error) throw error;
       }
       const { error } = await supabase.from('movimientos_banco').update({
-        ...(m.monto > 0 ? { por_facturar_id: destino } : { compra_id: destino }), conciliado_at: new Date().toISOString(), conciliado_por: perfil?.id || null,
+        ...(m.monto > 0 ? (abonoId ? { abono_id: abonoId } : { por_facturar_id: destino }) : { compra_id: destino }),
+        conciliado_at: new Date().toISOString(), conciliado_por: perfil?.id || null,
       }).eq('id', m.id);
       if (error) throw error;
-      success(m.monto > 0 ? 'Cobro marcado como pagado' : 'Compra marcada como pagada');
+      success(m.monto > 0 ? (abonoId ? 'Abono registrado en el trabajo' : 'Cobro marcado como pagado') : 'Compra marcada como pagada');
       setMovs(x => (x || []).filter(y => y.id !== m.id));
       onCambio();
     } catch (e) { toastError(e instanceof Error ? e.message : 'No se pudo conciliar'); }
@@ -157,14 +170,14 @@ export default function Conciliacion({ cobros, onClose, onCambio }: { cobros: Po
                   <b style={{ fontVariantNumeric: 'tabular-nums', color: m.monto > 0 ? 'var(--success)' : 'var(--danger)', minWidth: 100, textAlign: 'right' }}>{formatCLP(Number(m.monto))}</b>
                   <select className="input" value={valor} onChange={e => setEleccion(x => ({ ...x, [m.id]: e.target.value }))} style={{ flex: '1 1 220px', fontSize: '0.8rem' }}
                     aria-label="A qué corresponde">
-                    <option value="">{m.monto > 0 ? '¿Qué cobro es?' : '¿Qué compra es?'}</option>
+                    <option value="">{m.monto > 0 ? (cuentas ? '¿De qué trabajo es?' : '¿Qué cobro es?') : '¿Qué compra es?'}</option>
                     {m.monto > 0
-                      ? abiertos.map(c => <option key={c.id} value={c.id}>{c.cliente || 'Sin cliente'}{c.numero_factura ? ` · fact. ${c.numero_factura}` : ''} · saldo {formatCLP(c.saldo)}</option>)
+                      ? abiertos.map(c => <option key={c.id} value={c.id}>{cuentas ? `${c.numero_factura} · ${c.cliente || 'Sin cliente'}` : `${c.cliente || 'Sin cliente'}${c.numero_factura ? ` · fact. ${c.numero_factura}` : ''}`} · saldo {formatCLP(c.saldo)}</option>)
                       : compras.map(c => <option key={c.id} value={c.id}>{c.proveedor}{c.folio ? ` · N° ${c.folio}` : ''} · {formatCLP(c.total)}</option>)}
                   </select>
                   <span style={{ display: 'flex', gap: 4 }}>
-                    <button className="btn btn-primary btn-xs" disabled={!valor || ocupado === m.id} onClick={() => conciliar(m)} title="Marcar pagado">
-                      {ocupado === m.id ? <Loader2 size={12} className="iv-spin" /> : <Check size={12} />} Pagado</button>
+                    <button className="btn btn-primary btn-xs" disabled={!valor || ocupado === m.id} onClick={() => conciliar(m)} title={m.monto > 0 && cuentas ? 'Registrar como abono del trabajo' : 'Marcar pagado'}>
+                      {ocupado === m.id ? <Loader2 size={12} className="iv-spin" /> : <Check size={12} />} {m.monto > 0 && cuentas ? 'Abonar' : 'Pagado'}</button>
                     <button className="btn btn-ghost btn-xs" disabled={ocupado === m.id} onClick={() => ignorar(m)} title="No corresponde a un cobro ni a una compra (comisiones, traspasos…)">
                       <EyeOff size={12} /> Ignorar</button>
                   </span>

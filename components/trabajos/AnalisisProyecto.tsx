@@ -40,6 +40,7 @@ import type { EdicionPresupuesto } from '@/components/trabajos/analisis/tipos';
 import { descargarExcel } from '@/lib/excel';
 import type { HitoCobro } from '@/lib/cotizador/tipos';
 import { enMonedaExtranjera } from '@/lib/cotizador/planCobro';
+import { cobranzaService } from '@/services/cobranza';
 import { indicadoresDelDia } from '@/hooks/useValoresDia';
 import { useToast } from '@/hooks/useToast';
 import { fechaLocal, formatCLP } from '@/utils';
@@ -88,6 +89,9 @@ export default function AnalisisProyecto({ cotId, folio, plan, resultado, versio
 }) {
   const { success, error: toastError } = useToast();
   const [datos, setDatos] = useState<DatosControl | null>(null);
+  // El PPM de los ajustes de cobranza (fase 25): «Queda» lo descuenta de lo abonado.
+  const [ppmPct, setPpmPct] = useState(0);
+  useEffect(() => { cobranzaService.ajustes().then(x => setPpmPct(x.ppmPct)).catch(() => {}); }, []);
   const [fallo, setFallo] = useState('');
   const [vista, setVista] = useState<Vista>('resumen');
   const [nombres, setNombres] = useState<Record<string, string>>({});
@@ -211,7 +215,7 @@ export default function AnalisisProyecto({ cotId, folio, plan, resultado, versio
 
   const registros = (clase: 'mano_obra' | 'servicio') => datos.manoObra.filter(r => (r.clase === 'servicio' ? 'servicio' : 'mano_obra') === clase);
   // Queda = el saldo a favor: lo abonado por el cliente (sin IVA) menos lo gastado.
-  const s = saldoAFavor({ abonado: datos.cobros.reduce((t, c) => t + (Number(c.monto_pagado) || 0), 0), venta: a.venta, total: base.total, gastado: a.gastado });
+  const s = saldoAFavor({ abonado: datos.cobros.reduce((t, c) => t + (Number(c.monto_pagado) || 0), 0), venta: a.venta, total: base.total, gastado: a.gastado, ppmPct });
   const tarjetas: [string, React.ReactNode, string?][] = [
     ['Total cotización', formatCLP(base.total), base.total > a.venta ? `neto ${formatCLP(a.venta)} + IVA` : 'sin IVA'],
     ['Margen proyectado', <span key="m" style={{ color: a.margenProyectado < 0 ? 'var(--danger)' : 'var(--success)' }}>{formatCLP(a.margenProyectado)}</span>,
@@ -219,7 +223,7 @@ export default function AnalisisProyecto({ cotId, folio, plan, resultado, versio
     ['Gastado', formatCLP(a.gastado), a.paraGastar > 0 ? `${pct((a.gastado / a.paraGastar) * 100)} de ${formatCLP(a.paraGastar)} presupuestado` : undefined],
     ['Queda', <Queda key="q" v={s.saldo} />,
       !s.abonado ? 'sin abonos todavía'
-        : `de ${formatCLP(s.abonado)} abonado${s.sinIva !== s.abonado ? ` (${formatCLP(s.sinIva)} sin IVA)` : ''}${s.saldo < 0 ? ': se ha gastado más' : ''}`],
+        : `de ${formatCLP(s.abonado)} abonado${s.sinIva !== s.abonado ? ` (${formatCLP(s.sinIva)} sin IVA${s.ppm ? ` ni PPM ${formatCLP(s.ppm)}` : ''})` : s.ppm ? ` (sin PPM ${formatCLP(s.ppm)})` : ''}${s.saldo < 0 ? ': se ha gastado más' : ''}`],
   ];
   const props = { a, partidas: base.partidas, edicion };
 

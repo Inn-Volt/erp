@@ -26,6 +26,8 @@ SELECT set_config('request.jwt.claim.sub', '', false);
 INSERT INTO r (ok, txt) SELECT count(*) FILTER (WHERE column_name = 'sueldo_bruto') = 0 AND count(*) FILTER (WHERE column_name IN ('sueldo_liquido','afp_pct','salud_pct','cesantia_pct','otros_descuentos')) = 5,
   'La ficha de la primera versión (sueldo bruto) queda con el líquido y los descuentos'
   FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'trabajadores';
+-- Con la facturación activa (fase 25): aprobar crea los cobros en «Por facturar».
+UPDATE public.ajustes_cotizacion SET facturacion_activa = TRUE WHERE id = 1;
 UPDATE public.ajustes_cotizacion SET retencion_honorarios = 15.25,
   plan_cobro = '[{"nombre":"Anticipo","porcentaje":50,"cuando":"aprobar"},{"nombre":"Saldo","porcentaje":50,"cuando":"terminar"}]' WHERE id = 1;
 
