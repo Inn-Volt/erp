@@ -37,7 +37,7 @@ INSERT INTO r (ok, txt) SELECT NOT EXISTS (SELECT 1 FROM public.notificaciones W
   AND EXISTS (SELECT 1 FROM public.notificaciones WHERE usuario_id = :'VENDE' AND tipo = 'solicitud_nueva'), 'Solicitud nueva: le llega al vendedor, no al técnico';
 
 -- 4. Trabajo y anticipo
-UPDATE public.ajustes_cotizacion SET plan_cobro = '[{"nombre":"Anticipo","porcentaje":50,"cuando":"aprobar"},{"nombre":"Saldo","porcentaje":50,"cuando":"terminar"}]'::JSONB, costo_hora = 8000 WHERE id = 1;
+UPDATE public.ajustes_cotizacion SET plan_cobro = '[{"nombre":"Anticipo","porcentaje":50,"cuando":"aprobar"},{"nombre":"Saldo","porcentaje":50,"cuando":"terminar"}]'::JSONB, costo_hora = 8000, facturacion_activa = TRUE WHERE id = 1;   -- con la facturación activa (fase 25)
 INSERT INTO public.cotizaciones (id, cliente_id, estado, titulo, subtotal, iva, total, costo_directo, vendedor_id, items)
 VALUES ('c1500000-0000-0000-0000-000000000001', :'CLI', 'Borrador', 'Boxes clínica', 1000000, 190000, 1190000, 600000, :'VENDE', '[]'),
        ('c1500000-0000-0000-0000-000000000002', :'CLI', 'Borrador', 'Otra obra', 500000, 95000, 595000, 300000, :'VENDE', '[]');

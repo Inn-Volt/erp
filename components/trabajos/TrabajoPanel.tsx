@@ -24,6 +24,7 @@ import { useFase } from '@/lib/fases';
 import { anticiposService, type Anticipo } from '@/services/fase5';
 import { CATEGORIAS_GASTO, ETAPAS_COBRO, type Gasto, type PorFacturar } from '@/services/operacion';
 import { cobroPagado } from '@/lib/cobros';
+import CuentaTrabajo from '@/components/cobranza/CuentaTrabajo';
 import { detalleHito, enMonedaExtranjera, hitoActivo } from '@/lib/cotizador/planCobro';
 import { indicadoresDelDia } from '@/hooks/useValoresDia';
 import { CUANDO_COBRO, estadoTrabajo, type EstadoTrabajo, type HitoCobro } from '@/lib/cotizador/tipos';
@@ -87,6 +88,9 @@ export default function TrabajoPanel({ cot, plan, onCambio, cliente, responsable
   useEffect(() => { cargar(); }, [cargar]);
   // Fase 15: iniciar pide el motivo si el anticipo no está pagado; materiales.
   const fase15 = useFase(15);
+  // Fase 25: la cobranza son abonos libres (la cuenta del trabajo); sin ella, los cobros de «Por facturar».
+  const fase25 = useFase(25);
+  const verCuenta = puede('facturacion.ver') || puede('facturacion.gestionar') || verCostos;
   const { iniciar, modal: modalAnticipo, ocupado: iniciando } = useIniciarTrabajo(() => { onCambio(); cargar(); });
 
   const rendirGasto = (inicial?: InicialGasto) => {
@@ -133,8 +137,13 @@ export default function TrabajoPanel({ cot, plan, onCambio, cliente, responsable
       )}
 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 280px), 1fr))', gap: 14 }}>
-        {/* Cobros */}
-        <div>
+        {/* Cobranza: la cuenta del trabajo (fase 25) o los cobros de «Por facturar». */}
+        {fase25 ? (verCuenta ? (
+          <div>
+            <p className="label-muted" style={{ marginBottom: 6 }}>Cobranza</p>
+            <CuentaTrabajo cotId={cot.id} puedeAnotar={puede('facturacion.gestionar')} />
+          </div>
+        ) : null) : <div>
           <p className="label-muted" style={{ marginBottom: 6 }}>Cobros · {formatCLP(cobrado)} cobrado de {formatCLP(cot.total)}</p>
           {cobros.map(c => {
             const e = ETAPAS_COBRO.find(x => x.clave === c.etapa);
@@ -153,7 +162,7 @@ export default function TrabajoPanel({ cot, plan, onCambio, cliente, responsable
             </div>
           ))}
           {puede('facturacion.ver') && <Link href="/facturacion" style={{ fontSize: '0.8rem' }}>Ir a facturación y cobranza</Link>}
-        </div>
+        </div>}
 
         {/* Gastos rendidos (quien ve costos los tiene en el análisis, en «Operación»). */}
         {!verCostos && <div>

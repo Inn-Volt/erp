@@ -257,11 +257,13 @@ export function analizar(e: EntradaAnalisis): Analisis {
  * El saldo a favor del trabajo: lo que el cliente ya abonó, sin el IVA (ese va al SII), menos lo
  * gastado (que también va sin IVA: las compras con factura cuentan su neto). Negativo = se ha
  * gastado más de lo que ha entrado. `venta` (neta) y `total` (con IVA) son de la cotización, en pesos.
+ * `ppmPct` (fase 25): el PPM que se descuenta del neto abonado, en % (lo define el contador).
  */
-export function saldoAFavor(o: { abonado: number; venta: number; total: number; gastado: number }) {
+export function saldoAFavor(o: { abonado: number; venta: number; total: number; gastado: number; ppmPct?: number }) {
   const abonado = Math.round(n(o.abonado));
   const sinIva = n(o.total) > 0 ? Math.round(abonado * Math.min(n(o.venta) / n(o.total), 1)) : abonado;
-  return { abonado, sinIva, saldo: sinIva - Math.round(n(o.gastado)) };
+  const ppm = Math.round((sinIva * Math.max(n(o.ppmPct), 0)) / 100);
+  return { abonado, sinIva, ppm, saldo: sinIva - ppm - Math.round(n(o.gastado)) };
 }
 
 // ── Editar el presupuesto: mano de obra por día y servicios por hora ────────

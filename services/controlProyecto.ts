@@ -12,6 +12,7 @@ import {
   opcionesDePartida, type CobroCP, type CompraCP, type DocumentoLineaCP, type FlujoPlan, type GastoCP, type HoraCP, type ManoObraCP, type PartidaOpcion,
 } from '@/lib/controlProyecto';
 import { anteproyectoService, type LineaPresupuestoBD } from '@/services/anteproyecto';
+import { cobranzaService } from '@/services/cobranza';
 import type { HitoCobro, Linea, Moneda, PartidaCot } from '@/lib/cotizador/tipos';
 
 export interface CotizacionControl {
@@ -43,7 +44,7 @@ export const controlProyectoService = {
   },
 
   async datos(cotId: string): Promise<DatosControl> {
-    const [c, g, k, m, h, f, presupuesto] = await Promise.all([
+    const [c, g, k, m, h, cobros, presupuesto] = await Promise.all([
       supabase.from('cotizaciones')
         .select('id, folio, titulo, items, partidas, moneda, valor_uf, total, total_clp, plan_cobro, flujo_plan, trabajo_inicio, aceptada_at')
         .eq('id', cotId).single(),
@@ -55,10 +56,11 @@ export const controlProyectoService = {
         .select('id, fecha, tipo, nombre, horas, jornadas, monto_liquido, honorarios, costo, pagado, fecha_pago, documento, nota, partida_id, trabajador_id, clase, presupuesto_linea_id, created_at')
         .eq('cotizacion_id', cotId).order('fecha', { ascending: false }).order('created_at', { ascending: false }),
       supabase.from('horas_trabajo').select('id, fecha, horas, costo_hora, usuario_id, nota').eq('cotizacion_id', cotId),
-      supabase.from('por_facturar').select('monto, monto_pagado, fecha_pago, fecha_factura, created_at, hito').eq('cotizacion_id', cotId),
+      // Lo cobrado: los abonos (fase 25) y lo anotado antes en «Por facturar».
+      cobranzaService.pagosParaControl(cotId),
       anteproyectoService.lineas(cotId),
     ]);
-    for (const r of [c, g, k, m, h, f]) lanzar(r.error);
+    for (const r of [c, g, k, m, h]) lanzar(r.error);
     // Sin permiso para ver compras o mano de obra, la base no devuelve filas: igual que cotizacion_resultado.
     const gastos = (g.data || []) as GastoCP[], compras = (k.data || []) as CompraCP[];
     const lineas = await anteproyectoService.lineasDeDocumentos(compras.map(x => x.id), gastos.map(x => x.id));
@@ -68,7 +70,7 @@ export const controlProyectoService = {
     }));
     return {
       cot: c.data as unknown as CotizacionControl,
-      gastos, compras, manoObra, horas: (h.data || []) as HoraCP[], cobros: (f.data || []) as CobroCP[], presupuesto, lineas,
+      gastos, compras, manoObra, horas: (h.data || []) as HoraCP[], cobros, presupuesto, lineas,
     };
   },
 

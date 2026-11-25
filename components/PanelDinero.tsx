@@ -2,7 +2,8 @@
 
 /**
  * Panel de dinero del dashboard (fase 15): lo que pregunta el gerente.
- * - Cobrado este mes, por cobrar y vencido (con su antigüedad).
+ * - Cobrado este mes, por cobrar y vencido (con su antigüedad). Con la cobranza de la fase 25, de
+ *   los abonos: por cobrar = los saldos; vencido = lo que el plan de cobro ya esperaba.
  * - Costos del mes: gastos rendidos + compras a proveedores.
  * - Caja de los próximos 30 días: lo que debería entrar menos lo que hay que pagar.
  * - Margen real de los trabajos terminados (solo los que tienen costos cargados) y por cliente.
@@ -16,6 +17,11 @@ import { Banknote, Scale, TrendingUp, Wallet } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { finDeMes, mesDe } from '@/lib/meses';
 import { cobroAbierto, saldoCobro as saldo } from '@/lib/cobros';
+import { cuentaTrabajo, resumenCobranza } from '@/lib/cobranza';
+import { enMonedaExtranjera } from '@/lib/cotizador/planCobro';
+import { faseAplicada } from '@/lib/fases';
+import { cobranzaService, ivaRatio, planDeTrabajo, totalPesos } from '@/services/cobranza';
+import { indicadoresDelDia } from '@/hooks/useValoresDia';
 import { costoReal, type ResultadoTrabajo } from '@/services/trabajos';
 import { usePermisos } from '@/hooks/usePermisos';
 import { fechaLocal, formatCLP, sumarDias } from '@/utils';
@@ -56,6 +62,35 @@ export default function PanelDinero({ ventaNetaMes }: { ventaNetaMes: number }) 
       const dias = (p: PF) => Math.floor((Date.parse(hoy) - Date.parse(p.fecha_factura || p.created_at.slice(0, 10))) / 864e5);
       const tramos: [number, number, number] = [0, 0, 0];
       for (const p of abiertas) tramos[dias(p) <= 30 ? 0 : dias(p) <= 60 ? 1 : 2] += saldo(p);
+      let cobros = {
+        cobradoMes: filas.filter(p => p.fecha_pago && p.fecha_pago >= desde && p.fecha_pago <= hasta).reduce((s, p) => s + Number(p.monto_pagado || 0), 0),
+        porCobrar: abiertas.reduce((s, p) => s + saldo(p), 0),
+        vencido: abiertas.filter(p => p.vencimiento && p.vencimiento < hoy).reduce((s, p) => s + saldo(p), 0),
+        tramos,
+        entra30: abiertas.filter(p => !p.vencimiento || p.vencimiento <= en30).reduce((s, p) => s + saldo(p), 0),
+      };
+      // Fase 25: de los abonos de cada trabajo (por cobrar = los saldos; vencido = lo que el plan ya esperaba).
+      if (verCobros && await faseAplicada(25)) {
+        try {
+          const [trabajos, abonos, aj] = await Promise.all([cobranzaService.trabajos(), cobranzaService.abonos(), cobranzaService.ajustes()]);
+          const ind = trabajos.some(t => planDeTrabajo(t, aj.plan).some(enMonedaExtranjera)) ? await indicadoresDelDia() : null;
+          const valores = ind ? { uf: ind.uf.valor, usd: ind.usd.valor } : undefined;
+          const r = resumenCobranza(trabajos.map(t => {
+            const terminado = t.trabajo_estado === 'terminado';
+            return {
+              cuenta: cuentaTrabajo({
+                total: totalPesos(t), ivaRatio: ivaRatio(t), plan: planDeTrabajo(t, aj.plan), valores, terminado, ppmPct: aj.ppmPct,
+                abonos: abonos.filter(a => a.cotizacion_id === t.id),
+              }),
+              desde: (terminado && t.trabajo_termino ? t.trabajo_termino : t.aceptada_at)?.slice(0, 10) ?? null,
+            };
+          }), hoy);
+          cobros = {
+            cobradoMes: abonos.filter(a => a.fecha >= desde && a.fecha <= hasta).reduce((s, a) => s + a.monto, 0),
+            porCobrar: r.porCobrar, vencido: r.atrasado, tramos: r.tramos, entra30: r.atrasado,
+          };
+        } catch { /* sin permiso o sin la fase: queda lo de «Por facturar» */ }
+      }
 
       const costoCompra = (c: { tipo_doc: string; neto: number; exento: number; total: number }) =>
         (c.tipo_doc === 'nota_credito' ? -1 : 1) * (['factura', 'factura_exenta', 'nota_credito'].includes(c.tipo_doc) ? Number(c.neto) + Number(c.exento) : Number(c.total));
@@ -87,13 +122,9 @@ export default function PanelDinero({ ventaNetaMes }: { ventaNetaMes: number }) 
       const gastosFijos = (est?.gastos || []).reduce((s, g) => s + (Number(g.monto) || 0), 0);
 
       setD({
-        cobradoMes: filas.filter(p => p.fecha_pago && p.fecha_pago >= desde && p.fecha_pago <= hasta).reduce((s, p) => s + Number(p.monto_pagado || 0), 0),
-        porCobrar: abiertas.reduce((s, p) => s + saldo(p), 0),
-        vencido: abiertas.filter(p => p.vencimiento && p.vencimiento < hoy).reduce((s, p) => s + saldo(p), 0),
-        tramos,
+        ...cobros,
         gastosMes: ((gastos.data || []) as { monto: number }[]).reduce((s, g) => s + Number(g.monto), 0),
         comprasMes: compras.error ? null : ((compras.data || []) as { tipo_doc: string; neto: number; exento: number; total: number }[]).reduce((s, c) => s + costoCompra(c), 0),
-        entra30: abiertas.filter(p => !p.vencimiento || p.vencimiento <= en30).reduce((s, p) => s + saldo(p), 0),
         sale30: comprasImpagas.error ? null : ((comprasImpagas.data || []) as { total: number; vencimiento: string | null }[])
           .filter(c => !c.vencimiento || c.vencimiento <= en30).reduce((s, c) => s + Number(c.total), 0) + gastosFijos,
         margen, porCliente, gastosFijos, ventaNetaMes,
@@ -135,7 +166,7 @@ export default function PanelDinero({ ventaNetaMes }: { ventaNetaMes: number }) 
           </Link>
         )}
         {verCobros && caja !== null && (
-          <div style={caja2} title="Lo por cobrar que vence en 30 días (o ya vencido, o sin vencimiento) menos las compras impagas que vencen en 30 días y los gastos fijos del mes">
+          <div style={caja2} title="Lo por cobrar que ya se esperaba o vence en 30 días menos las compras impagas que vencen en 30 días y los gastos fijos del mes">
             <span style={titulo}><Banknote size={12} /> Caja próximos 30 días</span>
             <span style={{ ...valor, color: caja >= 0 ? 'var(--success)' : 'var(--danger)' }}>{caja >= 0 ? '+' : '−'}{formatCLP(Math.abs(caja))}</span>
             <span style={sub}>entra {formatCLP(d.entra30)} · sale {formatCLP(d.sale30 || 0)}{d.gastosFijos ? ' (con gastos fijos)' : ''}</span>

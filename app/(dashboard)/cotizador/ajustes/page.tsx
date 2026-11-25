@@ -53,6 +53,9 @@ export default function AjustesCotPage() {
           exigir_anticipo: a.exigir_anticipo !== false, costo_hora: Math.max(0, Number(a.costo_hora) || 0),
           descuento_max: a.descuento_max ?? null, utilidad_min: a.utilidad_min ?? null,
         } : {}),
+        ...('facturacion_activa' in a ? {
+          facturacion_activa: !!a.facturacion_activa, ppm_pct: Math.min(Math.max(Number(a.ppm_pct) || 0, 0), 10),
+        } : {}),
       });
       success('Ajustes guardados. Las cotizaciones ya hechas no cambian.');
     } catch (e) { toastError(e instanceof Error ? e.message : 'No se pudo guardar'); }
@@ -106,6 +109,17 @@ export default function AjustesCotPage() {
             <label><span className="label-muted">Utilidad mínima sin aprobación (%)</span>
               <NumeroInput className="input" sufijo="%" value={a.utilidad_min ?? null} onChange={v => setA({ ...a, utilidad_min: v })} onVacio={() => setA({ ...a, utilidad_min: null })} placeholder="Sin mínimo" />
               <span style={{ fontSize: '0.74rem', color: 'var(--muted)' }}>Bajo esto, también se pide aprobación. Aprueba quien tiene el permiso «Autorizar descuentos y utilidad baja».</span></label>
+          </div>
+        </>}
+        {'facturacion_activa' in a && <>
+          <p className="section-label" style={{ margin: '6px 0 0' }}>Cobranza y facturación</p>
+          <label style={{ display: 'flex', gap: 8, alignItems: 'center', color: 'var(--text)' }}>
+            <input type="checkbox" checked={!!a.facturacion_activa} onChange={e => setA({ ...a, facturacion_activa: e.target.checked })} style={{ accentColor: 'var(--y-brand)', width: 16, height: 16 }} />
+            Facturación activa (cada cobro del plan cae en «Facturas» para seguir su OC, HES y factura). Apagada: solo cobranza con abonos.</label>
+          <div style={fila}>
+            <label><span className="label-muted">PPM (% de lo abonado sin IVA)</span>
+              <NumeroInput className="input" sufijo="%" decimales={3} mostrarCero value={a.ppm_pct ?? 0} onChange={v => setA({ ...a, ppm_pct: v })} />
+              <span style={{ fontSize: '0.74rem', color: 'var(--muted)' }}>Pago provisional mensual del impuesto a la renta. El % lo define tu contador según tu régimen; en 0 no se descuenta. El IVA se descuenta solo, según lo que lleve cada cotización.</span></label>
           </div>
         </>}
         <div style={fila}>

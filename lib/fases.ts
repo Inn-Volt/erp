@@ -23,6 +23,8 @@ const MARCAS: Record<number, () => Promise<boolean>> = {
   // Fase 24 (supabase_fase24_forma_pago.sql): cobros en $, UF, dólares o «el resto». Sin ella la base
   // solo crea los cobros en %: la forma de pago no ofrece lo demás.
   24: async () => !(await supabase.from('por_facturar').select('moneda', { head: true }).limit(1)).error,
+  // Fase 25 (supabase_fase25_cobranza.sql): cobranza con abonos libres; la facturación queda en pausa.
+  25: async () => !(await supabase.from('abonos').select('id', { head: true, count: 'exact' }).limit(1)).error,
 };
 
 const cache = new Map<number, Promise<boolean>>();

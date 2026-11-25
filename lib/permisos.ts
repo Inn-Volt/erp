@@ -70,9 +70,9 @@ const TODO: AreaDef[] = [
     ] },
   ] },
   { area: 'Finanzas', modulos: [
-    { modulo: 'facturacion', nombre: 'Por facturar y cobranza', permisos: [
+    { modulo: 'facturacion', nombre: 'Cobranza y facturación', permisos: [
       { clave: 'facturacion.ver', nombre: 'Ver' },
-      { clave: 'facturacion.gestionar', nombre: 'Registrar OC, HES, facturas y pagos' },
+      { clave: 'facturacion.gestionar', nombre: 'Registrar abonos (y la facturación cuando esté activa)' },
     ] },
     { modulo: 'gastos', nombre: 'Gastos y rendiciones', permisos: [
       { clave: 'gastos.crear', nombre: 'Rendir mis gastos (en una OT)' },
